@@ -17,3 +17,43 @@
 .checks{display:flex;gap:12px;flex-wrap:wrap}
 .checks label{display:flex;gap:6px;align-items:center;font-size:14px}
 .denied-row td{color:var(--bad)}
+
+/* Phase 1: sidebar layout */
+.org{display:grid;grid-template-columns:210px minmax(0,1fr);gap:24px;align-items:start}
+.side{position:sticky;top:12px;display:flex;flex-direction:column;gap:2px;padding:10px;border:1px solid var(--line);border-radius:18px;background:var(--card)}
+.side a{padding:10px 12px;border-radius:10px;color:var(--muted);text-decoration:none;font-weight:600}
+.side a:hover{color:var(--fg)}
+.side a[aria-current="page"]{background:var(--card-on);color:var(--fg);box-shadow:inset 3px 0 var(--signal)}
+.side-label{padding:10px 12px 4px;overflow-wrap:anywhere;text-transform:none;letter-spacing:.02em;font-size:12px;color:var(--fg);font-weight:700}
+.main{min-width:0}
+.stat.dk{background:var(--plum);border-color:var(--plum)}
+.stat.dk b,.stat.dk span{color:#fff}
+.wrap{max-width:1240px}
+@media (max-width:860px){
+  .org{grid-template-columns:1fr;gap:14px}
+  .side{position:static;flex-direction:row;overflow-x:auto;padding:6px;gap:4px;white-space:nowrap}
+  .side a[aria-current="page"]{box-shadow:none}
+  .side-label{display:none}
+}
+
+/* Phase 1: sidebar layout */
+.org{display:grid;grid-template-columns:210px minmax(0,1fr);gap:24px;align-items:start}
+.side{position:sticky;top:12px;display:flex;flex-direction:column;gap:2px;padding:10px;border:1px solid var(--line);border-radius:18px;background:var(--card)}
+.side a{padding:10px 12px;border-radius:10px;color:var(--muted);text-decoration:none;font-weight:600}
+.side a:hover{color:var(--fg)}
+.side a[aria-current="page"]{background:var(--card-on);color:var(--fg);box-shadow:inset 3px 0 var(--signal)}
+.side-label{padding:10px 12px 4px;overflow-wrap:anywhere;text-transform:none;letter-spacing:.02em;font-size:12px;color:var(--fg);font-weight:700}
+.main{min-width:0}
+.stat.dk{background:var(--plum);border-color:var(--plum)}
+.stat.dk b,.stat.dk span{color:#fff}
+.wrap{max-width:1240px}
+@media (max-width:860px){
+  .org{grid-template-columns:1fr;gap:14px}
+  .side{position:static;flex-direction:row;overflow-x:auto;padding:6px;gap:4px;white-space:nowrap}
+  .side a[aria-current="page"]{box-shadow:none}
+  .side-label{display:none}
+}
+.topbar{max-width:1240px}
+.wordmark{white-space:nowrap}
+.main h1 + p{margin-bottom:18px}
+@media (max-width:860px){.hide-sm{display:none}}

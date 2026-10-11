@@ -5,9 +5,11 @@ One Cloudflare Worker serves both the website (`public/`) and the API (`/api/*`)
 | Page | Path | Who it is for |
 |------|------|---------------|
 | Landing | `/` | Everyone |
-| Attendee app | `/app/` | Register, add an invite code, show a pass (QR) |
-| Organiser console | `/organiser/` | Create events, generate invite codes, see live numbers |
+| Attendee app | `/app/` | Short onboarding, register, add an invite code, "Around me" view of your passes, show a pass (QR), customise your card |
+| Organiser console | `/organiser/` | Sidebar console: create events, generate invite codes, attendees, live numbers, gate key |
 | Gate scanner | `/gate/` | Door staff: scan or type a pass, see admit / do not admit |
+
+The card design (colours, finish, pattern, name) is appearance only and is saved in the browser on that device, not on the server.
 
 ## How codes are generated on the back end
 

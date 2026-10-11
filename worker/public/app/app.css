@@ -23,3 +23,45 @@
 .list{display:grid;gap:10px}
 .item{display:flex;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:16px;background:var(--card)}
 .empty{text-align:center;padding:48px 12px;color:var(--muted)}
+
+/* Phase 1: onboarding, Around me, card */
+.tabs div{grid-template-columns:repeat(5,1fr)}
+.tabs button{font-size:11px}
+.onb h1.ob,h1.ob{font-size:34px;margin:10px 0 8px}
+.seg3{display:flex;gap:6px;margin:6px 0 10px}
+.seg3 i{flex:1;height:3px;border-radius:9px;background:var(--line)}
+.seg3 i.on{background:var(--signal)}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{cursor:pointer;font-family:inherit;color:var(--fg)}
+.chip.on{background:var(--fg);color:var(--ink);border-color:var(--fg)}
+.fld2{display:flex;justify-content:space-between;gap:12px;align-items:center;border:1px solid var(--line);background:var(--card);border-radius:16px;padding:14px;margin-top:10px}
+.obc{width:min(68%,260px);margin:22px auto 26px;transform:rotate(-5deg)}
+.tc{aspect-ratio:1.586;border-radius:20px;padding:16px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 22px 34px -14px rgba(43,27,45,.55),inset 0 0 0 1px rgba(255,255,255,.18);font-size:12px;width:100%}
+.tc .r1{display:flex;justify-content:space-between;align-items:center}
+.tc .r1.bot{align-items:flex-end}
+.tc .ico{width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.2);display:grid;place-items:center}
+.tc .cstat{display:flex;align-items:center;gap:6px;text-transform:uppercase;letter-spacing:.14em;font-size:10px}
+.tc .dt{width:7px;height:7px;border-radius:50%;background:#3DDC84;display:inline-block}
+.tc .cname{font-size:22px;letter-spacing:-.02em;line-height:1.1;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tc .cnum{letter-spacing:.14em;font-size:11px;opacity:.8;font-family:var(--mono)}
+.cardwrap{width:min(100%,340px);margin:4px auto}
+.orb{margin:0 -8px;color:var(--fg);border-radius:50%;max-width:380px;justify-self:center;width:100%}
+.orb svg{width:100%;height:auto;overflow:visible}
+.glass{display:block;width:100%;text-align:left;position:relative;border:1px solid var(--line);background:var(--card);border-radius:20px;padding:16px;cursor:pointer}
+.glass .cd{position:absolute;right:16px;top:12px;text-align:center;line-height:1}
+.glass .cd b{display:block;font-family:var(--display);font-size:34px}
+.glass .cd small{font-size:10px;letter-spacing:.12em;color:var(--muted)}
+.swrow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.swc{width:32px;height:32px;border-radius:50%;border:2px solid var(--line);cursor:pointer}
+.swc.on{box-shadow:0 0 0 2px var(--ink),0 0 0 4px var(--fg)}
+.tapz{display:flex;flex-direction:column;align-items:center;gap:12px;margin:26px auto;background:none;border:0;cursor:pointer;color:var(--fg)}
+.ringc{width:120px;height:120px;border-radius:50%;border:3px solid var(--signal);display:grid;place-items:center;font-size:40px}
+.tapz.go .ringc{animation:ping 1.2s ease-out infinite}
+@keyframes ping{0%{box-shadow:0 0 0 0 var(--glow)}100%{box-shadow:0 0 0 40px transparent}}
+.result{border-radius:24px;padding:22px 18px;text-align:center;border:2px solid var(--ok);background:var(--ok-soft);margin:14px 0}
+.result .big{font-family:var(--display);font-weight:800;font-size:32px;color:var(--ok)}
+.cardwrap{width:min(100%,300px)}
+.tc .cnum{white-space:nowrap}
+.obc .tc .cname{font-size:15px;max-width:70%}
+.obc .tc .cnum{font-size:9px}
+.chips .hint{flex-basis:100%;margin:2px 0 0}

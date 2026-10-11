@@ -12,7 +12,7 @@ function header() {
   mount(top,
     h('a', { class: 'wordmark', href: '#/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), 'Tap In ', h('span', { class: 'muted', style: 'font-weight:600;font-size:14px' }, 'Organiser')),
     h('div', { class: 'row' },
-      h('a', { class: 'btn ghost small', href: '/gate/' }, 'Open gate scanner'),
+      h('a', { class: 'btn ghost small hide-sm', href: '/gate/' }, 'Open gate scanner'),
       user && h('button', { class: 'btn ghost small', type: 'button', onclick: async () => { await post('/auth/logout').catch(() => {}); user = null; boot(); } }, 'Sign out'),
       window.TapTheme.button()));
 }
@@ -47,6 +47,17 @@ function route() {
   viewEvents();
 }
 
+
+// Two-column layout: sidebar navigation on the left, content on the right (stacks on phones).
+function layout(items, content) {
+  return h('div', { class: 'org' },
+    h('nav', { class: 'side', 'aria-label': 'Sections' }, items.map((i) => i.label
+      ? h('p', { class: 'eyebrow side-label' }, i.label)
+      : h('a', { href: i.href, 'aria-current': i.on ? 'page' : null }, i.text))),
+    h('div', { class: 'main' }, content));
+}
+const listNav = (on) => [{ href: '#/', text: 'All events', on: on === 'list' }, { href: '#/new', text: 'New event', on: on === 'new' }, { href: '/gate/', text: 'Open scanner' }];
+
 const fail = (ex) => {
   if (ex.status === 401) { user = null; boot(); return; }
   mount(main, h('div', { class: 'error' }, ex.message), h('p', { style: 'margin-top:12px' }, h('a', { href: '#/' }, 'Back to events')));
@@ -57,7 +68,7 @@ async function viewEvents() {
   try {
     const { events } = await get('/events');
     document.title = 'Events · Tap In';
-    mount(main,
+    mount(main, layout(listNav('list'), h('div', {},
       h('div', { class: 'spread' }, h('h1', { style: 'font-size:34px' }, 'Your events'), h('a', { class: 'btn primary', href: '#/new' }, 'New event')),
       events.length
         ? h('div', { class: 'grid two', style: 'margin-top:18px' }, events.map((e) => h('a', { class: 'card', href: '#/e/' + e.id, style: 'text-decoration:none;color:inherit' },
@@ -65,7 +76,7 @@ async function viewEvents() {
             h('h3', { style: 'font-size:20px;margin:4px 0' }, e.name),
             h('p', { class: 'muted' }, [e.venue, e.city].filter(Boolean).join(', ')),
             h('div', { class: 'row', style: 'margin-top:12px' }, h('span', { class: 'chip' }, e.registered + ' registered'), h('span', { class: 'chip ok' }, e.checked_in + ' checked in'), h('span', { class: 'chip' }, e.invites_open + ' invites open')))))
-        : h('div', { class: 'card', style: 'margin-top:18px;text-align:center;padding:40px' }, h('p', {}, 'No events yet.'), h('a', { class: 'btn primary', style: 'margin-top:14px', href: '#/new' }, 'Create your first event')));
+        : h('div', { class: 'card', style: 'margin-top:18px;text-align:center;padding:40px' }, h('p', {}, 'No events yet.'), h('a', { class: 'btn primary', style: 'margin-top:14px', href: '#/new' }, 'Create your first event')))));
   } catch (ex) { fail(ex); }
 }
 
@@ -153,13 +164,13 @@ async function viewEvent(id, tab) {
   try {
     const data = await get('/events/' + id);
     document.title = data.event.name + ' · Tap In';
-    const nav = h('nav', { class: 'subnav', 'aria-label': 'Event sections' },
-      [['overview', 'Overview'], ['invites', 'Invite codes'], ['attendees', 'Attendees'], ['gate', 'Gate']].map(([k, label]) => h('a', { href: `#/e/${id}/${k}`, 'aria-current': tab === k ? 'page' : null }, label)));
+    const items = [{ href: '#/', text: '\u2190 All events' }, { label: data.event.name }]
+      .concat([['overview', 'Overview'], ['invites', 'Invite codes'], ['attendees', 'Attendees'], ['gate', 'Gate key & rules']].map(([k, label]) => ({ href: `#/e/${id}/${k}`, text: label, on: tab === k })))
+      .concat([{ href: '/gate/', text: 'Open scanner' }]);
     const body = h('div', {});
-    mount(main,
-      h('a', { href: '#/' }, '← Events'),
-      h('div', { class: 'spread', style: 'margin-top:8px' }, h('div', {}, h('h1', { style: 'font-size:34px' }, data.event.name), h('p', { class: 'muted' }, [data.event.venue, data.event.city, data.event.starts_at && when(data.event.starts_at)].filter(Boolean).join(' · ')))),
-      nav, body);
+    mount(main, layout(items, h('div', {},
+      h('div', { class: 'spread' }, h('div', {}, h('h1', { style: 'font-size:34px' }, data.event.name), h('p', { class: 'muted' }, [data.event.venue, data.event.city, data.event.starts_at && when(data.event.starts_at)].filter(Boolean).join(' \u00b7 ')))),
+      body)));
     ({ overview: tabOverview, invites: tabInvites, attendees: tabAttendees, gate: tabGate }[tab] || tabOverview)(body, data);
   } catch (ex) { fail(ex); }
 }
@@ -177,7 +188,7 @@ function tabOverview(body, data) {
     const vmax = Math.max(1, ...st.entry_volume.map((v) => v.n));
     mount(stats,
       h('div', { class: 'grid cols' },
-        [['Registered', st.registered], ['Checked in', st.checked_in], ['Not yet in', Math.max(0, st.registered - st.checked_in)], ['Declined scans', st.denied]].map(([l, v]) => h('div', { class: 'card stat' }, h('b', {}, String(v)), h('span', {}, l)))),
+        [['Registered', st.registered], ['Checked in', st.checked_in, true], ['% checked in', (st.registered ? Math.round((st.checked_in / st.registered) * 100) : 0) + '%'], ['Not yet in', Math.max(0, st.registered - st.checked_in)], ['Declined scans', st.denied]].map(([l, v, dk]) => h('div', { class: 'card stat' + (dk ? ' dk' : '') }, h('b', {}, String(v)), h('span', {}, l)))),
       h('div', { class: 'grid two', style: 'margin-top:14px' },
         h('div', { class: 'card' }, h('h3', {}, 'Entries by area'), barRows(st.by_zone, 'name', (z) => z.granted, Math.max(1, ...st.by_zone.map((z) => z.granted)))),
         h('div', { class: 'card' }, h('h3', {}, 'Registered by ticket type'), barRows(st.by_tier, 'name', (t) => t.registered, Math.max(1, ...st.by_tier.map((t) => t.registered))))),
