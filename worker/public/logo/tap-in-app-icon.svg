@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-53.5 -69 480 480" width="480" height="480" role="img" aria-label="Tap In">
+<title>Tap In</title>
+<rect x="-53.5" y="-69" width="480" height="480" rx="108" fill="#6C4A6C"/>
+<polygon points="0,0 76,0 76,151 45,151 45,26 0,26" fill="#FFFFFF"/>
+<polygon points="80,0 120,0 120,26 93,26" fill="#FFFFFF"/>
+<polygon points="149,0 181,0 244,151 212,151 201,124 131,124 120,151 88,151" fill="#FFFFFF"/>
+<polygon points="143,97 189,97 166,42" fill="#6C4A6C"/>
+<polygon points="164,44 193,21 198,27 169,50" fill="#6C4A6C"/>
+<rect x="251" y="0" width="29" height="151" fill="#FFFFFF"/>
+<path d="M280,0 H320 A53,53 0 0 1 320,106 H301 L285,76 H318 A25,25 0 0 0 318,26 H280 Z" fill="#FFFFFF"/>
+<g transform="translate(99.5,191)">
+<polygon points="0,0 31,0 31,26 0,38" fill="#B5A0CC"/>
+<rect x="0" y="44" width="31" height="107" fill="#B5A0CC"/>
+<polygon points="45,0 77,0 174,139 174,151 142,151 77,58 77,151 45,151" fill="#B5A0CC"/>
+<polygon points="142,0 174,0 174,113 142,90" fill="#B5A0CC"/>
+</g>
+</svg>

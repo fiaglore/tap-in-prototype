@@ -1,0 +1,18 @@
+{
+  "name": "tap-in",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tap In: phone-based entry. Cloudflare Worker + D1 backend and static site.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local --port 8787",
+    "db:migrate:local": "wrangler d1 migrations apply tap-in-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply tap-in-db --remote",
+    "test": "node test/smoke.mjs",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  },
+  "dependencies": {}
+}

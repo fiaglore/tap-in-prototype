@@ -1,0 +1,75 @@
+/* Tap In website. Dark by default; light when the phone asks for it or the toggle is used (theme.js sets data-mode). */
+:root{
+  --ink:#2B1B2D; --deep:#3A263D; --raise:#46304A; --line:#634A68;
+  --fg:#FFFFFF; --muted:#C9B8D4; --signal:#B5A0CC; --plum:#6C4A6C; --ok:#7FE0B4; --warn:#F2C96B; --bad:#FF9AA8;
+  --primary:#80619A; --card:rgba(58,38,61,.78); --card-on:rgba(181,160,204,.14);
+  --ok-soft:rgba(127,224,180,.12); --bad-soft:rgba(255,154,168,.12); --glow:rgba(181,160,204,.28);
+  --display:"Syne","Avenir Next","Segoe UI",sans-serif; --body:"Manrope","Segoe UI",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+:root[data-mode="light"]{
+  --ink:#F7F2F8; --deep:#EDE4F0; --raise:#FFFFFF; --line:#D9CCDF;
+  --fg:#2B1B2D; --muted:#6E5A74; --signal:#6C4A6C; --ok:#1E8F5F; --warn:#946500; --bad:#B3243B;
+  --primary:#6C4A6C; --card:rgba(255,255,255,.88); --card-on:rgba(128,97,154,.10);
+  --ok-soft:rgba(30,143,95,.12); --bad-soft:rgba(179,36,59,.10); --glow:rgba(108,74,108,.22);
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;min-height:100%}
+body{background:var(--ink);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.5;transition:background .3s,color .3s}
+img,svg{max-width:100%}
+a{color:var(--signal)}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--signal);outline-offset:3px}
+h1,h2,h3{font-family:var(--display);letter-spacing:-.02em;margin:0;text-wrap:balance}
+h1{font-weight:800;font-size:clamp(30px,6vw,52px);line-height:1.02}
+h2{font-weight:700;font-size:24px;line-height:1.15}
+h3{font-weight:700;font-size:16px}
+p{margin:0}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.muted{color:var(--muted)}
+.mono{font-family:var(--mono)}
+.sr{position:absolute;left:-9999px}
+
+/* Buttons and fields */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:16px;padding:14px 18px;font-weight:700;font-size:15px;background:var(--fg);color:var(--ink);text-decoration:none;transition:transform .15s,opacity .2s}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.primary{background:var(--primary);color:#fff}
+.btn.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
+.btn.danger{background:transparent;color:var(--bad);border:1px solid var(--bad)}
+.btn.small{padding:8px 12px;font-size:13px;border-radius:12px}
+.btn.block{display:flex;width:100%}
+.field{display:grid;gap:6px;margin-top:14px}
+.field label,.label{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.03em}
+.input{width:100%;border:1px solid var(--line);background:var(--card);border-radius:14px;padding:13px 14px;font-size:16px}
+.input.code{font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase}
+.input.otp{font-family:var(--mono);font-size:28px;letter-spacing:.4em;text-align:center}
+.hint{font-size:12.5px;color:var(--muted)}
+.error{margin-top:12px;padding:10px 12px;border-radius:12px;background:var(--bad-soft);color:var(--bad);font-size:13.5px;border:1px solid var(--bad)}
+.notice{margin-top:12px;padding:10px 12px;border-radius:12px;background:var(--card-on);font-size:13.5px;border:1px solid var(--line)}
+.notice.warn{border-color:var(--warn);color:var(--warn)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:18px}
+.chip{display:inline-block;white-space:nowrap;font-size:12px;font-weight:600;padding:3px 10px;border-radius:99px;background:var(--card-on);border:1px solid var(--line)}
+.chip.ok{color:var(--ok);background:var(--ok-soft);border-color:transparent}
+.chip.bad{color:var(--bad);background:var(--bad-soft);border-color:transparent}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.spread{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.stack{display:grid;gap:12px}
+.wordmark{display:inline-flex;align-items:center;gap:10px;font-family:var(--display);font-weight:800;font-size:20px;letter-spacing:-.02em;color:var(--fg);text-decoration:none}
+.wordmark img{width:28px;height:28px;border-radius:8px}
+.theme-btn{border:1px solid var(--line);background:var(--card);border-radius:99px;width:38px;height:38px;display:grid;place-items:center;font-size:17px;line-height:1}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--fg);color:var(--ink);padding:10px 16px;border-radius:14px;font-weight:600;font-size:14px;z-index:60}
+
+/* Pages with a header + centered content (landing, organiser, gate) */
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px max(16px,env(safe-area-inset-left));max-width:1100px;margin:0 auto}
+.wrap{max-width:1100px;margin:0 auto;padding:8px 16px 64px}
+.narrow{max-width:520px;margin:0 auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;font-weight:700}
+th,td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.scroll-x{overflow-x:auto}
+
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

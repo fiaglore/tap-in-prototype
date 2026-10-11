@@ -1,0 +1,29 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tap-in",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tap-in-db",
+      "database_id": "f20945a0-c947-4794-94cb-d6e7fbbb5a5b",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    // "demo": the sign-in code is shown on screen and no SMS or email is sent.
+    // "live": codes must be delivered by a provider (see src/lib/otp-delivery.js).
+    "OTP_MODE": "demo",
+    // Comma-separated phone numbers or emails allowed to create events. Empty = anyone who signs in.
+    "ORGANISER_IDENTIFIERS": ""
+  },
+  "triggers": { "crons": ["17 3 * * *"] },
+  "observability": { "enabled": true }
+}

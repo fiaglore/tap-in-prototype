@@ -1,0 +1,295 @@
+import { h, mount, toast, copy, when, ago, download } from '/js/dom.js';
+import { get, post, patch } from '/js/api.js';
+import { signInFlow } from '/js/auth-ui.js';
+
+const top = document.getElementById('top');
+const main = document.getElementById('main');
+let user = null;
+let timer = null;
+const reasons = { already_used: 'Already used', no_zone_access: 'Wrong area', revoked: 'Cancelled pass', invalid_token: 'Unreadable / fake', wrong_event: 'Other event' };
+
+function header() {
+  mount(top,
+    h('a', { class: 'wordmark', href: '#/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), 'Tap In ', h('span', { class: 'muted', style: 'font-weight:600;font-size:14px' }, 'Organiser')),
+    h('div', { class: 'row' },
+      h('a', { class: 'btn ghost small', href: '/gate/' }, 'Open gate scanner'),
+      user && h('button', { class: 'btn ghost small', type: 'button', onclick: async () => { await post('/auth/logout').catch(() => {}); user = null; boot(); } }, 'Sign out'),
+      window.TapTheme.button()));
+}
+
+function stopTimer() { if (timer) clearInterval(timer); timer = null; }
+
+async function boot() {
+  header();
+  try {
+    user = (await get('/me')).user;
+  } catch {
+    user = null;
+  }
+  header();
+  if (!user) return viewSignIn();
+  route();
+}
+window.addEventListener('hashchange', () => user && route());
+
+function viewSignIn() {
+  const box = h('div', { class: 'narrow card', style: 'margin-top:6vh' });
+  mount(main, box);
+  signInFlow(box, { title: 'Organiser sign-in', lede: 'Sign in with the phone number or email you will run events from.', onDone: (u) => { user = u; header(); location.hash = '#/'; route(); } });
+}
+
+function route() {
+  stopTimer();
+  const parts = (location.hash.replace(/^#\/?/, '') || '').split('/').filter(Boolean);
+  if (!parts.length) return viewEvents();
+  if (parts[0] === 'new') return viewNew();
+  if (parts[0] === 'e' && parts[1]) return viewEvent(parts[1], parts[2] || 'overview');
+  viewEvents();
+}
+
+const fail = (ex) => {
+  if (ex.status === 401) { user = null; boot(); return; }
+  mount(main, h('div', { class: 'error' }, ex.message), h('p', { style: 'margin-top:12px' }, h('a', { href: '#/' }, 'Back to events')));
+};
+
+// ---- Events list -------------------------------------------------------------------------------------
+async function viewEvents() {
+  try {
+    const { events } = await get('/events');
+    document.title = 'Events · Tap In';
+    mount(main,
+      h('div', { class: 'spread' }, h('h1', { style: 'font-size:34px' }, 'Your events'), h('a', { class: 'btn primary', href: '#/new' }, 'New event')),
+      events.length
+        ? h('div', { class: 'grid two', style: 'margin-top:18px' }, events.map((e) => h('a', { class: 'card', href: '#/e/' + e.id, style: 'text-decoration:none;color:inherit' },
+            h('p', { class: 'eyebrow' }, e.starts_at ? when(e.starts_at, { dateStyle: 'medium' }) : 'Date to be announced'),
+            h('h3', { style: 'font-size:20px;margin:4px 0' }, e.name),
+            h('p', { class: 'muted' }, [e.venue, e.city].filter(Boolean).join(', ')),
+            h('div', { class: 'row', style: 'margin-top:12px' }, h('span', { class: 'chip' }, e.registered + ' registered'), h('span', { class: 'chip ok' }, e.checked_in + ' checked in'), h('span', { class: 'chip' }, e.invites_open + ' invites open')))))
+        : h('div', { class: 'card', style: 'margin-top:18px;text-align:center;padding:40px' }, h('p', {}, 'No events yet.'), h('a', { class: 'btn primary', style: 'margin-top:14px', href: '#/new' }, 'Create your first event')));
+  } catch (ex) { fail(ex); }
+}
+
+// ---- Create event -------------------------------------------------------------------------------------
+function viewNew(err = '', draft) {
+  document.title = 'New event · Tap In';
+  const d = draft || { name: '', venue: '', city: 'Lagos', starts_at: '', zones: ['Main entrance'], tiers: [{ name: 'General', zones: ['Main entrance'] }], reentry: false };
+  const name = h('input', { class: 'input', id: 'n', value: d.name, maxlength: '80', required: true });
+  const venue = h('input', { class: 'input', id: 'v', value: d.venue, maxlength: '80' });
+  const city = h('input', { class: 'input', id: 'c', value: d.city, maxlength: '80' });
+  const starts = h('input', { class: 'input', id: 's', type: 'datetime-local', value: d.starts_at });
+  const reentry = h('input', { type: 'checkbox', id: 'r', checked: d.reentry });
+  const zoneInputs = [];
+  const zoneBox = h('div', { class: 'stack' });
+  const tierBox = h('div', { class: 'stack' });
+  const tiers = d.tiers.map((t) => ({ ...t, zones: new Set(t.zones) }));
+
+  function zoneNames() { return zoneInputs.map((i) => i.value.trim()).filter(Boolean); }
+  function drawZones(names) {
+    zoneInputs.length = 0;
+    zoneBox.replaceChildren(...names.map((z, i) => {
+      const inp = h('input', { class: 'input', value: z, maxlength: '60', 'aria-label': 'Area name', oninput: () => drawTiers() });
+      zoneInputs.push(inp);
+      return h('div', { class: 'row' }, h('div', { style: 'flex:1' }, inp), names.length > 1 && h('button', { class: 'btn ghost small', type: 'button', onclick: () => { drawZones(zoneNames().filter((_, j) => j !== i)); drawTiers(); } }, 'Remove'));
+    }));
+  }
+  function drawTiers() {
+    const zs = zoneNames();
+    tierBox.replaceChildren(...tiers.map((t, i) => h('div', { class: 'tierrow' },
+      h('div', { class: 'row' }, h('div', { style: 'flex:1' }, h('input', { class: 'input', value: t.name, maxlength: '60', 'aria-label': 'Ticket type name', oninput: (e) => { t.name = e.target.value; } })),
+        tiers.length > 1 && h('button', { class: 'btn ghost small', type: 'button', onclick: () => { tiers.splice(i, 1); drawTiers(); } }, 'Remove')),
+      h('div', { class: 'checks' }, zs.map((z) => h('label', {}, h('input', { type: 'checkbox', checked: t.zones.has(z), onchange: (e) => { e.target.checked ? t.zones.add(z) : t.zones.delete(z); } }), z))))));
+  }
+  drawZones(d.zones);
+  drawTiers();
+
+  const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Create event');
+  mount(main, h('div', { class: 'narrow' },
+    h('a', { href: '#/' }, '← Events'),
+    h('h1', { style: 'font-size:34px;margin:8px 0 4px' }, 'New event'),
+    h('p', { class: 'muted' }, 'Areas are the doors or zones you scan at. Ticket types decide which areas a pass can enter.'),
+    h('form', {
+      onsubmit: async (e) => {
+        e.preventDefault();
+        btn.disabled = true;
+        const zs = zoneNames();
+        const body = {
+          name: name.value, venue: venue.value, city: city.value, allow_reentry: reentry.checked,
+          starts_at: starts.value ? new Date(starts.value).toISOString() : undefined,
+          zones: zs,
+          tiers: tiers.map((t) => ({ name: t.name, zones: zs.filter((z) => t.zones.has(z)) }))
+        };
+        try {
+          const r = await post('/events', body);
+          showGateKey(r.event, r.gate_key, () => { location.hash = '#/e/' + r.event.id + '/invites'; });
+        } catch (ex) {
+          viewNew(ex.message, { name: name.value, venue: venue.value, city: city.value, starts_at: starts.value, zones: zs, tiers: tiers.map((t) => ({ name: t.name, zones: [...t.zones] })), reentry: reentry.checked });
+        }
+      }
+    },
+      h('div', { class: 'field' }, h('label', { for: 'n' }, 'Event name'), name),
+      h('div', { class: 'grid two' }, h('div', { class: 'field' }, h('label', { for: 'v' }, 'Venue'), venue), h('div', { class: 'field' }, h('label', { for: 'c' }, 'City'), city)),
+      h('div', { class: 'field' }, h('label', { for: 's' }, 'Starts'), starts),
+      h('h3', { style: 'margin-top:22px' }, 'Areas'), zoneBox,
+      h('button', { class: 'btn ghost small', style: 'margin-top:8px', type: 'button', onclick: () => { drawZones([...zoneNames(), '']); drawTiers(); } }, 'Add area'),
+      h('h3', { style: 'margin-top:22px' }, 'Ticket types'), tierBox,
+      h('button', { class: 'btn ghost small', style: 'margin-top:8px', type: 'button', onclick: () => { tiers.push({ name: '', zones: new Set() }); drawTiers(); } }, 'Add ticket type'),
+      h('div', { class: 'checks', style: 'margin-top:20px' }, h('label', {}, reentry, 'Allow re-entry (a pass can be scanned in again at the same area)')),
+      err && h('div', { class: 'error', role: 'alert' }, err),
+      h('div', { style: 'margin-top:20px' }, btn))));
+}
+
+function showGateKey(event, key, next) {
+  mount(main, h('div', { class: 'narrow card' },
+    h('p', { class: 'eyebrow' }, 'Event created'),
+    h('h2', { style: 'margin:4px 0 10px' }, event.name),
+    h('p', {}, 'This is the gate key. Put it into the gate scanner on each door device. ', h('strong', {}, 'It is shown only once'), ' (you can rotate it later to get a new one).'),
+    h('div', { class: 'gatekey', style: 'margin:14px 0' }, key),
+    h('div', { class: 'row' }, h('button', { class: 'btn ghost', type: 'button', onclick: () => copy(key, 'Gate key copied') }, 'Copy key'),
+      h('button', { class: 'btn primary', type: 'button', onclick: next }, 'I have saved it. Continue'))));
+}
+
+// ---- One event -----------------------------------------------------------------------------------------
+async function viewEvent(id, tab) {
+  try {
+    const data = await get('/events/' + id);
+    document.title = data.event.name + ' · Tap In';
+    const nav = h('nav', { class: 'subnav', 'aria-label': 'Event sections' },
+      [['overview', 'Overview'], ['invites', 'Invite codes'], ['attendees', 'Attendees'], ['gate', 'Gate']].map(([k, label]) => h('a', { href: `#/e/${id}/${k}`, 'aria-current': tab === k ? 'page' : null }, label)));
+    const body = h('div', {});
+    mount(main,
+      h('a', { href: '#/' }, '← Events'),
+      h('div', { class: 'spread', style: 'margin-top:8px' }, h('div', {}, h('h1', { style: 'font-size:34px' }, data.event.name), h('p', { class: 'muted' }, [data.event.venue, data.event.city, data.event.starts_at && when(data.event.starts_at)].filter(Boolean).join(' · ')))),
+      nav, body);
+    ({ overview: tabOverview, invites: tabInvites, attendees: tabAttendees, gate: tabGate }[tab] || tabOverview)(body, data);
+  } catch (ex) { fail(ex); }
+}
+
+function barRows(rows, label, value, max) {
+  return rows.map((r) => h('div', { class: 'bar' }, h('span', {}, r[label]), h('div', { class: 'track' }, h('div', { class: 'fill', style: `width:${max ? Math.round((value(r) / max) * 100) : 0}%` })), h('span', { class: 'mono' }, String(value(r)))));
+}
+
+function tabOverview(body, data) {
+  const s = data.stats;
+  const feed = h('div', { class: 'scroll-x' });
+  const stats = h('div', {});
+  function draw(d) {
+    const st = d.stats;
+    const vmax = Math.max(1, ...st.entry_volume.map((v) => v.n));
+    mount(stats,
+      h('div', { class: 'grid cols' },
+        [['Registered', st.registered], ['Checked in', st.checked_in], ['Not yet in', Math.max(0, st.registered - st.checked_in)], ['Declined scans', st.denied]].map(([l, v]) => h('div', { class: 'card stat' }, h('b', {}, String(v)), h('span', {}, l)))),
+      h('div', { class: 'grid two', style: 'margin-top:14px' },
+        h('div', { class: 'card' }, h('h3', {}, 'Entries by area'), barRows(st.by_zone, 'name', (z) => z.granted, Math.max(1, ...st.by_zone.map((z) => z.granted)))),
+        h('div', { class: 'card' }, h('h3', {}, 'Registered by ticket type'), barRows(st.by_tier, 'name', (t) => t.registered, Math.max(1, ...st.by_tier.map((t) => t.registered))))),
+      h('div', { class: 'card', style: 'margin-top:14px' }, h('h3', {}, 'Entries per hour'),
+        st.entry_volume.length
+          ? h('div', { class: 'bars', role: 'img', 'aria-label': 'Entries per hour' }, st.entry_volume.map((v) => h('i', { title: `${when(v.hour, { hour: 'numeric', weekday: 'short' })}: ${v.n}`, style: `height:${Math.round((v.n / vmax) * 100)}%` })))
+          : h('p', { class: 'muted', style: 'margin-top:8px' }, 'No entries yet.')),
+      h('p', { class: 'hint', style: 'margin-top:10px' }, `Invites: ${st.invites.unused} unused, ${st.invites.claimed} claimed, ${st.invites.revoked} cancelled.`));
+    mount(feed, h('table', {}, h('thead', {}, h('tr', {}, ['When', 'Who', 'Area', 'Result'].map((c) => h('th', {}, c)))),
+      h('tbody', {}, d.recent.length ? d.recent.map((r) => h('tr', { class: r.result === 'denied' ? 'denied-row' : '' },
+        h('td', {}, ago(r.at)), h('td', {}, r.holder || '—', r.tier && h('div', { class: 'hint' }, r.tier)), h('td', {}, r.zone || ''),
+        h('td', {}, r.result === 'granted' ? 'Entered' : (reasons[r.reason] || 'Declined')))) : h('tr', {}, h('td', { colspan: '4', class: 'muted' }, 'Nothing scanned yet.')))));
+  }
+  draw(data);
+  body.append(stats, h('h3', { style: 'margin:22px 0 4px' }, 'Live activity ', h('span', { class: 'hint' }, '(updates every 8 seconds)')), feed);
+  timer = setInterval(async () => { try { draw(await get('/events/' + data.event.id)); } catch {} }, 8000);
+}
+
+function csvCell(v) { const s = String(v ?? ''); return /^[=+\-@\t\r]/.test(s) ? `"'${s.replace(/"/g, '""')}"` : /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }
+
+async function tabInvites(body, data) {
+  const id = data.event.id;
+  const tier = h('select', { class: 'input', id: 'tier' }, data.tiers.map((t) => h('option', { value: t.id }, t.name)));
+  const count = h('input', { class: 'input', id: 'cnt', type: 'number', min: '1', max: '500', value: '20' });
+  const label = h('input', { class: 'input', id: 'lbl', maxlength: '60', placeholder: 'e.g. Sponsors' });
+  const bound = h('input', { class: 'input', id: 'bnd', placeholder: 'Optional: only this phone or email can claim it' });
+  const out = h('div', {});
+  const list = h('div', { class: 'scroll-x', style: 'margin-top:12px' });
+  const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Generate codes');
+  const form = h('form', { class: 'card', onsubmit: async (e) => {
+    e.preventDefault();
+    btn.disabled = true;
+    try {
+      const n = Number(count.value);
+      const r = await post(`/events/${id}/invites`, { tier_id: tier.value, count: bound.value.trim() ? 1 : n, label: label.value, bound_to: bound.value.trim() || undefined });
+      const text = r.codes.join('\n');
+      mount(out, h('div', { class: 'card', style: 'margin-top:14px;border-color:var(--signal)' },
+        h('h3', {}, `${r.codes.length} ${r.tier} code${r.codes.length === 1 ? '' : 's'} created`),
+        h('p', { class: 'notice warn' }, 'Download or copy these now. For security we keep only a scrambled version, so we cannot show them again.'),
+        h('div', { class: 'codebox', style: 'margin-top:10px', tabindex: '0' }, text),
+        h('div', { class: 'row', style: 'margin-top:10px' },
+          h('button', { class: 'btn small', type: 'button', onclick: () => copy(text, 'Codes copied') }, 'Copy all'),
+          h('button', { class: 'btn small primary', type: 'button', onclick: () => download(`${data.event.prefix}-${r.tier.replace(/\W+/g, '-')}-codes.csv`, 'code,ticket_type,label\n' + r.codes.map((c) => [c, r.tier, r.label || ''].map(csvCell).join(',')).join('\n') + '\n') }, 'Download CSV'))));
+      loadList();
+    } catch (ex) {
+      mount(out, h('div', { class: 'error', role: 'alert' }, ex.message));
+    }
+    btn.disabled = false;
+  } },
+    h('h3', {}, 'Generate invite codes'),
+    h('div', { class: 'grid two' },
+      h('div', { class: 'field' }, h('label', { for: 'tier' }, 'Ticket type'), tier),
+      h('div', { class: 'field' }, h('label', { for: 'cnt' }, 'How many (up to 500)'), count)),
+    h('div', { class: 'grid two' },
+      h('div', { class: 'field' }, h('label', { for: 'lbl' }, 'Label (for your records)'), label),
+      h('div', { class: 'field' }, h('label', { for: 'bnd' }, 'Tie to one person'), bound)),
+    h('p', { class: 'hint', style: 'margin-top:8px' }, 'Tying a code to a phone or email makes one code, and it appears in that person’s app after they sign in.'),
+    h('div', { style: 'margin-top:14px' }, btn));
+  body.append(form, out, h('h3', { style: 'margin-top:24px' }, 'All codes'), list);
+
+  async function loadList() {
+    try {
+      const r = await get(`/events/${id}/invites?limit=100`);
+      mount(list, h('table', {}, h('thead', {}, h('tr', {}, ['Ends in', 'Type', 'Label', 'Status', ''].map((c) => h('th', {}, c)))),
+        h('tbody', {}, r.invites.map((i) => h('tr', {},
+          h('td', { class: 'mono' }, '…' + i.code_hint), h('td', {}, i.tier), h('td', {}, i.label || (i.bound_identifier ? 'For ' + i.bound_identifier : '')),
+          h('td', {}, h('span', { class: 'chip ' + (i.status === 'claimed' ? 'ok' : i.status === 'revoked' ? 'bad' : '') }, i.status === 'claimed' ? 'Claimed by ' + (i.claimed_by || 'someone') : i.status === 'revoked' ? 'Cancelled' : 'Unused')),
+          h('td', {}, i.status === 'unused' && h('button', { class: 'btn danger small', type: 'button', onclick: async () => { try { await post(`/events/${id}/invites/${i.id}/revoke`); loadList(); } catch (ex) { toast(ex.message); } } }, 'Cancel')))))));
+      if (!r.invites.length) mount(list, h('p', { class: 'muted' }, 'No codes yet.'));
+    } catch (ex) { mount(list, h('div', { class: 'error' }, ex.message)); }
+  }
+  loadList();
+}
+
+async function tabAttendees(body, data) {
+  const id = data.event.id;
+  const box = h('div', { class: 'scroll-x' });
+  body.append(box);
+  async function load() {
+    try {
+      const { attendees } = await get(`/events/${id}/attendees`);
+      mount(box,
+        h('div', { class: 'row', style: 'margin-bottom:10px' }, h('span', { class: 'chip' }, attendees.length + ' passes'),
+          attendees.length > 0 && h('button', { class: 'btn small ghost', type: 'button', onclick: () => download('attendees.csv', 'name,contact,ticket_type,status,registered,first_entry\n' + attendees.map((a) => [a.name, a.contact, a.tier, a.status, a.registered_at ? new Date(a.registered_at * 1000).toISOString() : '', a.first_entry ? new Date(a.first_entry * 1000).toISOString() : ''].map(csvCell).join(',')).join('\n') + '\n') }, 'Download CSV')),
+        h('table', {}, h('thead', {}, h('tr', {}, ['Name', 'Contact', 'Ticket', 'Entered', ''].map((c) => h('th', {}, c)))),
+          h('tbody', {}, attendees.length ? attendees.map((a) => h('tr', {},
+            h('td', {}, a.name || '—'), h('td', { class: 'mono' }, a.contact || ''), h('td', {}, a.tier),
+            h('td', {}, a.status === 'revoked' ? h('span', { class: 'chip bad' }, 'Cancelled') : a.first_entry ? h('span', { class: 'chip ok' }, when(a.first_entry, { timeStyle: 'short', dateStyle: 'short' })) : h('span', { class: 'muted' }, 'Not yet')),
+            h('td', {}, a.status === 'active' && h('button', { class: 'btn danger small', type: 'button', onclick: async () => { if (!confirm(`Cancel ${a.name || 'this'} pass? They will be refused at the gate.`)) return; try { await post(`/events/${id}/passes/${a.id}/revoke`); load(); } catch (ex) { toast(ex.message); } } }, 'Cancel pass')))) : h('tr', {}, h('td', { colspan: '5', class: 'muted' }, 'Nobody has added a pass yet.')))));
+    } catch (ex) { mount(box, h('div', { class: 'error' }, ex.message)); }
+  }
+  load();
+}
+
+function tabGate(body, data) {
+  const id = data.event.id;
+  const keyBox = h('div', {});
+  const reentry = h('input', { type: 'checkbox', checked: data.event.allow_reentry, onchange: async (e) => {
+    try { await patch('/events/' + id, { allow_reentry: e.target.checked }); toast('Saved'); } catch (ex) { e.target.checked = !e.target.checked; toast(ex.message); }
+  } });
+  body.append(h('div', { class: 'grid two' },
+    h('div', { class: 'card' }, h('h3', {}, 'Gate key'),
+      h('p', { class: 'muted', style: 'margin-top:6px' }, 'Gate staff enter this key once on the scanner page. We only keep a scrambled copy, so a lost key is replaced, not recovered. Current key ends in ', h('strong', { class: 'mono' }, data.event.gate_key_hint || '????'), '.'),
+      keyBox,
+      h('button', { class: 'btn danger', style: 'margin-top:12px', type: 'button', onclick: async () => {
+        if (!confirm('Create a new gate key? The old one stops working immediately on every scanner.')) return;
+        try { const r = await post(`/events/${id}/gate-key`); mount(keyBox, h('div', { class: 'gatekey', style: 'margin-top:12px' }, r.gate_key), h('button', { class: 'btn ghost small', style: 'margin-top:8px', type: 'button', onclick: () => copy(r.gate_key, 'Gate key copied') }, 'Copy key')); } catch (ex) { toast(ex.message); }
+      } }, 'Create a new gate key')),
+    h('div', { class: 'card' }, h('h3', {}, 'Rules'),
+      h('div', { class: 'checks', style: 'margin-top:10px' }, h('label', {}, reentry, 'Allow re-entry at the same area')),
+      h('p', { class: 'hint', style: 'margin-top:8px' }, 'Off means each pass gets in once per area. Applies to scans from now on.'),
+      h('a', { class: 'btn primary', style: 'margin-top:14px', href: '/gate/' }, 'Open gate scanner'))));
+}
+
+boot();

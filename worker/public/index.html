@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2B1B2D">
+<meta name="description" content="Tap In replaces entry bands with the phone in your pocket. Add your invite once, show your pass at the gate.">
+<title>Tap In · Your phone is the pass</title>
+<link rel="icon" href="/logo/tap-in-app-icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/css/tapin.css">
+<link rel="stylesheet" href="/site.css">
+<script src="/js/theme.js"></script>
+<script src="/js/site.js" defer></script>
+</head>
+<body>
+<header class="topbar">
+  <a class="wordmark" href="/"><img src="/logo/tap-in-app-icon.svg" alt="">Tap In</a>
+  <nav class="row" aria-label="Main">
+    <a class="btn ghost small" href="/organiser/">For organisers</a>
+    <a class="btn primary small" href="/app/">Open the app</a>
+    <span id="theme-slot"></span>
+  </nav>
+</header>
+
+<main>
+  <section class="wrap hero">
+    <p class="eyebrow">Entry without bands</p>
+    <h1>Your phone is the pass.</h1>
+    <p class="lede">Organisers send an invite code. You add it once. At the door you show your phone and walk in. No wristbands to print, hand out, lose or throw away.</p>
+    <div class="row" style="margin-top:26px">
+      <a class="btn primary" href="/app/">Add my pass</a>
+      <a class="btn ghost" href="/organiser/">Run an event</a>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <h2>How it works</h2>
+    <div class="grid three" style="margin-top:16px">
+      <article class="card"><p class="eyebrow">1 · Organiser</p><h3>Create the event</h3><p class="muted">Name the areas you control (main gate, VIP lounge, backstage) and the ticket types that can enter each one. Generate invite codes in bulk, or tie a code to one person.</p></article>
+      <article class="card"><p class="eyebrow">2 · Attendee</p><h3>Add the invite</h3><p class="muted">Sign in with your phone number or email, type the code once, and the pass lives in your phone. Each code works one time only.</p></article>
+      <article class="card"><p class="eyebrow">3 · Gate</p><h3>Show it, get in</h3><p class="muted">Gate staff scan the QR on your pass. They see a clear admit or do not admit, your first name, and your ticket type. Every scan is logged live.</p></article>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <h2>At the gate, today</h2>
+    <div class="card" style="margin-top:16px">
+      <table>
+        <thead><tr><th>Method</th><th>Status</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>QR on the phone, scanned by a staff phone camera</td><td><span class="chip ok">Works now</span></td><td>Chrome on Android with a camera. Other phones can use a USB scanner or typing.</td></tr>
+          <tr><td>USB or Bluetooth barcode scanner</td><td><span class="chip ok">Works now</span></td><td>The scanner types the code into the gate page.</td></tr>
+          <tr><td>Typed pass code</td><td><span class="chip ok">Works now</span></td><td>Fallback if a screen is cracked or a camera is struggling.</td></tr>
+          <tr><td>Tap the phone on a receiver (NFC)</td><td><span class="chip">Coming next</span></td><td>Needs a native app. Browsers cannot act as a tap-to-enter card, and iPhone access to this is restricted, so we will not pretend it is in the website.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <h2>Built for trust</h2>
+    <div class="grid three" style="margin-top:16px">
+      <article class="card"><h3>Invites that cannot be reused</h3><p class="muted">Codes are checked and used up in a single step, so two people cannot share one invite.</p></article>
+      <article class="card"><h3>Codes never stored in the clear</h3><p class="muted">Only a scrambled version is kept. Even someone who read the database could not turn it back into working invites.</p></article>
+      <article class="card"><h3>Privacy at the door</h3><p class="muted">Staff see a first name and last initial, not your phone number or email.</p></article>
+    </div>
+  </section>
+
+  <footer class="wrap muted" style="padding-top:32px;font-size:13px">
+    <p>Tap In is a work in progress. Sign-in codes are shown on screen in demo mode until a text or email provider is connected.</p>
+  </footer>
+</main>
+</body>
+</html>

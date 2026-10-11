@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-53.5 -69 480 480" width="480" height="480" role="img" aria-label="Tap In">
+<title>Tap In (animated)</title>
+<style>
+.rip{fill:none;stroke:#B5A0CC;stroke-width:6;transform-box:fill-box;transform-origin:center;opacity:0;animation:rip 2.4s cubic-bezier(.2,.6,.3,1) infinite}
+.r2{animation-delay:.3s}
+@keyframes rip{0%{transform:scale(.3);opacity:0}6%{opacity:.9}70%{transform:scale(4.2);opacity:0}100%{transform:scale(4.2);opacity:0}}
+.press{transform-box:fill-box;transform-origin:center;animation:press 2.4s ease infinite}
+@keyframes press{0%,100%{transform:scale(1)}4%{transform:scale(.6)}12%{transform:scale(1)}}
+.lit{animation:lit 2.4s ease infinite}
+@keyframes lit{0%,8%{fill:#B5A0CC}16%,34%{fill:#FFFFFF}52%,100%{fill:#B5A0CC}}
+@media (prefers-reduced-motion:reduce){.rip,.press,.lit{animation:none}}
+</style>
+<clipPath id="tile"><rect x="-53.5" y="-69" width="480" height="480" rx="108"/></clipPath>
+<rect x="-53.5" y="-69" width="480" height="480" rx="108" fill="#6C4A6C"/>
+<g clip-path="url(#tile)"><circle class="rip" cx="115" cy="207" r="30"/><circle class="rip r2" cx="115" cy="207" r="30"/></g>
+<polygon points="0,0 76,0 76,151 45,151 45,26 0,26" fill="#FFFFFF"/>
+<polygon points="80,0 120,0 120,26 93,26" fill="#FFFFFF"/>
+<polygon points="149,0 181,0 244,151 212,151 201,124 131,124 120,151 88,151" fill="#FFFFFF"/>
+<polygon points="143,97 189,97 166,42" fill="#6C4A6C"/>
+<polygon points="164,44 193,21 198,27 169,50" fill="#6C4A6C"/>
+<rect x="251" y="0" width="29" height="151" fill="#FFFFFF"/>
+<path d="M280,0 H320 A53,53 0 0 1 320,106 H301 L285,76 H318 A25,25 0 0 0 318,26 H280 Z" fill="#FFFFFF"/>
+<g transform="translate(99.5,191)">
+<polygon class="press" points="0,0 31,0 31,26 0,38" fill="#B5A0CC"/>
+<rect class="lit" x="0" y="44" width="31" height="107" fill="#B5A0CC"/>
+<polygon class="lit" points="45,0 77,0 174,139 174,151 142,151 77,58 77,151 45,151" fill="#B5A0CC"/>
+<polygon class="lit" points="142,0 174,0 174,113 142,90" fill="#B5A0CC"/>
+</g>
+</svg>

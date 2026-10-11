@@ -8,7 +8,7 @@
 
 Tap In replaces attendance wristbands, paper tickets and access cards with the phone people already carry. One app covers festival gates, office doors, venue guest lists and campus halls. A pass stays asleep until you arrive, then you tap your phone on a reader and you're in.
 
-This repo holds the clickable first-run prototype and the logo files. It's a design prototype: taps, pass lookups and passes are simulated with example data.
+This repo holds the clickable first-run prototype, the logo files, and a working website and server in [`worker/`](worker/) (register with a phone number or email, organisers generate invite codes, attendees claim them, gate staff scan passes). The prototype at the repo root is a design prototype with simulated data.
 
 **Live prototype:** https://fiaglore.github.io/tap-in-prototype/ (once GitHub Pages is on, see below)
 
@@ -80,6 +80,10 @@ python3 -m http.server 8000
 3. Choose branch **main** and folder **/ (root)**, then **Save**.
 
 After a minute or two the prototype is live at `https://fiaglore.github.io/tap-in-prototype/`.
+
+## The working site and server
+
+See [`worker/README.md`](worker/README.md) for how codes are generated, the API, and how to deploy to Cloudflare Workers with D1.
 
 ## Licence
 
