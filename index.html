@@ -13,23 +13,43 @@
 :root{
   --ink:#2B1B2D; --deep:#3A263D; --raise:#46304A; --line:#634A68;
   --fg:#FFFFFF; --muted:#C9B8D4; --field:#B5A0CC; --signal:#B5A0CC; --plum:#6C4A6C; --ok:#7FE0B4; --warn:#F2C96B;
+  --primary:#80619A; --hot:#FFFFFF; --glow:rgba(181,160,204,.28);
+  --card:rgba(58,38,61,.75); --card-on:rgba(181,160,204,.14); --label-bg:rgba(43,27,45,.8);
+  --pass-bg:linear-gradient(135deg,rgba(181,160,204,.18),rgba(70,48,74,.85));
+  --next-bg:linear-gradient(135deg,rgba(108,74,108,.9),rgba(70,48,74,.9)); --next-border:rgba(181,160,204,.45);
+  --ok-soft:rgba(127,224,180,.12); --ok-glow:rgba(127,224,180,.35); --warn-line:rgba(242,201,107,.45);
+  --lg-t:#FFFFFF; --lg-n:#B5A0CC;
+  --sp-bg:#6C4A6C; --sp-t:#FFFFFF; --sp-in:#B5A0CC; --sp-in-lit:#FFFFFF; --sp-text:#B5A0CC; --sp-status:#FFFFFF;
   --display:"Syne","Avenir Next","Segoe UI",sans-serif;
   --body:"Manrope","Segoe UI",system-ui,sans-serif;
   --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
   color-scheme:dark;
+}
+/* Light mode: same plum family, inverted ground */
+:root[data-mode="light"]{
+  --ink:#F7F2F8; --deep:#EDE4F0; --raise:#FFFFFF; --line:#D9CCDF;
+  --fg:#2B1B2D; --muted:#6E5A74; --field:#80619A; --signal:#6C4A6C; --ok:#1E8F5F; --warn:#946500;
+  --primary:#6C4A6C; --hot:#6C4A6C; --glow:rgba(108,74,108,.22);
+  --card:rgba(255,255,255,.82); --card-on:rgba(128,97,154,.10); --label-bg:rgba(255,255,255,.88);
+  --pass-bg:linear-gradient(135deg,rgba(181,160,204,.28),rgba(255,255,255,.92));
+  --next-bg:linear-gradient(135deg,rgba(181,160,204,.35),rgba(255,255,255,.92)); --next-border:rgba(108,74,108,.3);
+  --ok-soft:rgba(30,143,95,.12); --ok-glow:rgba(30,143,95,.28); --warn-line:rgba(148,101,0,.4);
+  --lg-t:#6C4A6C; --lg-n:#8C6FAB;
+  --sp-bg:#EFE7F4; --sp-t:#6C4A6C; --sp-in:#8C6FAB; --sp-in-lit:#6C4A6C; --sp-text:#80619A; --sp-status:#6C4A6C;
+  color-scheme:light;
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{margin:0}
 img,svg{max-width:100%}
 html,body{min-height:100%}
-body{background:var(--ink);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.5;padding-block:28px;padding-inline:16px}
+body{background:var(--ink);color:var(--fg);transition:background .3s,color .3s;font-family:var(--body);font-size:15px;line-height:1.5;padding-block:28px;padding-inline:16px}
 button{font:inherit;color:inherit;cursor:pointer}
 button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--signal);outline-offset:3px}
 .stage{display:flex;gap:40px;justify-content:center;align-items:flex-start;flex-wrap:wrap;max-width:1100px;margin:0 auto}
 
 /* Phone */
-.phone{position:relative;width:min(390px,100%);height:800px;border-radius:44px;background:var(--ink);border:1px solid var(--line);overflow:hidden;box-shadow:0 30px 80px -20px rgba(181,160,204,.28),0 0 0 8px var(--deep);flex:0 0 auto}
+.phone{position:relative;width:min(390px,100%);height:800px;border-radius:44px;background:var(--ink);border:1px solid var(--line);overflow:hidden;box-shadow:0 30px 80px -20px var(--glow),0 0 0 8px var(--deep);flex:0 0 auto}
 #field{position:absolute;inset:0;width:100%;height:100%;z-index:0}
 .statusbar{position:relative;z-index:3;display:flex;justify-content:space-between;padding:16px 28px 0;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
 .statusbar .notch{width:110px;height:30px;border-radius:20px;background:#000;position:absolute;left:50%;top:10px;transform:translateX(-50%)}
@@ -52,18 +72,18 @@ h2{font-family:var(--display);font-weight:700;font-size:26px;line-height:1.1;let
 .btn:active{transform:scale(.98)}
 .btn:disabled{opacity:.35;cursor:not-allowed}
 .btn.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
-.btn.signal{background:#80619A;color:#FFFFFF}
+.btn.signal{background:var(--primary);color:#FFFFFF}
 .fine{font-size:12px;color:var(--muted);text-align:center;margin:4px 0 0}
 
 /* Context chips */
 .choices{display:grid;gap:10px;margin-top:22px}
-.choice{display:grid;grid-template-columns:42px 1fr 22px;gap:12px;align-items:center;text-align:left;background:rgba(58,38,61,.75);border:1px solid var(--line);border-radius:18px;padding:14px;backdrop-filter:blur(10px)}
+.choice{display:grid;grid-template-columns:42px 1fr 22px;gap:12px;align-items:center;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;backdrop-filter:blur(10px)}
 .choice b{display:block;font-size:15px}
 .choice span{font-size:12.5px;color:var(--muted)}
 .choice .ic{width:42px;height:42px;border-radius:14px;background:var(--deep);display:grid;place-items:center}
 .choice .ic svg{width:22px;height:22px;stroke:var(--field);fill:none;stroke-width:1.6}
 .check{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--line);display:grid;place-items:center}
-.choice[aria-pressed="true"]{border-color:var(--signal);background:rgba(181,160,204,.14)}
+.choice[aria-pressed="true"]{border-color:var(--signal);background:var(--card-on)}
 .choice[aria-pressed="true"] .check{background:var(--signal);border-color:var(--signal)}
 .choice[aria-pressed="true"] .check::after{content:"";width:8px;height:5px;border:2px solid var(--ink);border-top:0;border-right:0;transform:rotate(-45deg) translateY(-1px)}
 
@@ -78,19 +98,19 @@ h2{font-family:var(--display);font-weight:700;font-size:26px;line-height:1.1;let
 .scan .pulse{width:10px;height:10px;border-radius:50%;background:var(--field);animation:pp 1s infinite}
 @keyframes pp{50%{opacity:.25}}
 .passes{display:grid;gap:10px;margin-top:16px}
-.pass{position:relative;display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding:14px 16px;border-radius:18px;border:1px solid var(--line);background:linear-gradient(135deg,rgba(181,160,204,.18),rgba(70,48,74,.85));animation:in .4s ease both}
+.pass{position:relative;display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding:14px 16px;border-radius:18px;border:1px solid var(--line);background:var(--pass-bg);animation:in .4s ease both}
 .pass .org{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .pass b{font-family:var(--display);font-size:17px;letter-spacing:-.01em}
 .pass .meta{grid-column:1/-1;font-size:12.5px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap}
 .pass .tag{font-family:var(--mono);font-size:10.5px;padding:3px 8px;border-radius:20px;border:1px solid var(--line);color:var(--fg)}
-.pass .tag.pending{color:var(--warn);border-color:rgba(242,201,107,.45)}
+.pass .tag.pending{color:var(--warn);border-color:var(--warn-line)}
 .addtgl{grid-row:1/3;grid-column:2;align-self:center;width:30px;height:30px;border-radius:50%;border:1.5px solid var(--line);background:none;display:grid;place-items:center}
 .addtgl[aria-pressed="true"]{background:var(--ok);border-color:var(--ok)}
 .addtgl[aria-pressed="true"]::after{content:"";width:9px;height:5px;border:2px solid var(--ink);border-top:0;border-right:0;transform:rotate(-45deg) translateY(-1px)}
 
 /* Secure */
 .rows{display:grid;gap:10px;margin-top:20px}
-.row{display:grid;grid-template-columns:1fr auto;gap:4px 14px;align-items:center;padding:14px 16px;border-radius:18px;background:rgba(58,38,61,.78);border:1px solid var(--line);backdrop-filter:blur(10px)}
+.row{display:grid;grid-template-columns:1fr auto;gap:4px 14px;align-items:center;padding:14px 16px;border-radius:18px;background:var(--card);border:1px solid var(--line);backdrop-filter:blur(10px)}
 .row b{font-size:15px}
 .row p{grid-column:1;margin:0;font-size:12.5px;color:var(--muted)}
 .row .req{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--signal);margin-left:6px}
@@ -101,10 +121,10 @@ h2{font-family:var(--display);font-weight:700;font-size:26px;line-height:1.1;let
 .sw:disabled{opacity:.7;cursor:default}
 
 /* Practice */
-.reader{margin:18px auto 0;width:200px;height:120px;border-radius:22px;border:1px dashed var(--line);display:grid;place-items:center;text-align:center;position:relative;background:rgba(58,38,61,.6)}
+.reader{margin:18px auto 0;width:200px;height:120px;border-radius:22px;border:1px dashed var(--line);display:grid;place-items:center;text-align:center;position:relative;background:var(--card)}
 .reader .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--muted)}
 .reader .glyph{width:44px;height:44px;margin:0 auto 6px}
-.reader.ok{border-style:solid;border-color:var(--ok);box-shadow:0 0 0 6px rgba(127,224,180,.12),0 0 60px rgba(127,224,180,.35)}
+.reader.ok{border-style:solid;border-color:var(--ok);box-shadow:0 0 0 6px var(--ok-soft),0 0 60px var(--ok-glow)}
 .reader.ok .lbl{color:var(--ok)}
 .result{margin-top:18px;text-align:center;min-height:68px}
 .result b{display:block;font-family:var(--display);font-size:22px}
@@ -121,11 +141,11 @@ h2{font-family:var(--display);font-weight:700;font-size:26px;line-height:1.1;let
 .orbit .you{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:58px;height:58px;border-radius:50%;background:var(--fg);color:var(--ink);display:grid;place-items:center;font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.1em}
 .sat{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:0;padding:4px}
 .sat i{width:14px;height:14px;border-radius:50%;background:var(--field);box-shadow:0 0 18px var(--field)}
-.sat.warm i{background:#FFFFFF;box-shadow:0 0 18px #FFFFFF}
+.sat.warm i{background:var(--hot);box-shadow:0 0 18px var(--hot)}
 .sat.wait i{background:transparent;border:1.5px dashed var(--warn);box-shadow:none}
-.sat span{font-size:11px;white-space:nowrap;background:rgba(43,27,45,.8);padding:2px 8px;border-radius:10px}
+.sat span{font-size:11px;white-space:nowrap;background:var(--label-bg);padding:2px 8px;border-radius:10px}
 .ringlbl{position:absolute;font-family:var(--mono);font-size:9.5px;color:var(--muted);letter-spacing:.1em;left:50%;transform:translateX(-50%)}
-.next{padding:16px;border-radius:22px;background:linear-gradient(135deg,rgba(108,74,108,.9),rgba(70,48,74,.9));border:1px solid rgba(181,160,204,.45)}
+.next{padding:16px;border-radius:22px;background:var(--next-bg);border:1px solid var(--next-border)}
 .next .top{display:flex;justify-content:space-between;align-items:baseline}
 .next b{font-family:var(--display);font-size:20px;display:block;margin-top:2px}
 .next .count{font-family:var(--display);font-size:30px;font-weight:800;color:var(--signal);font-variant-numeric:tabular-nums;line-height:1}
@@ -139,18 +159,30 @@ h2{font-family:var(--display);font-weight:700;font-size:26px;line-height:1.1;let
 .toast{position:absolute;left:24px;right:24px;bottom:96px;z-index:5;padding:12px 14px;border-radius:14px;background:var(--raise);border:1px solid var(--line);font-size:13px;animation:in .3s ease both}
 
 /* Launch splash: Tap In motion logo */
-.splash{position:absolute;inset:0;z-index:4;background:#6C4A6C;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;border:0;width:100%;cursor:pointer;color:#FFFFFF;padding:0 24px}
-.splash .sp-tag{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#B5A0CC}
-.splash .sp-skip{position:absolute;bottom:36px;left:0;right:0;text-align:center;font-size:12px;color:#B5A0CC;opacity:.8}
-.sp-rip{fill:none;stroke:#B5A0CC;stroke-width:6;transform-box:fill-box;transform-origin:center;opacity:0;animation:sprip 2.4s cubic-bezier(.2,.6,.3,1) infinite}
+.splash{position:absolute;inset:0;z-index:4;background:var(--sp-bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;border:0;width:100%;cursor:pointer;color:var(--sp-t);padding:0 24px}
+.splash .sp-tag{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--sp-text)}
+.splash .sp-skip{position:absolute;bottom:36px;left:0;right:0;text-align:center;font-size:12px;color:var(--sp-text);opacity:.8}
+.sp-rip{fill:none;stroke:var(--sp-in);stroke-width:6;transform-box:fill-box;transform-origin:center;opacity:0;animation:sprip 2.4s cubic-bezier(.2,.6,.3,1) infinite}
 .sp-rip.r2{animation-delay:.3s}
 @keyframes sprip{0%{transform:scale(.3);opacity:0}6%{opacity:.9}70%{transform:scale(4.2);opacity:0}100%{transform:scale(4.2);opacity:0}}
 .sp-press{transform-box:fill-box;transform-origin:center;animation:sppress 2.4s ease infinite}
 @keyframes sppress{0%,100%{transform:scale(1)}4%{transform:scale(.6)}12%{transform:scale(1)}}
 .sp-lit{animation:split 2.4s ease infinite}
-@keyframes split{0%,8%{fill:#B5A0CC}16%,34%{fill:#FFFFFF}52%,100%{fill:#B5A0CC}}
+@keyframes split{0%,8%{fill:var(--sp-in)}16%,34%{fill:var(--sp-in-lit)}52%,100%{fill:var(--sp-in)}}
+.sp-t{fill:var(--sp-t)} .sp-bgf{fill:var(--sp-bg)} .sp-press,.sp-lit{fill:var(--sp-in)}
 .statusbar{z-index:5}
-.phone.on-splash .statusbar{color:#FFFFFF}
+.phone.on-splash .statusbar{color:var(--sp-status)}
+.logo-h .lg-t{fill:var(--lg-t)} .logo-h .lg-bg{fill:var(--ink)} .logo-h .lg-n{fill:var(--lg-n)}
+.glyph{color:var(--field)}
+.sb-right{display:flex;align-items:center;gap:10px}
+.theme-tgl{width:28px;height:28px;border-radius:50%;border:1px solid var(--line);background:var(--card);display:grid;place-items:center;padding:0;color:inherit}
+.phone.on-splash .theme-tgl{background:transparent;border-color:currentColor}
+.theme-tgl svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round}
+.theme-tgl .i-moon{display:none}
+:root[data-mode="light"] .theme-tgl .i-sun{display:none}
+:root[data-mode="light"] .theme-tgl .i-moon{display:block}
+.mode-line{font-size:13px;color:var(--muted);margin-top:18px}
+.mode-line button{background:none;border:0;padding:0;color:var(--signal);text-decoration:underline;font-size:13px}
 
 /* Notes */
 .notes{flex:1 1 360px;max-width:520px;min-width:0}
@@ -169,7 +201,7 @@ h2{font-family:var(--display);font-weight:700;font-size:26px;line-height:1.1;let
 .flow button.on .n{color:var(--signal)}
 .disclaim{font-size:12px;color:var(--muted);margin-top:16px}
 @media (max-width:760px){.phone{height:760px}.notes{max-width:100%}}
-@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.sp-lit{fill:#FFFFFF}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.sp-lit{fill:var(--sp-in-lit)}}
 </style>
 
 </head>
@@ -177,20 +209,20 @@ h2{font-family:var(--display);font-weight:700;font-size:26px;line-height:1.1;let
 <div class="stage">
   <div class="phone" id="phone">
     <canvas id="field" aria-hidden="true"></canvas>
-    <div class="statusbar"><span>11:10</span><span class="notch"></span><span>5G ▮▮▮</span></div>
+    <div class="statusbar"><span>11:10</span><span class="notch"></span><span class="sb-right"><span>5G ▮▮▮</span><button class="theme-tgl" id="themeBtn" aria-label="Switch to light mode"><svg class="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><svg class="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg></button></span></div>
 
     <!-- 0 Launch splash -->
     <button class="splash" id="splash" aria-label="Tap In. Tap to continue">
       <svg viewBox="-53.5 -69 480 480" width="250" height="250" role="img" aria-label="Tap In logo, animated">
         <circle class="sp-rip" cx="115" cy="207" r="30"></circle>
         <circle class="sp-rip r2" cx="115" cy="207" r="30"></circle>
-        <polygon points="0,0 76,0 76,151 45,151 45,26 0,26" fill="#FFFFFF"></polygon>
-        <polygon points="80,0 120,0 120,26 93,26" fill="#FFFFFF"></polygon>
-        <polygon points="149,0 181,0 244,151 212,151 201,124 131,124 120,151 88,151" fill="#FFFFFF"></polygon>
-        <polygon points="143,97 189,97 166,42" fill="#6C4A6C"></polygon>
-        <polygon points="164,44 193,21 198,27 169,50" fill="#6C4A6C"></polygon>
-        <rect x="251" y="0" width="29" height="151" fill="#FFFFFF"></rect>
-        <path d="M280,0 H320 A53,53 0 0 1 320,106 H301 L285,76 H318 A25,25 0 0 0 318,26 H280 Z" fill="#FFFFFF"></path>
+        <polygon points="0,0 76,0 76,151 45,151 45,26 0,26" class="sp-t" fill="#FFFFFF"></polygon>
+        <polygon points="80,0 120,0 120,26 93,26" class="sp-t" fill="#FFFFFF"></polygon>
+        <polygon points="149,0 181,0 244,151 212,151 201,124 131,124 120,151 88,151" class="sp-t" fill="#FFFFFF"></polygon>
+        <polygon points="143,97 189,97 166,42" class="sp-bgf" fill="#6C4A6C"></polygon>
+        <polygon points="164,44 193,21 198,27 169,50" class="sp-bgf" fill="#6C4A6C"></polygon>
+        <rect x="251" y="0" width="29" height="151" class="sp-t" fill="#FFFFFF"></rect>
+        <path d="M280,0 H320 A53,53 0 0 1 320,106 H301 L285,76 H318 A25,25 0 0 0 318,26 H280 Z" class="sp-t" fill="#FFFFFF"></path>
         <g transform="translate(99.5,191)">
           <polygon class="sp-press" points="0,0 31,0 31,26 0,38" fill="#B5A0CC"></polygon>
           <rect class="sp-lit" x="0" y="44" width="31" height="107" fill="#B5A0CC"></rect>
@@ -204,7 +236,7 @@ h2{font-family:var(--display);font-weight:700;font-size:26px;line-height:1.1;let
 
     <!-- 1 Welcome -->
     <section class="screen" data-s="0">
-      <div class="topnav"><svg class="logo-h" viewBox="0 0 600 151" height="22" role="img" aria-label="Tap In"><polygon points="0,0 76,0 76,151 45,151 45,26 0,26" fill="#FFFFFF"/><polygon points="80,0 120,0 120,26 93,26" fill="#FFFFFF"/><polygon points="149,0 181,0 244,151 212,151 201,124 131,124 120,151 88,151" fill="#FFFFFF"/><polygon points="143,97 189,97 166,42" fill="#2B1B2D"/><polygon points="164,44 193,21 198,27 169,50" fill="#2B1B2D"/><rect x="251" y="0" width="29" height="151" fill="#FFFFFF"/><path d="M280,0 H320 A53,53 0 0 1 320,106 H301 L285,76 H318 A25,25 0 0 0 318,26 H280 Z" fill="#FFFFFF"/><g transform="translate(426,0)" fill="#B5A0CC"><polygon points="0,0 31,0 31,26 0,38"/><rect x="0" y="44" width="31" height="107"/><polygon points="45,0 77,0 174,139 174,151 142,151 77,58 77,151 45,151"/><polygon points="142,0 174,0 174,113 142,90"/></g></svg><span class="eyebrow">v1.0</span></div>
+      <div class="topnav"><svg class="logo-h" viewBox="0 0 600 151" height="22" role="img" aria-label="Tap In"><polygon points="0,0 76,0 76,151 45,151 45,26 0,26" class="lg-t"/><polygon points="80,0 120,0 120,26 93,26" class="lg-t"/><polygon points="149,0 181,0 244,151 212,151 201,124 131,124 120,151 88,151" class="lg-t"/><polygon points="143,97 189,97 166,42" class="lg-bg"/><polygon points="164,44 193,21 198,27 169,50" class="lg-bg"/><rect x="251" y="0" width="29" height="151" class="lg-t"/><path d="M280,0 H320 A53,53 0 0 1 320,106 H301 L285,76 H318 A25,25 0 0 0 318,26 H280 Z" class="lg-t"/><g transform="translate(426,0)" class="lg-n"><polygon points="0,0 31,0 31,26 0,38"/><rect x="0" y="44" width="31" height="107"/><polygon points="45,0 77,0 174,139 174,151 142,151 77,58 77,151 45,151"/><polygon points="142,0 174,0 174,113 142,90"/></g></svg><span class="eyebrow">v1.0</span></div>
       <div class="grow"></div>
       <span class="eyebrow">Your phone is the way in</span>
       <h1 style="margin-top:10px">No bands.<br>No paper.<br>Just tap in.</h1>
@@ -268,7 +300,7 @@ h2{font-family:var(--display);font-weight:700;font-size:26px;line-height:1.1;let
       <span class="eyebrow" style="margin-top:14px">Step 4 of 4</span>
       <h2>Try one tap</h2>
       <p class="lede">This is the whole gesture. Hold the top of your phone near the reader.</p>
-      <div class="reader" id="reader"><div><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="#B5A0CC" stroke-width="1.6" stroke-linecap="round"><circle cx="6" cy="12" r="2" fill="#B5A0CC" stroke="none"/><path d="M11 7.5a6.5 6.5 0 0 1 0 9"/><path d="M15 4.5a10.5 10.5 0 0 1 0 15"/></svg><div class="lbl" id="readerLbl">PRACTICE READER</div></div></div>
+      <div class="reader" id="reader"><div><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="6" cy="12" r="2" fill="currentColor" stroke="none"/><path d="M11 7.5a6.5 6.5 0 0 1 0 9"/><path d="M15 4.5a10.5 10.5 0 0 1 0 15"/></svg><div class="lbl" id="readerLbl">PRACTICE READER</div></div></div>
       <div class="result" id="result" aria-live="polite"></div>
       <div class="mini" id="mini"><span class="eyebrow">Practice pass</span><b>Tap in · Demo Gate</b></div>
       <div class="cta" style="margin-top:18px"><button class="btn signal" id="tapBtn">Hold near reader</button></div>
@@ -298,6 +330,7 @@ h2{font-family:var(--display);font-weight:700;font-size:26px;line-height:1.1;let
     <p class="q" id="nQ"></p>
     <dl id="nBody"></dl>
     <div class="flow" id="flow"></div>
+    <p class="mode-line" id="modeLine"></p>
     <p class="disclaim">Prototype. Taps, lookups and passes are simulated with example data.</p>
   </aside>
 </div>
@@ -417,14 +450,18 @@ const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
 let W,H,DPR,ox=.5,oy=.42,t0=performance.now();
 function size(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;cv.width=W*DPR;cv.height=H*DPR;cx.setTransform(DPR,0,0,DPR,0,0)}
 addEventListener("resize",size);size();
-const C={field:[181,160,204],signal:[255,255,255],ok:[127,224,180]};
+const PAL={
+  dark:{field:[181,160,204],signal:[255,255,255],ok:[127,224,180],dash:[201,184,212],fade:[43,27,45]},
+  light:{field:[128,97,154],signal:[108,74,108],ok:[30,143,95],dash:[110,90,116],fade:[247,242,248]}
+};
+let C=PAL.dark;
 function frame(now){
   const [tx,ty]=ORIGINS[Math.max(0,step)];ox+=(tx-ox)*.05;oy+=(ty-oy)*.05;
   const t=(now-t0)/1000,X=ox*W,Y=oy*H;
   cx.clearRect(0,0,W,H);
   const g=cx.createRadialGradient(X,Y,0,X,Y,Math.max(W,H)*.8);
   const warm=step===5?C.signal:C.field;
-  g.addColorStop(0,`rgba(${warm},.20)`);g.addColorStop(.5,`rgba(${C.field},.05)`);g.addColorStop(1,"rgba(43,27,45,0)");
+  g.addColorStop(0,`rgba(${warm},.20)`);g.addColorStop(.5,`rgba(${C.field},.05)`);g.addColorStop(1,`rgba(${C.fade},0)`);
   cx.fillStyle=g;cx.fillRect(0,0,W,H);
   const speed=step===3?.06:step===2&&burst?.3:.1, n=4, maxR=Math.max(W,H)*.75;
   for(let i=0;i<n;i++){
@@ -433,12 +470,31 @@ function frame(now){
     const col=burst&&burstColor?C[burstColor]:(i%3===0&&step!==3?C.signal:C.field);
     cx.beginPath();cx.arc(X,Y,r,0,Math.PI*2);cx.strokeStyle=`rgba(${col},${a})`;cx.lineWidth=1.2;cx.stroke();
   }
-  if(step===5){[70,125].forEach(r=>{cx.beginPath();cx.setLineDash([3,5]);cx.arc(X,Y,r,0,Math.PI*2);cx.strokeStyle="rgba(201,184,212,.35)";cx.stroke();cx.setLineDash([])})}
+  if(step===5){[70,125].forEach(r=>{cx.beginPath();cx.setLineDash([3,5]);cx.arc(X,Y,r,0,Math.PI*2);cx.strokeStyle=`rgba(${C.dash},.35)`;cx.stroke();cx.setLineDash([])})}
   if(burst){burst*=.985;if(burst<.05){burst=0;burstColor=null}}
   if(!reduce||burst) requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 if(reduce){setInterval(()=>requestAnimationFrame(frame),400)}
+
+/* Dark / light mode: follows the phone until the person picks one */
+const mq=matchMedia("(prefers-color-scheme: light)");
+let mode=null; try{const v=localStorage.getItem("tapin-mode");if(v==="light"||v==="dark")mode=v}catch(e){}
+function systemMode(){const v=document.documentElement.getAttribute("data-theme");if(v==="light"||v==="dark")return v;return mq.matches?"light":"dark"}
+function applyMode(){
+  const m=mode||systemMode();
+  document.documentElement.setAttribute("data-mode",m);
+  C=PAL[m];
+  const meta=document.querySelector('meta[name="theme-color"]'); if(meta) meta.content=m==="light"?"#F7F2F8":"#2B1B2D";
+  themeBtn.setAttribute("aria-label",m==="light"?"Switch to dark mode":"Switch to light mode");
+  modeLine.innerHTML=mode?`Theme: ${m}, chosen with the switch · <button id="modeReset">Follow my phone instead</button>`:`Theme: ${m}, following your phone's setting. Use the sun/moon switch to change it.`;
+  if(reduce) requestAnimationFrame(frame);
+}
+themeBtn.addEventListener("click",e=>{e.stopPropagation();mode=(mode||systemMode())==="light"?"dark":"light";try{localStorage.setItem("tapin-mode",mode)}catch(err){}applyMode()});
+document.addEventListener("click",e=>{if(e.target.id==="modeReset"){mode=null;try{localStorage.removeItem("tapin-mode")}catch(err){}applyMode()}});
+if(mq.addEventListener) mq.addEventListener("change",()=>{if(!mode)applyMode()});
+new MutationObserver(()=>{if(!mode)applyMode()}).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+applyMode();
 go(-1);
 </script>
 

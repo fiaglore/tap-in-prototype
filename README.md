@@ -28,6 +28,12 @@ What a brand-new user sees, in order:
 
 The side panel beside the phone explains each screen: what the user sees, why it's built that way, and how the ambient ripple layer behaves.
 
+## Dark and light mode
+
+The app follows the phone's own dark or light setting. A sun/moon switch in the status bar of every screen overrides it, and the prototype remembers the choice in that browser. A link under the notes panel switches back to following the phone.
+
+Light mode keeps the same plum family: a pale lilac-white ground, plum text and buttons, and a light launch screen with a plum TAP and lilac IN that flashes plum.
+
 ## Logo
 
 All files are in [`logo/`](logo/) as SVG.
@@ -50,7 +56,9 @@ The letters are traced from the original Tap In wordmark image, so they're close
 | Plum | `#6C4A6C` | Logo tile, launch screen |
 | Lilac | `#B5A0CC` | "IN", buttons, highlights, ripples |
 | White | `#FFFFFF` | "TAP", text |
-| Deep plum | `#2B1B2D` | App background |
+| Deep plum | `#2B1B2D` | App background (dark mode) |
+| Mist | `#F7F2F8` | App background (light mode) |
+| Deep lilac | `#80619A` / `#8C6FAB` | Primary button (dark mode) / IN in light mode |
 | Success | `#7FE0B4` | Access granted |
 | Pending | `#F2C96B` | Passes waiting for approval |
 
