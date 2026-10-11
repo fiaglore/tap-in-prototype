@@ -400,9 +400,8 @@ function viewCustom() {
 
 // ---- Start ---------------------------------------------------------------------------------------
 (async function start() {
-  const splash = h('div', { class: 'splash', 'aria-hidden': 'true' }, h('img', { src: '/logo/tap-in-animated.svg', alt: '' }));
-  document.body.append(splash);
-  setTimeout(() => splash.remove(), 2500);
+  const splash = document.getElementById('splash');
+  if (splash) setTimeout(() => splash.remove(), 3300);
   state.config = await get('/config').catch(() => ({}));
   if (state.config.configured === false) {
     mount(root, h('main', { class: 'page hero' }, h('h1', {}, 'Almost there'), h('p', { class: 'muted', style: 'margin-top:12px' }, 'The server is running but its SECRET_PEPPER secret is not set yet. See the README, "Set the secret".')));

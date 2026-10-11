@@ -5,10 +5,10 @@
 .r2{animation-delay:.3s}
 @keyframes rip{0%{transform:scale(.3);opacity:0}6%{opacity:.9}70%{transform:scale(4.2);opacity:0}100%{transform:scale(4.2);opacity:0}}
 .press{transform-box:fill-box;transform-origin:center;animation:press 2.4s ease infinite}
-@keyframes press{0%,100%{transform:scale(1)}4%{transform:scale(.6)}12%{transform:scale(1)}}
+@keyframes press{0%,100%{transform:scale(1)}6%{transform:scale(.5)}18%{transform:scale(1)}}
 .lit{animation:lit 2.4s ease infinite}
-@keyframes lit{0%,8%{fill:#B5A0CC}16%,34%{fill:#FFFFFF}52%,100%{fill:#B5A0CC}}
-@media (prefers-reduced-motion:reduce){.rip,.press,.lit{animation:none}}
+@keyframes lit{0%{fill:#B5A0CC}10%,42%{fill:#FFFFFF}64%,100%{fill:#B5A0CC}}
+@media (prefers-reduced-motion:reduce){.rip,.press{animation:none}.lit{animation:litsoft 2.4s ease infinite}@keyframes litsoft{0%,100%{fill:#B5A0CC}45%{fill:#FFFFFF}}}
 </style>
 <clipPath id="tile"><rect x="-53.5" y="-69" width="480" height="480" rx="108"/></clipPath>
 <rect x="-53.5" y="-69" width="480" height="480" rx="108" fill="#6C4A6C"/>
