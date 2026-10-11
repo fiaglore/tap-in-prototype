@@ -52,7 +52,7 @@ h2{font-family:var(--display);font-weight:700;font-size:26px;line-height:1.1;let
 .btn:active{transform:scale(.98)}
 .btn:disabled{opacity:.35;cursor:not-allowed}
 .btn.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
-.btn.signal{background:var(--signal);color:var(--ink)}
+.btn.signal{background:#80619A;color:#FFFFFF}
 .fine{font-size:12px;color:var(--muted);text-align:center;margin:4px 0 0}
 
 /* Context chips */
@@ -426,10 +426,10 @@ function frame(now){
   const warm=step===5?C.signal:C.field;
   g.addColorStop(0,`rgba(${warm},.20)`);g.addColorStop(.5,`rgba(${C.field},.05)`);g.addColorStop(1,"rgba(43,27,45,0)");
   cx.fillStyle=g;cx.fillRect(0,0,W,H);
-  const speed=step===3?.25:step===2&&burst?1.2:.5, n=6, maxR=Math.max(W,H)*.75;
+  const speed=step===3?.06:step===2&&burst?.3:.1, n=4, maxR=Math.max(W,H)*.75;
   for(let i=0;i<n;i++){
     const p=reduce?i/n:((t*speed+i/n)%1);
-    const r=12+p*maxR, a=(1-p)*.35;
+    const r=12+p*maxR, a=(1-p)*.22;
     const col=burst&&burstColor?C[burstColor]:(i%3===0&&step!==3?C.signal:C.field);
     cx.beginPath();cx.arc(X,Y,r,0,Math.PI*2);cx.strokeStyle=`rgba(${col},${a})`;cx.lineWidth=1.2;cx.stroke();
   }
