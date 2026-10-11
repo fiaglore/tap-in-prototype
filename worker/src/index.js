@@ -11,7 +11,7 @@ import * as gate from './routes/gate.js';
 
 // [method, path, auth, handler]. auth "user" needs a signed-in session; gate routes check their own key.
 const ROUTES = [
-  ['GET', '/api/config', 'none', ({ env }) => json({ otp_mode: isDemo(env) ? 'demo' : 'live', configured: isConfigured(env) })],
+  ['GET', '/api/config', 'none', ({ env }) => json({ otp_mode: isDemo(env) ? 'demo' : 'live', configured: isConfigured(env), ...(isConfigured(env) ? {} : { problem: !env.SECRET_PEPPER ? 'SECRET_PEPPER is not set on the running Worker' : 'SECRET_PEPPER is set but shorter than 32 characters (length ' + String(env.SECRET_PEPPER).length + ')' }) })],
   ['POST', '/api/auth/otp/request', 'none', auth.otpRequest],
   ['POST', '/api/auth/otp/verify', 'none', auth.otpVerify],
   ['POST', '/api/auth/logout', 'none', auth.logout],
