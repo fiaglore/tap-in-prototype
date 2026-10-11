@@ -10,7 +10,7 @@ Tap In replaces attendance wristbands, paper tickets and access cards with the p
 
 This repo holds the clickable first-run prototype and the logo files. It's a design prototype: taps, pass lookups and passes are simulated with example data.
 
-**Live prototype:** https://YOUR-USERNAME.github.io/tap-in-prototype/ (once GitHub Pages is on, see below)
+**Live prototype:** https://fiaglore.github.io/tap-in-prototype/ (once GitHub Pages is on, see below)
 
 ## The first-run flow
 
@@ -71,4 +71,8 @@ python3 -m http.server 8000
 2. Under **Build and deployment**, set **Source** to *Deploy from a branch*.
 3. Choose branch **main** and folder **/ (root)**, then **Save**.
 
-After a minute or two the prototype is live at `https://YOUR-USERNAME.github.io/tap-in-prototype/`.
+After a minute or two the prototype is live at `https://fiaglore.github.io/tap-in-prototype/`.
+
+## Licence
+
+Copyright © 2026 Tap In. All rights reserved. You can view this repository and the live prototype, but the code, name, logo and designs may not be copied, reused or adapted without written permission. See [LICENSE](LICENSE).
