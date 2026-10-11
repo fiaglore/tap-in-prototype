@@ -6,11 +6,11 @@ import { get, patch, post } from './api.js';
 export function signInFlow(root, { title, lede, onDone }) {
   let identifier = '';
   let config = { otp_mode: 'demo', configured: true };
-  get('/config').then((c) => { config = c; }).catch(() => {});
+  const emailOnly = () => config.otp_mode === 'firebase';
 
   function stepIdentifier(err = '') {
-    const input = h('input', { class: 'input', id: 'ident', type: 'text', inputmode: 'email', autocomplete: 'username', placeholder: '0803 412 7790 or you@example.com', value: identifier, 'aria-describedby': 'ident-hint' });
-    const btn = h('button', { class: 'btn primary block', type: 'submit' }, 'Send me a code');
+    const input = h('input', { class: 'input', id: 'ident', type: emailOnly() ? 'email' : 'text', inputmode: 'email', autocomplete: 'username', placeholder: emailOnly() ? 'you@example.com' : '0803 412 7790 or you@example.com', value: identifier, 'aria-describedby': 'ident-hint' });
+    const btn = h('button', { class: 'btn primary block', type: 'submit' }, emailOnly() ? 'Email me a sign-in link' : 'Send me a code');
     const form = h('form', {
       onsubmit: async (e) => {
         e.preventDefault();
@@ -18,14 +18,17 @@ export function signInFlow(root, { title, lede, onDone }) {
         identifier = input.value.trim();
         try {
           const r = await post('/auth/otp/request', { identifier });
-          stepCode('', r);
+          if (r.channel === 'email-link') {
+            try { localStorage.setItem('tapin-signin', JSON.stringify({ email: identifier.toLowerCase(), ret: location.pathname })); } catch {}
+            stepLink(r);
+          } else stepCode('', r);
         } catch (ex) {
           stepIdentifier(ex.message);
         }
       }
     },
-      h('div', { class: 'field' }, h('label', { for: 'ident' }, 'Phone number or email'), input,
-        h('p', { class: 'hint', id: 'ident-hint' }, 'Nigerian numbers work with or without the 0. We only use this to sign you in and match invites sent to you.')),
+      h('div', { class: 'field' }, h('label', { for: 'ident' }, emailOnly() ? 'Email address' : 'Phone number or email'), input,
+        h('p', { class: 'hint', id: 'ident-hint' }, emailOnly() ? 'We email you a link that signs you in. We only use your email to sign you in and match invites sent to you.' : 'Nigerian numbers work with or without the 0. We only use this to sign you in and match invites sent to you.')),
       err && h('div', { class: 'error', role: 'alert' }, err),
       h('div', { style: 'margin-top:16px' }, btn));
     mount(root, h('h2', {}, title), lede && h('p', { class: 'muted', style: 'margin-top:6px' }, lede), form);
@@ -60,6 +63,19 @@ export function signInFlow(root, { title, lede, onDone }) {
     input.focus();
   }
 
+  function stepLink(sent, note = '') {
+    const resend = h('button', { class: 'btn ghost block', type: 'button', onclick: async (e) => {
+      e.target.disabled = true;
+      try { await post('/auth/otp/request', { identifier }); stepLink(sent, 'Sent again. Check your spam folder too.'); } catch (ex) { stepLink(sent, ex.message); }
+    } }, 'Send it again');
+    mount(root, h('h2', {}, 'Check your email'),
+      h('p', { class: 'muted', style: 'margin-top:6px' }, 'We sent a sign-in link to ' + identifier + '. Open it on this device and you will be signed in. The link works once and expires in about an hour.'),
+      note && h('div', { class: 'notice', role: 'status' }, note),
+      h('p', { class: 'hint', style: 'margin-top:12px' }, 'Nothing there? Look in spam or promotions. The sender is Firebase / noreply.'),
+      h('div', { style: 'margin-top:16px' }, resend),
+      h('p', { class: 'hint', style: 'margin-top:10px;text-align:center' }, 'Wrong email? ', h('a', { href: '#', onclick: (e) => { e.preventDefault(); stepIdentifier(); } }, 'Change it')));
+  }
+
   function stepName(user, err = '') {
     const input = h('input', { class: 'input', id: 'nm', type: 'text', autocomplete: 'name', placeholder: 'Full name', maxlength: '80' });
     const form = h('form', {
@@ -81,5 +97,5 @@ export function signInFlow(root, { title, lede, onDone }) {
     input.focus();
   }
 
-  stepIdentifier();
+  get('/config').then((c) => { config = c; }).catch(() => {}).finally(() => stepIdentifier());
 }

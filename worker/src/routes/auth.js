@@ -1,7 +1,8 @@
 import { HttpError, cleanText, newId, nowSec, parseIdentifier, safeEqual } from '../lib/util.js';
 import { clientIp, json, readJson } from '../lib/http.js';
 import { hashOtp, makeOtp } from '../lib/codes.js';
-import { deliverOtp, isDemo } from '../lib/otp-delivery.js';
+import { deliverOtp, isDemo, isFirebase } from '../lib/otp-delivery.js';
+import { completeSignIn, sendSignInLink } from '../lib/firebase.js';
 import { isFull, record, take } from '../lib/limits.js';
 import { endSession, publicUser, startSession } from '../lib/session.js';
 
@@ -19,6 +20,14 @@ export async function otpRequest({ request, env }) {
   const ok =
     (await take(env.DB, 'otp:id:' + id.value, 3, 900)) && (await take(env.DB, 'otp:ip:' + ip, 12, 900));
   if (!ok) throw new HttpError(429, 'rate_limited', 'Too many codes requested. Wait a few minutes and try again.');
+
+  if (isFirebase(env)) {
+    if (id.kind !== 'email') {
+      throw new HttpError(400, 'email_only', 'Sign in with your email address for now. Phone sign-in is coming.');
+    }
+    await sendSignInLink(env, id.value, new URL(request.url).origin + '/signin/');
+    return json({ ok: true, channel: 'email-link', expires_in: 3600 });
+  }
 
   const now = nowSec();
   const code = makeOtp();
@@ -78,6 +87,11 @@ export async function otpVerify({ request, env }) {
     .run();
   if (used.meta.changes !== 1) throw wrong;
 
+  return signInUser(env, request, id, now);
+}
+
+// Finds or creates the account for a verified identifier and starts a session.
+async function signInUser(env, request, id, now) {
   const column = id.kind === 'email' ? 'email' : 'phone';
   const made = await env.DB.prepare(
     `INSERT OR IGNORE INTO users (id, ${column}, name, created_at) VALUES (?1, ?2, NULL, ?3)`
@@ -90,6 +104,26 @@ export async function otpVerify({ request, env }) {
 
   const setCookie = await startSession(env, request, user.id);
   return json({ user: publicUser(user), is_new: made.meta.changes === 1 }, 200, { 'Set-Cookie': setCookie });
+}
+
+// POST /api/auth/email-link/complete  { email, oobCode }
+// The page the emailed link opens sends the one-time code here. Google confirms it; we never trust the browser's word.
+export async function emailLinkComplete({ request, env }) {
+  if (!isFirebase(env)) throw new HttpError(404, 'not_found', 'Not found.');
+  const body = await readJson(request);
+  const id = parseIdentifier(body.email);
+  const oob = String(body.oobCode ?? '');
+  if (!id || id.kind !== 'email' || !oob || oob.length > 300) {
+    throw new HttpError(400, 'link_invalid', 'That sign-in link is not valid. Request a new one.');
+  }
+  if (!(await take(env.DB, 'verify:ip:' + clientIp(request), 40, 900))) {
+    throw new HttpError(429, 'rate_limited', 'Too many attempts. Wait a few minutes and try again.');
+  }
+  const confirmed = await completeSignIn(env, id.value, oob);
+  if (confirmed !== id.value) {
+    throw new HttpError(400, 'email_mismatch', 'That link was sent to a different email address.');
+  }
+  return signInUser(env, request, id, nowSec());
 }
 
 export async function logout({ request, env }) {

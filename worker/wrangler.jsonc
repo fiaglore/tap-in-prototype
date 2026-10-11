@@ -19,8 +19,11 @@
   ],
   "vars": {
     // "demo": the sign-in code is shown on screen and no SMS or email is sent.
+    // "firebase": email only; Firebase emails a sign-in link (needs FIREBASE_API_KEY below).
     // "live": codes must be delivered by a provider (see src/lib/otp-delivery.js).
     "OTP_MODE": "demo",
+    // Firebase "Web API key" (Project settings > General). It is public by design, not a secret.
+    // "FIREBASE_API_KEY": "",
     // Comma-separated phone numbers or emails allowed to create events. Empty = anyone who signs in.
     "ORGANISER_IDENTIFIERS": ""
   },

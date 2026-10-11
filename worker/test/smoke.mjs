@@ -477,6 +477,69 @@ async function worker_fetch(path) {
   return (await mod.default.fetch(new Request('https://tapin.test' + path), env)).text();
 }
 
+
+// ---- Firebase email-link mode (Google's endpoints are stubbed; nothing real is sent) ----
+{
+  const realFetch = globalThis.fetch;
+  const sent = [];
+  let nextError = null;
+  globalThis.fetch = async (url, init) => {
+    const u = String(url);
+    if (!u.startsWith('https://identitytoolkit.googleapis.com/')) return realFetch(url, init);
+    const body = JSON.parse(init.body);
+    if (nextError) return new Response(JSON.stringify({ error: { message: nextError } }), { status: 400 });
+    if (u.includes(':sendOobCode')) { sent.push({ u, body }); return new Response('{}', { status: 200 }); }
+    if (body.oobCode === 'GOODCODE') return new Response(JSON.stringify({ email: body.email }), { status: 200 });
+    if (body.oobCode === 'OTHERCODE') return new Response(JSON.stringify({ email: 'someone.else@example.com' }), { status: 200 });
+    return new Response(JSON.stringify({ error: { message: 'INVALID_OOB_CODE' } }), { status: 400 });
+  };
+  const fenv = makeEnv({ OTP_MODE: 'firebase', FIREBASE_API_KEY: 'test-key' });
+  await test('firebase mode: config reports it and asks for the key if missing', async () => {
+    const c = client(fenv, '10.7.0.1');
+    assert.equal((await c.get('/api/config')).body.otp_mode, 'firebase');
+    const bare = client(makeEnv({ OTP_MODE: 'firebase' }), '10.7.0.2');
+    assert.ok((await bare.get('/api/config')).body.delivery_problem);
+    const r = await bare.post('/api/auth/otp/request', { identifier: 'a@example.com' });
+    assert.equal(r.status, 503);
+  });
+  await test('firebase mode: phone numbers are refused, email gets a link, no code is leaked', async () => {
+    const c = client(fenv, '10.7.1.1');
+    const ph = await c.post('/api/auth/otp/request', { identifier: '08034127790' });
+    assert.equal(ph.status, 400); assert.equal(ph.body.error.code, 'email_only');
+    const r = await c.post('/api/auth/otp/request', { identifier: 'Fire@Example.com' });
+    assert.equal(r.status, 200); assert.equal(r.body.channel, 'email-link'); assert.equal(r.body.dev_code, undefined);
+    const last = sent.at(-1);
+    assert.equal(last.body.email, 'fire@example.com'); assert.equal(last.body.requestType, 'EMAIL_SIGNIN');
+    assert.equal(last.body.continueUrl, 'https://tapin.test/signin/'); assert.equal(last.body.canHandleCodeInApp, true);
+    assert.ok(last.u.includes('key=test-key'));
+  });
+  await test('firebase mode: a good link signs in; wrong, reused or mismatched links do not', async () => {
+    const c = client(fenv, '10.7.2.1');
+    const bad = await c.post('/api/auth/email-link/complete', { email: 'fire@example.com', oobCode: 'NOPE' });
+    assert.equal(bad.status, 400); assert.equal(bad.body.error.code, 'link_invalid');
+    const mism = await c.post('/api/auth/email-link/complete', { email: 'fire@example.com', oobCode: 'OTHERCODE' });
+    assert.equal(mism.status, 400); assert.equal(mism.body.error.code, 'email_mismatch');
+    assert.equal((await c.get('/api/me')).status, 401);
+    const ok = await c.post('/api/auth/email-link/complete', { email: 'fire@example.com', oobCode: 'GOODCODE' });
+    assert.equal(ok.status, 200); assert.equal(ok.body.is_new, true);
+    assert.equal((await c.get('/api/me')).status, 200);
+    assert.equal((await c.post('/api/auth/email-link/complete', { email: '08034127790', oobCode: 'GOODCODE' })).status, 400);
+  });
+  await test('firebase mode: Google configuration errors become clear messages', async () => {
+    const c = client(fenv, '10.7.3.1');
+    nextError = 'OPERATION_NOT_ALLOWED';
+    assert.equal((await c.post('/api/auth/otp/request', { identifier: 'x1@example.com' })).body.error.code, 'email_not_enabled');
+    nextError = 'UNAUTHORIZED_DOMAIN : Domain not whitelisted by project';
+    assert.equal((await c.post('/api/auth/otp/request', { identifier: 'x2@example.com' })).body.error.code, 'domain_not_authorised');
+    nextError = null;
+  });
+  await test('demo mode does not expose the email-link route', async () => {
+    const c = client(env, '10.7.4.1');
+    assert.equal((await c.post('/api/auth/email-link/complete', { email: 'a@example.com', oobCode: 'GOODCODE' })).status, 404);
+  });
+  globalThis.fetch = realFetch;
+}
+
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {
   console.log('Failed: ' + failures.join('; '));

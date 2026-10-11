@@ -3,7 +3,7 @@
 import { HttpError, nowSec } from './lib/util.js';
 import { checkOrigin, json } from './lib/http.js';
 import { currentUser } from './lib/session.js';
-import { isDemo } from './lib/otp-delivery.js';
+import { otpMode } from './lib/otp-delivery.js';
 import * as auth from './routes/auth.js';
 import * as me from './routes/me.js';
 import * as events from './routes/events.js';
@@ -11,9 +11,10 @@ import * as gate from './routes/gate.js';
 
 // [method, path, auth, handler]. auth "user" needs a signed-in session; gate routes check their own key.
 const ROUTES = [
-  ['GET', '/api/config', 'none', ({ env }) => json({ otp_mode: isDemo(env) ? 'demo' : 'live', configured: isConfigured(env), ...(isConfigured(env) ? {} : { problem: !env.SECRET_PEPPER ? 'SECRET_PEPPER is not set on the running Worker' : 'SECRET_PEPPER is set but shorter than 32 characters (length ' + String(env.SECRET_PEPPER).length + ')' }) })],
+  ['GET', '/api/config', 'none', ({ env }) => json({ otp_mode: otpMode(env), configured: isConfigured(env), ...(otpMode(env) === 'firebase' && !env.FIREBASE_API_KEY ? { delivery_problem: 'FIREBASE_API_KEY is not set' } : {}), ...(isConfigured(env) ? {} : { problem: !env.SECRET_PEPPER ? 'SECRET_PEPPER is not set on the running Worker' : 'SECRET_PEPPER is set but shorter than 32 characters (length ' + String(env.SECRET_PEPPER).length + ')' }) })],
   ['POST', '/api/auth/otp/request', 'none', auth.otpRequest],
   ['POST', '/api/auth/otp/verify', 'none', auth.otpVerify],
+  ['POST', '/api/auth/email-link/complete', 'none', auth.emailLinkComplete],
   ['POST', '/api/auth/logout', 'none', auth.logout],
 
   ['GET', '/api/me', 'user', me.me],

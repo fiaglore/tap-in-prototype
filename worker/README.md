@@ -72,6 +72,8 @@ New migrations go in `migrations/` and are applied with `npm run db:migrate`.
 
 ## Going live with real sign-in codes
 
+**Email without a domain (Firebase).** Set `OTP_MODE` to `firebase` and `FIREBASE_API_KEY` to your Firebase Web API key. Firebase emails a sign-in link (not a 6-digit code); the link opens `/signin/`, and the Worker confirms it with Google. Phone numbers are refused in this mode. In Firebase: Authentication > Sign-in method > enable *Email link (passwordless)*, and add your Worker's host (e.g. `tap-in.<you>.workers.dev`) under Settings > Authorized domains.
+
 `OTP_MODE` is `demo` in `wrangler.jsonc`: no message is sent and the code is shown on screen. That is fine for trying the product, but anyone could then sign in as any phone number or email. Before real use, implement `sendSms` / `sendEmail` in `src/lib/otp-delivery.js` with a provider (for Nigeria, a local SMS aggregator or Termii/Twilio; Resend or Postmark for email), set `OTP_MODE` to `live`, and keep the secret keys as Worker secrets. In `live` mode the server refuses to send until a provider is wired in; it never falls back to demo.
 
 To limit who can create events, set `ORGANISER_IDENTIFIERS` to a comma-separated list of phone numbers (+234...) or emails.
