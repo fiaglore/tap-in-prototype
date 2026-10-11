@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2B1B2D">
+<link rel="icon" href="logo/tap-in-app-icon.svg" type="image/svg+xml">
+<title>Tap In · First-run prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: phone prototype on the left, design notes for the current screen on the right; stacks on phones. Ambient "signal field" canvas lives behind every screen. */
+:root{
+  --ink:#2B1B2D; --deep:#3A263D; --raise:#46304A; --line:#634A68;
+  --fg:#FFFFFF; --muted:#C9B8D4; --field:#B5A0CC; --signal:#B5A0CC; --plum:#6C4A6C; --ok:#7FE0B4; --warn:#F2C96B;
+  --display:"Syne","Avenir Next","Segoe UI",sans-serif;
+  --body:"Manrope","Segoe UI",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{background:var(--ink);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.5;padding-block:28px;padding-inline:16px}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--signal);outline-offset:3px}
+.stage{display:flex;gap:40px;justify-content:center;align-items:flex-start;flex-wrap:wrap;max-width:1100px;margin:0 auto}
+
+/* Phone */
+.phone{position:relative;width:min(390px,100%);height:800px;border-radius:44px;background:var(--ink);border:1px solid var(--line);overflow:hidden;box-shadow:0 30px 80px -20px rgba(181,160,204,.28),0 0 0 8px var(--deep);flex:0 0 auto}
+#field{position:absolute;inset:0;width:100%;height:100%;z-index:0}
+.statusbar{position:relative;z-index:3;display:flex;justify-content:space-between;padding:16px 28px 0;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.statusbar .notch{width:110px;height:30px;border-radius:20px;background:#000;position:absolute;left:50%;top:10px;transform:translateX(-50%)}
+.screen{position:absolute;inset:48px 0 0;z-index:2;display:flex;flex-direction:column;padding:16px 24px 28px;animation:in .45s ease both}
+@keyframes in{from{opacity:.0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.topnav{display:flex;align-items:center;justify-content:space-between;min-height:36px}
+.back{background:none;border:0;color:var(--muted);font-size:14px;padding:6px 0}
+.dots{display:flex;gap:6px}
+.dots i{width:18px;height:3px;border-radius:2px;background:var(--line)}
+.dots i.on{background:var(--signal)}
+.wordmark{font-family:var(--display);font-weight:800;font-size:20px;letter-spacing:-.02em;display:flex;align-items:center;gap:8px}
+.wordmark svg{width:22px;height:22px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+h1{font-family:var(--display);font-weight:800;font-size:34px;line-height:1.02;letter-spacing:-.025em;margin:0;text-wrap:balance}
+h2{font-family:var(--display);font-weight:700;font-size:26px;line-height:1.1;letter-spacing:-.02em;margin:6px 0 6px;text-wrap:balance}
+.lede{color:var(--muted);margin:10px 0 0;font-size:15px}
+.grow{flex:1}
+.cta{display:flex;flex-direction:column;gap:10px}
+.btn{border:0;border-radius:18px;padding:16px 18px;font-weight:700;font-size:16px;background:var(--fg);color:var(--ink);transition:transform .15s}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
+.btn.signal{background:var(--signal);color:var(--ink)}
+.fine{font-size:12px;color:var(--muted);text-align:center;margin:4px 0 0}
+
+/* Context chips */
+.choices{display:grid;gap:10px;margin-top:22px}
+.choice{display:grid;grid-template-columns:42px 1fr 22px;gap:12px;align-items:center;text-align:left;background:rgba(58,38,61,.75);border:1px solid var(--line);border-radius:18px;padding:14px;backdrop-filter:blur(10px)}
+.choice b{display:block;font-size:15px}
+.choice span{font-size:12.5px;color:var(--muted)}
+.choice .ic{width:42px;height:42px;border-radius:14px;background:var(--deep);display:grid;place-items:center}
+.choice .ic svg{width:22px;height:22px;stroke:var(--field);fill:none;stroke-width:1.6}
+.check{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--line);display:grid;place-items:center}
+.choice[aria-pressed="true"]{border-color:var(--signal);background:rgba(181,160,204,.14)}
+.choice[aria-pressed="true"] .check{background:var(--signal);border-color:var(--signal)}
+.choice[aria-pressed="true"] .check::after{content:"";width:8px;height:5px;border:2px solid var(--ink);border-top:0;border-right:0;transform:rotate(-45deg) translateY(-1px)}
+
+/* Find passes */
+.field-in{display:flex;align-items:center;gap:10px;background:var(--raise);border:1px solid var(--line);border-radius:18px;padding:6px 6px 6px 16px;margin-top:22px}
+.field-in .cc{font-family:var(--mono);font-size:14px;color:var(--muted)}
+.field-in input{flex:1;min-width:0;background:none;border:0;color:var(--fg);font-family:var(--mono);font-size:16px;padding:12px 0;outline:none}
+.seg{display:flex;gap:6px;margin-top:18px}
+.seg button{flex:1;background:none;border:1px solid var(--line);border-radius:12px;padding:9px;font-size:13px;color:var(--muted)}
+.seg button[aria-pressed="true"]{color:var(--fg);border-color:var(--fg)}
+.scan{margin-top:22px;display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px}
+.scan .pulse{width:10px;height:10px;border-radius:50%;background:var(--field);animation:pp 1s infinite}
+@keyframes pp{50%{opacity:.25}}
+.passes{display:grid;gap:10px;margin-top:16px}
+.pass{position:relative;display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding:14px 16px;border-radius:18px;border:1px solid var(--line);background:linear-gradient(135deg,rgba(181,160,204,.18),rgba(70,48,74,.85));animation:in .4s ease both}
+.pass .org{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.pass b{font-family:var(--display);font-size:17px;letter-spacing:-.01em}
+.pass .meta{grid-column:1/-1;font-size:12.5px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap}
+.pass .tag{font-family:var(--mono);font-size:10.5px;padding:3px 8px;border-radius:20px;border:1px solid var(--line);color:var(--fg)}
+.pass .tag.pending{color:var(--warn);border-color:rgba(242,201,107,.45)}
+.addtgl{grid-row:1/3;grid-column:2;align-self:center;width:30px;height:30px;border-radius:50%;border:1.5px solid var(--line);background:none;display:grid;place-items:center}
+.addtgl[aria-pressed="true"]{background:var(--ok);border-color:var(--ok)}
+.addtgl[aria-pressed="true"]::after{content:"";width:9px;height:5px;border:2px solid var(--ink);border-top:0;border-right:0;transform:rotate(-45deg) translateY(-1px)}
+
+/* Secure */
+.rows{display:grid;gap:10px;margin-top:20px}
+.row{display:grid;grid-template-columns:1fr auto;gap:4px 14px;align-items:center;padding:14px 16px;border-radius:18px;background:rgba(58,38,61,.78);border:1px solid var(--line);backdrop-filter:blur(10px)}
+.row b{font-size:15px}
+.row p{grid-column:1;margin:0;font-size:12.5px;color:var(--muted)}
+.row .req{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--signal);margin-left:6px}
+.sw{grid-row:1/3;grid-column:2;width:50px;height:30px;border-radius:20px;background:var(--line);border:0;position:relative;transition:background .2s}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:var(--fg);transition:transform .2s}
+.sw[aria-checked="true"]{background:var(--ok)}
+.sw[aria-checked="true"]::after{transform:translateX(20px)}
+.sw:disabled{opacity:.7;cursor:default}
+
+/* Practice */
+.reader{margin:18px auto 0;width:200px;height:120px;border-radius:22px;border:1px dashed var(--line);display:grid;place-items:center;text-align:center;position:relative;background:rgba(58,38,61,.6)}
+.reader .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--muted)}
+.reader .glyph{width:44px;height:44px;margin:0 auto 6px}
+.reader.ok{border-style:solid;border-color:var(--ok);box-shadow:0 0 0 6px rgba(127,224,180,.12),0 0 60px rgba(127,224,180,.35)}
+.reader.ok .lbl{color:var(--ok)}
+.result{margin-top:18px;text-align:center;min-height:68px}
+.result b{display:block;font-family:var(--display);font-size:22px}
+.result span{font-size:13px;color:var(--muted)}
+.mini{margin:auto auto 0;width:150px;padding:14px;border-radius:20px;background:linear-gradient(160deg,var(--raise),var(--deep));border:1px solid var(--line);text-align:center;transition:transform .5s cubic-bezier(.3,1.4,.5,1)}
+.mini.lift{transform:translateY(-190px) scale(.92)}
+.mini .eyebrow{font-size:9.5px}
+.mini b{display:block;font-family:var(--display);font-size:15px;margin-top:4px}
+
+/* Home */
+.homehead{display:flex;justify-content:space-between;align-items:center}
+.avatar{width:36px;height:36px;border-radius:50%;background:var(--raise);border:1px solid var(--line);display:grid;place-items:center;font-weight:700;font-size:13px}
+.orbit{position:relative;height:250px;margin:6px -8px 0}
+.orbit .you{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:58px;height:58px;border-radius:50%;background:var(--fg);color:var(--ink);display:grid;place-items:center;font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.1em}
+.sat{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:0;padding:4px}
+.sat i{width:14px;height:14px;border-radius:50%;background:var(--field);box-shadow:0 0 18px var(--field)}
+.sat.warm i{background:#FFFFFF;box-shadow:0 0 18px #FFFFFF}
+.sat.wait i{background:transparent;border:1.5px dashed var(--warn);box-shadow:none}
+.sat span{font-size:11px;white-space:nowrap;background:rgba(43,27,45,.8);padding:2px 8px;border-radius:10px}
+.ringlbl{position:absolute;font-family:var(--mono);font-size:9.5px;color:var(--muted);letter-spacing:.1em;left:50%;transform:translateX(-50%)}
+.next{padding:16px;border-radius:22px;background:linear-gradient(135deg,rgba(108,74,108,.9),rgba(70,48,74,.9));border:1px solid rgba(181,160,204,.45)}
+.next .top{display:flex;justify-content:space-between;align-items:baseline}
+.next b{font-family:var(--display);font-size:20px;display:block;margin-top:2px}
+.next .count{font-family:var(--display);font-size:30px;font-weight:800;color:var(--signal);font-variant-numeric:tabular-nums;line-height:1}
+.next .count small{display:block;font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right;letter-spacing:.1em}
+.next .state{margin-top:10px;font-size:12.5px;color:var(--muted);display:flex;gap:8px;align-items:center}
+.next .state i{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.tabbar{display:grid;grid-template-columns:repeat(4,1fr);margin:14px -8px 0;padding-top:10px;border-top:1px solid var(--line)}
+.tabbar button{background:none;border:0;font-size:11px;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:4px}
+.tabbar button svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.6}
+.tabbar button.on{color:var(--fg)}
+.toast{position:absolute;left:24px;right:24px;bottom:96px;z-index:5;padding:12px 14px;border-radius:14px;background:var(--raise);border:1px solid var(--line);font-size:13px;animation:in .3s ease both}
+
+/* Launch splash: Tap In motion logo */
+.splash{position:absolute;inset:0;z-index:4;background:#6C4A6C;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;border:0;width:100%;cursor:pointer;color:#FFFFFF;padding:0 24px}
+.splash .sp-tag{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#B5A0CC}
+.splash .sp-skip{position:absolute;bottom:36px;left:0;right:0;text-align:center;font-size:12px;color:#B5A0CC;opacity:.8}
+.sp-rip{fill:none;stroke:#B5A0CC;stroke-width:6;transform-box:fill-box;transform-origin:center;opacity:0;animation:sprip 2.4s cubic-bezier(.2,.6,.3,1) infinite}
+.sp-rip.r2{animation-delay:.3s}
+@keyframes sprip{0%{transform:scale(.3);opacity:0}6%{opacity:.9}70%{transform:scale(4.2);opacity:0}100%{transform:scale(4.2);opacity:0}}
+.sp-press{transform-box:fill-box;transform-origin:center;animation:sppress 2.4s ease infinite}
+@keyframes sppress{0%,100%{transform:scale(1)}4%{transform:scale(.6)}12%{transform:scale(1)}}
+.sp-lit{animation:split 2.4s ease infinite}
+@keyframes split{0%,8%{fill:#B5A0CC}16%,34%{fill:#FFFFFF}52%,100%{fill:#B5A0CC}}
+.statusbar{z-index:5}
+.phone.on-splash .statusbar{color:#FFFFFF}
+
+/* Notes */
+.notes{flex:1 1 360px;max-width:520px;min-width:0}
+.notes .eyebrow{color:var(--signal)}
+.notes h3{font-family:var(--display);font-size:28px;letter-spacing:-.02em;margin:6px 0 4px;line-height:1.1}
+.notes .q{color:var(--muted);margin:0 0 18px}
+.notes dl{margin:0;display:grid;gap:14px}
+.notes dt{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.notes dd{margin:4px 0 0;line-height:1.55}
+.notes ul{margin:4px 0 0;padding-left:18px}
+.notes li{margin:3px 0}
+.flow{display:grid;gap:4px;margin-top:26px;padding-top:18px;border-top:1px solid var(--line)}
+.flow button{display:grid;grid-template-columns:28px 1fr;align-items:center;text-align:left;background:none;border:0;padding:8px 10px;border-radius:12px;color:var(--muted);font-size:14px}
+.flow button .n{font-family:var(--mono);font-size:12px}
+.flow button.on{background:var(--deep);color:var(--fg)}
+.flow button.on .n{color:var(--signal)}
+.disclaim{font-size:12px;color:var(--muted);margin-top:16px}
+@media (max-width:760px){.phone{height:760px}.notes{max-width:100%}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.sp-lit{fill:#FFFFFF}}
+</style>
+
+</head>
+<body>
+<div class="stage">
+  <div class="phone" id="phone">
+    <canvas id="field" aria-hidden="true"></canvas>
+    <div class="statusbar"><span>11:10</span><span class="notch"></span><span>5G ▮▮▮</span></div>
+
+    <!-- 0 Launch splash -->
+    <button class="splash" id="splash" aria-label="Tap In. Tap to continue">
+      <svg viewBox="-53.5 -69 480 480" width="250" height="250" role="img" aria-label="Tap In logo, animated">
+        <circle class="sp-rip" cx="115" cy="207" r="30"></circle>
+        <circle class="sp-rip r2" cx="115" cy="207" r="30"></circle>
+        <polygon points="0,0 76,0 76,151 45,151 45,26 0,26" fill="#FFFFFF"></polygon>
+        <polygon points="80,0 120,0 120,26 93,26" fill="#FFFFFF"></polygon>
+        <polygon points="149,0 181,0 244,151 212,151 201,124 131,124 120,151 88,151" fill="#FFFFFF"></polygon>
+        <polygon points="143,97 189,97 166,42" fill="#6C4A6C"></polygon>
+        <polygon points="164,44 193,21 198,27 169,50" fill="#6C4A6C"></polygon>
+        <rect x="251" y="0" width="29" height="151" fill="#FFFFFF"></rect>
+        <path d="M280,0 H320 A53,53 0 0 1 320,106 H301 L285,76 H318 A25,25 0 0 0 318,26 H280 Z" fill="#FFFFFF"></path>
+        <g transform="translate(99.5,191)">
+          <polygon class="sp-press" points="0,0 31,0 31,26 0,38" fill="#B5A0CC"></polygon>
+          <rect class="sp-lit" x="0" y="44" width="31" height="107" fill="#B5A0CC"></rect>
+          <polygon class="sp-lit" points="45,0 77,0 174,139 174,151 142,151 77,58 77,151 45,151" fill="#B5A0CC"></polygon>
+          <polygon class="sp-lit" points="142,0 174,0 174,113 142,90" fill="#B5A0CC"></polygon>
+        </g>
+      </svg>
+      <span class="sp-tag">Your phone is the way in</span>
+      <span class="sp-skip">Tap anywhere to skip</span>
+    </button>
+
+    <!-- 1 Welcome -->
+    <section class="screen" data-s="0">
+      <div class="topnav"><svg class="logo-h" viewBox="0 0 600 151" height="22" role="img" aria-label="Tap In"><polygon points="0,0 76,0 76,151 45,151 45,26 0,26" fill="#FFFFFF"/><polygon points="80,0 120,0 120,26 93,26" fill="#FFFFFF"/><polygon points="149,0 181,0 244,151 212,151 201,124 131,124 120,151 88,151" fill="#FFFFFF"/><polygon points="143,97 189,97 166,42" fill="#2B1B2D"/><polygon points="164,44 193,21 198,27 169,50" fill="#2B1B2D"/><rect x="251" y="0" width="29" height="151" fill="#FFFFFF"/><path d="M280,0 H320 A53,53 0 0 1 320,106 H301 L285,76 H318 A25,25 0 0 0 318,26 H280 Z" fill="#FFFFFF"/><g transform="translate(426,0)" fill="#B5A0CC"><polygon points="0,0 31,0 31,26 0,38"/><rect x="0" y="44" width="31" height="107"/><polygon points="45,0 77,0 174,139 174,151 142,151 77,58 77,151 45,151"/><polygon points="142,0 174,0 174,113 142,90"/></g></svg><span class="eyebrow">v1.0</span></div>
+      <div class="grow"></div>
+      <span class="eyebrow">Your phone is the way in</span>
+      <h1 style="margin-top:10px">No bands.<br>No paper.<br>Just tap in.</h1>
+      <p class="lede">One app for festival gates, office doors and the guest list at the club. Your pass wakes up when you arrive.</p>
+      <div class="cta" style="margin-top:26px">
+        <button class="btn signal" data-go="1">Get started</button>
+        <button class="btn ghost" data-go="2" data-code="1">I have an invite code</button>
+      </div>
+      <p class="fine">Passes work offline at the gate once they're on your phone.</p>
+    </section>
+
+    <!-- 2 Contexts -->
+    <section class="screen" data-s="1" hidden>
+      <div class="topnav"><button class="back" data-go="0">← Back</button><div class="dots"></div></div>
+      <span class="eyebrow" style="margin-top:14px">Step 1 of 4</span>
+      <h2>Where will you tap in?</h2>
+      <p class="lede">Pick all that apply. We'll look for passes from these places first.</p>
+      <div class="choices" id="choices">
+        <button class="choice" data-ctx="events" aria-pressed="true"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 9V6h16v3a3 3 0 0 0 0 6v3H4v-3a3 3 0 0 0 0-6z"/><path d="M14 6v12" stroke-dasharray="2 2"/></svg></span><span><b>Events &amp; festivals</b><span>Concerts, conferences, weddings, markets</span></span><span class="check"></span></button>
+        <button class="choice" data-ctx="work" aria-pressed="false"><span class="ic"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M11 21v-4h2v4"/></svg></span><span><b>Workplace</b><span>Office doors, floors, meeting rooms, visitors</span></span><span class="check"></span></button>
+        <button class="choice" data-ctx="venues" aria-pressed="false"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 20V10l8-6 8 6v10"/><path d="M9 20v-6h6v6"/></svg></span><span><b>Venues &amp; clubs</b><span>Lounges, gyms, members' clubs, guest lists</span></span><span class="check"></span></button>
+        <button class="choice" data-ctx="campus" aria-pressed="false"><span class="ic"><svg viewBox="0 0 24 24"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c3 2 9 2 12 0v-5"/></svg></span><span><b>Campus &amp; residences</b><span>Halls, hostels, libraries, estates</span></span><span class="check"></span></button>
+      </div>
+      <div class="grow"></div>
+      <div class="cta"><button class="btn" id="ctxNext" data-go="2">Continue</button></div>
+    </section>
+
+    <!-- 3 Find passes -->
+    <section class="screen" data-s="2" hidden>
+      <div class="topnav"><button class="back" data-go="1">← Back</button><div class="dots"></div></div>
+      <span class="eyebrow" style="margin-top:14px">Step 2 of 4</span>
+      <h2 id="findTitle">Find passes sent to you</h2>
+      <p class="lede" id="findLede">Organisers and employers send passes to your number or email. No app account needed to receive one.</p>
+      <div class="seg" role="group" aria-label="Find by">
+        <button id="byPhone" aria-pressed="true">Phone</button><button id="byEmail" aria-pressed="false">Email</button><button id="byCode" aria-pressed="false">Invite code</button>
+      </div>
+      <label class="field-in" for="lookup"><span class="cc" id="cc">+234</span><input id="lookup" value="803 412 7790" inputmode="tel" aria-label="Phone number"></label>
+      <div id="findOut"></div>
+      <div class="grow"></div>
+      <div class="cta"><button class="btn" id="findBtn">Find my passes</button></div>
+    </section>
+
+    <!-- 4 Secure -->
+    <section class="screen" data-s="3" hidden>
+      <div class="topnav"><button class="back" data-go="2">← Back</button><div class="dots"></div></div>
+      <span class="eyebrow" style="margin-top:14px">Step 3 of 4</span>
+      <h2>Lock your passes to you</h2>
+      <p class="lede">A screenshot can't get anyone in. Your pass only opens on this phone, with you holding it.</p>
+      <div class="rows">
+        <div class="row"><b>Tap to enter<span class="req">REQUIRED</span></b><button class="sw" role="switch" aria-checked="true" disabled aria-label="Tap to enter"></button><p>Lets readers at gates and doors talk to your phone.</p></div>
+        <div class="row"><b>Face or fingerprint</b><button class="sw" role="switch" aria-checked="true" aria-label="Face or fingerprint"></button><p>Confirms it's you once per visit. Off means a 6-digit PIN instead.</p></div>
+        <div class="row"><b>Arrival awareness</b><button class="sw" role="switch" aria-checked="false" id="aware" aria-label="Arrival awareness"></button><p>Wakes the right pass as you reach the venue, so you never open the app at the gate.</p></div>
+      </div>
+      <div class="grow"></div>
+      <div class="cta"><button class="btn" data-go="4">Continue</button><p class="fine">You can change these any time in Me → Security.</p></div>
+    </section>
+
+    <!-- 5 Practice -->
+    <section class="screen" data-s="4" hidden>
+      <div class="topnav"><button class="back" data-go="3">← Back</button><div class="dots"></div></div>
+      <span class="eyebrow" style="margin-top:14px">Step 4 of 4</span>
+      <h2>Try one tap</h2>
+      <p class="lede">This is the whole gesture. Hold the top of your phone near the reader.</p>
+      <div class="reader" id="reader"><div><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="#B5A0CC" stroke-width="1.6" stroke-linecap="round"><circle cx="6" cy="12" r="2" fill="#B5A0CC" stroke="none"/><path d="M11 7.5a6.5 6.5 0 0 1 0 9"/><path d="M15 4.5a10.5 10.5 0 0 1 0 15"/></svg><div class="lbl" id="readerLbl">PRACTICE READER</div></div></div>
+      <div class="result" id="result" aria-live="polite"></div>
+      <div class="mini" id="mini"><span class="eyebrow">Practice pass</span><b>Tap in · Demo Gate</b></div>
+      <div class="cta" style="margin-top:18px"><button class="btn signal" id="tapBtn">Hold near reader</button></div>
+    </section>
+
+    <!-- 6 Home -->
+    <section class="screen" data-s="5" hidden>
+      <div class="homehead"><div><span class="eyebrow">Sunday, 11 Oct</span><div class="wordmark" style="font-size:22px;margin-top:2px">You're in.</div></div><div class="avatar">DS</div></div>
+      <div class="orbit" id="orbit"></div>
+      <div class="next">
+        <div class="top"><div><span class="eyebrow">Next up · Lagos</span><b>Palm Grove Festival</b><span style="font-size:12.5px;color:var(--muted)">Sat 12 Dec · VIP access · 3 zones</span></div><div class="count">62<small>DAYS</small></div></div>
+        <div class="state"><i></i>Pass is asleep. It wakes when you arrive.</div>
+      </div>
+      <div class="grow"></div>
+      <nav class="tabbar" aria-label="Main">
+        <button class="on"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" stroke-dasharray="3 3"/></svg>Around me</button>
+        <button><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="3"/><path d="M4 10h16"/></svg>Passes</button>
+        <button><svg viewBox="0 0 24 24"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="8"/></svg>History</button>
+        <button><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="3.5"/><path d="M5 20c1.5-4 12.5-4 14 0"/></svg>Me</button>
+      </nav>
+    </section>
+  </div>
+
+  <aside class="notes" aria-live="polite">
+    <span class="eyebrow" id="nEye"></span>
+    <h3 id="nTitle"></h3>
+    <p class="q" id="nQ"></p>
+    <dl id="nBody"></dl>
+    <div class="flow" id="flow"></div>
+    <p class="disclaim">Prototype. Taps, lookups and passes are simulated with example data.</p>
+  </aside>
+</div>
+
+<script>
+const NOTES=[
+ {t:"Welcome",q:"The first thing a new user sees. One promise, two ways forward.",
+  see:["Live signal field behind the headline: rings pulse out from a point, the visual idea the whole app is built on.","Headline sells the outcome (no bands, no paper), not the technology.","Primary path: Get started. Shortcut: I have an invite code, for people who arrived from an SMS or email."],
+  why:"Most first-timers open Tap in because someone sent them a pass. The code shortcut drops them straight into Find passes with one less step.",
+  spatial:"The field's origin sits mid-screen here. On later screens it moves to wherever the action is, so the ambient layer always points at what matters."},
+ {t:"Where will you tap in?",q:"One app for events, offices and venues means asking once, up front.",
+  see:["Four contexts, multi-select, Events pre-selected as the most common first use.","Each option names real places (gyms, hostels, meeting rooms) so people recognise themselves."],
+  why:"The answer tailors the next screen: Workplace adds an email field suggestion and surfaces staff passes awaiting approval. It also sets which pass types appear first on Home.",
+  spatial:"Field origin drifts to the top right, quiet, so the choices carry the screen."},
+ {t:"Find your passes",q:"The pass already exists. The user just claims it.",
+  see:["Lookup by phone, email or invite code. Phone first, since Lagos tickets mostly arrive by SMS and WhatsApp.","Results animate in as cards. Each has an add toggle, all on by default.","A workplace pass shows as Pending until the employer approves the device."],
+  why:"No sign-up form, no password. Identity is the number or email the organiser already has, confirmed with a one-time code (skipped in this prototype).",
+  spatial:"While searching, the field pulses faster from the input, as if reaching out to find passes."},
+ {t:"Lock passes to you",q:"Replace the wristband's physical security with the phone's own.",
+  see:["Tap to enter is required and can't be switched off.","Face or fingerprint, with a PIN fallback.","Arrival awareness is optional and off by default, explained in terms of the benefit."],
+  why:"This is the anti-fraud answer to bands: passes are bound to one device and one person, so screenshots and forwarded links are worthless.",
+  spatial:"Field origin settles behind the security rows and slows down. Calm, trustworthy."},
+ {t:"Try one tap",q:"Teach the gesture before the real gate, with zero pressure.",
+  see:["A practice reader at the top of the screen.","The mini pass lifts toward the reader on tap, then the reader glows green with Access granted.","Result line shows exactly what a gate shows: name, zone, time."],
+  why:"First real use happens in a queue with people behind you. A five-second rehearsal here removes most of the hesitation there.",
+  spatial:"Field origin moves to the reader. On success the rings turn green and burst once."},
+ {t:"Home: Around me",q:"Where every first run lands, and the screen people see daily after that.",
+  see:["Orbit view: you at the centre, passes placed by how soon you'll use them. Inner ring is this week, outer ring is later.","Next up card with a countdown and the pass's state.","Pending passes show as dashed outlines until approved.","Tabs: Around me, Passes, History, Me."],
+  why:"Passes are asleep until you arrive, then wake on their own. Home tells you when and where that will happen, so you never hunt for a ticket at the gate.",
+  spatial:"This is the spatial idea in full. Tap any orbiting pass to see it named; on the day, the event's dot moves to the centre ring and the field turns warm."}
+];
+const SPLASH_NOTE={t:"Launch: the Tap In logo",q:"The very first thing anyone sees, for about five seconds while the app loads.",
+  see:["The TAP IN mark, full screen on plum.","The dot of the i presses like a fingertip, two ripples go out, and IN flashes white, like a gate saying yes.","It plays twice (about 5 seconds), then moves to Welcome. Tapping anywhere skips it."],
+  why:"It teaches the gesture before a single word is read: tap, ripple, you're in. The logo and the app's one action tell the same story.",
+  spatial:"The ripple here is the same signal that runs behind every screen after it, so the logo animation hands straight off into the app."};
+const ORIGINS=[[.5,.42],[.82,.12],[.5,.42],[.5,.55],[.5,.28],[.5,.27]];
+let step=-1, ctx=new Set(["events"]), found=false, burst=0, burstColor=null, splashT;
+
+const screens=[...document.querySelectorAll(".screen")];
+const splashEl=document.getElementById("splash");
+splashEl.addEventListener("click",()=>go(0));
+function go(n){
+  step=n; screens.forEach((s,i)=>s.hidden=i!==n);
+  clearTimeout(splashT);
+  splashEl.hidden=n!==-1; phone.classList.toggle("on-splash",n===-1);
+  if(n===-1){ splashT=setTimeout(()=>{ if(step===-1) go(0); },4800); }
+  document.querySelectorAll(".dots").forEach(d=>{d.innerHTML=[1,2,3,4].map(i=>`<i class="${i<=n?"on":""}"></i>`).join("")});
+  renderNotes(); if(n===5) renderOrbit(); if(n===4) resetPractice();
+}
+function renderNotes(){
+  const N=step===-1?SPLASH_NOTE:NOTES[step];
+  nEye.textContent=`Screen ${step+2} of 7 · first-time user`;
+  nTitle.textContent=N.t; nQ.textContent=N.q;
+  nBody.innerHTML=`<div><dt>What they see</dt><dd><ul>${N.see.map(x=>`<li>${x}</li>`).join("")}</ul></dd></div><div><dt>Why it's built this way</dt><dd>${N.why}</dd></div><div><dt>Ambient / spatial layer</dt><dd>${N.spatial}</dd></div>`;
+  flow.innerHTML=[SPLASH_NOTE,...NOTES].map((x,i)=>`<button class="${i-1===step?"on":""}" data-jump="${i-1}"><span class="n">0${i+1}</span>${x.t}</button>`).join("");
+}
+document.addEventListener("click",e=>{
+  const g=e.target.closest("[data-go]"); if(g){ if(g.dataset.code) setMode("code"); go(+g.dataset.go); }
+  const j=e.target.closest("[data-jump]"); if(j) go(+j.dataset.jump);
+  const c=e.target.closest(".choice"); if(c){const on=c.getAttribute("aria-pressed")!=="true";c.setAttribute("aria-pressed",on);on?ctx.add(c.dataset.ctx):ctx.delete(c.dataset.ctx);ctxNext.disabled=!ctx.size;found=false;findOut.innerHTML="";findBtn.textContent="Find my passes"}
+  const t=e.target.closest(".addtgl"); if(t){t.setAttribute("aria-pressed",t.getAttribute("aria-pressed")!=="true");updateAdd()}
+  const sw=e.target.closest(".sw:not([disabled])"); if(sw) sw.setAttribute("aria-checked",sw.getAttribute("aria-checked")!=="true");
+  const s=e.target.closest(".sat"); if(s){showToast(s.dataset.info)}
+});
+
+/* Find passes */
+function setMode(m){
+  byPhone.setAttribute("aria-pressed",m==="phone");byEmail.setAttribute("aria-pressed",m==="email");byCode.setAttribute("aria-pressed",m==="code");
+  cc.hidden=m!=="phone";
+  lookup.value=m==="phone"?"803 412 7790":m==="email"?"david.sesay@northgate.ng":"PGF-26-VIP-7K4Q";
+  lookup.setAttribute("aria-label",m==="phone"?"Phone number":m==="email"?"Email":"Invite code");
+  lookup.inputMode=m==="phone"?"tel":m==="email"?"email":"text";
+}
+byPhone.onclick=()=>setMode("phone");byEmail.onclick=()=>setMode("email");byCode.onclick=()=>setMode("code");
+const DATA=[
+ {ctx:"events",org:"Palm Grove Festival · Lagos",name:"VIP Access",meta:["Sat 12 Dec","Main Grounds · VIP Lounge"],tag:"Ready"},
+ {ctx:"events",org:"Eko Night Market · Lekki",name:"General Admission",meta:["Sat 14 Nov","Main Gate"],tag:"Ready"},
+ {ctx:"work",org:"Northgate Offices · Victoria Island",name:"Staff Access",meta:["Weekdays","Floors 3–5 · Car park"],tag:"Pending",pending:true},
+ {ctx:"venues",org:"Ikoyi Members' Club",name:"Guest List",meta:["Fri 23 Oct","Lounge · after 8pm"],tag:"Ready"},
+ {ctx:"campus",org:"Unilag · Moremi Hall",name:"Resident",meta:["Session 2026/27","Hall gate · Library"],tag:"Pending",pending:true}
+];
+findBtn.onclick=()=>{
+  if(found){go(3);return}
+  findOut.innerHTML=`<div class="scan"><span class="pulse"></span>Looking for passes sent to you…</div>`;
+  burst=1;burstColor="field";
+  setTimeout(()=>{
+    const list=DATA.filter(d=>ctx.has(d.ctx));
+    findOut.innerHTML=`<div class="scan" style="color:var(--ok)">${list.length} pass${list.length===1?"":"es"} waiting for you</div><div class="passes">${list.map((d,i)=>`<div class="pass" style="animation-delay:${i*90}ms"><span class="org">${d.org}</span><button class="addtgl" aria-pressed="true" aria-label="Add ${d.name}"></button><b>${d.name}</b><span class="meta"><span>${d.meta.join(" · ")}</span><span class="tag ${d.pending?"pending":""}">${d.tag}</span></span></div>`).join("")}</div>`;
+    found=true;updateAdd();
+  },900);
+};
+function updateAdd(){const n=findOut.querySelectorAll('.addtgl[aria-pressed="true"]').length;findBtn.textContent=n?`Add ${n} pass${n>1?"es":""}`:"Skip for now"}
+
+/* Practice */
+function resetPractice(){reader.classList.remove("ok");readerLbl.textContent="PRACTICE READER";result.innerHTML="";mini.classList.remove("lift");tapBtn.textContent="Hold near reader";tapBtn.dataset.done=""}
+tapBtn.onclick=()=>{
+  if(tapBtn.dataset.done){go(5);return}
+  mini.classList.add("lift");tapBtn.disabled=true;
+  setTimeout(()=>{reader.classList.add("ok");readerLbl.textContent="ACCESS GRANTED";burst=1;burstColor="ok";
+    result.innerHTML=`<b>Welcome, David</b><span>Demo Gate · General · 11:10</span>`;if(navigator.vibrate)try{navigator.vibrate(30)}catch(e){}},600);
+  setTimeout(()=>{mini.classList.remove("lift");tapBtn.disabled=false;tapBtn.textContent="Go to my passes";tapBtn.dataset.done="1"},1500);
+};
+
+/* Orbit */
+function renderOrbit(){
+  const added=[...findOut.querySelectorAll(".pass")].filter(p=>p.querySelector('.addtgl[aria-pressed="true"]')).map(p=>({name:p.querySelector(".org").textContent.split(" · ")[0],pending:!!p.querySelector(".pending"),when:p.querySelector(".meta span").textContent.split(" · ")[0]}));
+  const list=added.length?added:[{name:"Palm Grove Festival",when:"Sat 12 Dec"},{name:"Eko Night Market",when:"Sat 14 Nov"}];
+  const pos=[[78,22],[20,30],[84,74],[16,76],[50,92]];
+  orbit.innerHTML=`<span class="you">YOU</span><span class="ringlbl" style="top:27%">THIS MONTH</span><span class="ringlbl" style="top:3%">LATER</span>`+
+   list.map((p,i)=>{const [x,y]=pos[i%pos.length];const warm=p.name.startsWith("Palm");return `<button class="sat ${p.pending?"wait":warm?"warm":""}" style="left:${x}%;top:${y}%" data-info="${p.name} · ${p.pending?"waiting for approval":p.when}"><i></i><span>${p.name}</span></button>`}).join("");
+}
+let toastT;function showToast(t){document.querySelector(".toast")?.remove();const d=document.createElement("div");d.className="toast";d.textContent=t;phone.appendChild(d);clearTimeout(toastT);toastT=setTimeout(()=>d.remove(),2200)}
+
+/* Ambient signal field */
+const cv=document.getElementById("field"),cx=cv.getContext("2d");
+const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+let W,H,DPR,ox=.5,oy=.42,t0=performance.now();
+function size(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;cv.width=W*DPR;cv.height=H*DPR;cx.setTransform(DPR,0,0,DPR,0,0)}
+addEventListener("resize",size);size();
+const C={field:[181,160,204],signal:[255,255,255],ok:[127,224,180]};
+function frame(now){
+  const [tx,ty]=ORIGINS[Math.max(0,step)];ox+=(tx-ox)*.05;oy+=(ty-oy)*.05;
+  const t=(now-t0)/1000,X=ox*W,Y=oy*H;
+  cx.clearRect(0,0,W,H);
+  const g=cx.createRadialGradient(X,Y,0,X,Y,Math.max(W,H)*.8);
+  const warm=step===5?C.signal:C.field;
+  g.addColorStop(0,`rgba(${warm},.20)`);g.addColorStop(.5,`rgba(${C.field},.05)`);g.addColorStop(1,"rgba(43,27,45,0)");
+  cx.fillStyle=g;cx.fillRect(0,0,W,H);
+  const speed=step===3?.25:step===2&&burst?1.2:.5, n=6, maxR=Math.max(W,H)*.75;
+  for(let i=0;i<n;i++){
+    const p=reduce?i/n:((t*speed+i/n)%1);
+    const r=12+p*maxR, a=(1-p)*.35;
+    const col=burst&&burstColor?C[burstColor]:(i%3===0&&step!==3?C.signal:C.field);
+    cx.beginPath();cx.arc(X,Y,r,0,Math.PI*2);cx.strokeStyle=`rgba(${col},${a})`;cx.lineWidth=1.2;cx.stroke();
+  }
+  if(step===5){[70,125].forEach(r=>{cx.beginPath();cx.setLineDash([3,5]);cx.arc(X,Y,r,0,Math.PI*2);cx.strokeStyle="rgba(201,184,212,.35)";cx.stroke();cx.setLineDash([])})}
+  if(burst){burst*=.985;if(burst<.05){burst=0;burstColor=null}}
+  if(!reduce||burst) requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+if(reduce){setInterval(()=>requestAnimationFrame(frame),400)}
+go(-1);
+</script>
+
+</body>
+</html>
