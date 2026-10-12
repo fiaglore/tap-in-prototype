@@ -83,7 +83,7 @@ async function viewEvents() {
 // ---- Create event -------------------------------------------------------------------------------------
 function viewNew(err = '', draft) {
   document.title = 'New event · Tap In';
-  const d = draft || { name: '', venue: '', city: 'Lagos', starts_at: '', zones: ['Main entrance'], tiers: [{ name: 'General', zones: ['Main entrance'] }], reentry: false };
+  const d = draft || { name: '', venue: '', city: 'Lagos', starts_at: '', zones: ['Main entrance'], tiers: [{ name: 'General', zones: ['Main entrance'], price: '' }], reentry: false };
   const name = h('input', { class: 'input', id: 'n', value: d.name, maxlength: '80', required: true });
   const venue = h('input', { class: 'input', id: 'v', value: d.venue, maxlength: '80' });
   const city = h('input', { class: 'input', id: 'c', value: d.city, maxlength: '80' });
@@ -92,7 +92,7 @@ function viewNew(err = '', draft) {
   const zoneInputs = [];
   const zoneBox = h('div', { class: 'stack' });
   const tierBox = h('div', { class: 'stack' });
-  const tiers = d.tiers.map((t) => ({ ...t, zones: new Set(t.zones) }));
+  const tiers = d.tiers.map((t) => ({ ...t, zones: new Set(t.zones), price: t.price ?? '' }));
 
   function zoneNames() { return zoneInputs.map((i) => i.value.trim()).filter(Boolean); }
   function drawZones(names) {
@@ -106,7 +106,9 @@ function viewNew(err = '', draft) {
   function drawTiers() {
     const zs = zoneNames();
     tierBox.replaceChildren(...tiers.map((t, i) => h('div', { class: 'tierrow' },
-      h('div', { class: 'row' }, h('div', { style: 'flex:1' }, h('input', { class: 'input', value: t.name, maxlength: '60', 'aria-label': 'Ticket type name', oninput: (e) => { t.name = e.target.value; } })),
+      h('div', { class: 'row' },
+        h('div', { style: 'flex:1' }, h('input', { class: 'input', value: t.name, maxlength: '60', 'aria-label': 'Ticket type name', oninput: (e) => { t.name = e.target.value; } })),
+        h('input', { class: 'input', style: 'width:110px', value: t.price, inputmode: 'decimal', placeholder: 'Free', 'aria-label': 'Price in naira, blank for free', oninput: (e) => { t.price = e.target.value; } }),
         tiers.length > 1 && h('button', { class: 'btn ghost small', type: 'button', onclick: () => { tiers.splice(i, 1); drawTiers(); } }, 'Remove')),
       h('div', { class: 'checks' }, zs.map((z) => h('label', {}, h('input', { type: 'checkbox', checked: t.zones.has(z), onchange: (e) => { e.target.checked ? t.zones.add(z) : t.zones.delete(z); } }), z))))));
   }
@@ -127,13 +129,13 @@ function viewNew(err = '', draft) {
           name: name.value, venue: venue.value, city: city.value, allow_reentry: reentry.checked,
           starts_at: starts.value ? new Date(starts.value).toISOString() : undefined,
           zones: zs,
-          tiers: tiers.map((t) => ({ name: t.name, zones: zs.filter((z) => t.zones.has(z)) }))
+          tiers: tiers.map((t) => ({ name: t.name, zones: zs.filter((z) => t.zones.has(z)), price_kobo: t.price.trim() ? Math.round(parseFloat(t.price) * 100) : 0 }))
         };
         try {
           const r = await post('/events', body);
           showGateKey(r.event, r.gate_key, () => { location.hash = '#/e/' + r.event.id + '/invites'; });
         } catch (ex) {
-          viewNew(ex.message, { name: name.value, venue: venue.value, city: city.value, starts_at: starts.value, zones: zs, tiers: tiers.map((t) => ({ name: t.name, zones: [...t.zones] })), reentry: reentry.checked });
+          viewNew(ex.message, { name: name.value, venue: venue.value, city: city.value, starts_at: starts.value, zones: zs, tiers: tiers.map((t) => ({ name: t.name, zones: [...t.zones], price: t.price })), reentry: reentry.checked });
         }
       }
     },
@@ -169,7 +171,9 @@ async function viewEvent(id, tab) {
       .concat([{ href: '/gate/', text: 'Open scanner' }]);
     const body = h('div', {});
     mount(main, layout(items, h('div', {},
-      h('div', { class: 'spread' }, h('div', {}, h('h1', { style: 'font-size:34px' }, data.event.name), h('p', { class: 'muted' }, [data.event.venue, data.event.city, data.event.starts_at && when(data.event.starts_at)].filter(Boolean).join(' \u00b7 ')))),
+      h('div', { class: 'spread' },
+        h('div', {}, h('h1', { style: 'font-size:34px' }, data.event.name), h('p', { class: 'muted' }, [data.event.venue, data.event.city, data.event.starts_at && when(data.event.starts_at)].filter(Boolean).join(' \u00b7 '))),
+        h('button', { class: 'btn ghost small', type: 'button', onclick: () => copy(location.origin + '/e/?id=' + id, 'Sales page link copied') }, 'Copy sales page link')),
       body)));
     ({ overview: tabOverview, invites: tabInvites, attendees: tabAttendees, gate: tabGate }[tab] || tabOverview)(body, data);
   } catch (ex) { fail(ex); }

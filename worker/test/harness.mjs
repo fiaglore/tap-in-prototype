@@ -1,12 +1,17 @@
 // Runs the real Worker code in-process against the SQLite-backed D1 stand-in.
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import worker from '../src/index.js';
 import { createD1 } from './d1-shim.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-export const schema = readFileSync(join(root, 'migrations/0001_init.sql'), 'utf8');
+const migrationsDir = join(root, 'migrations');
+export const schema = readdirSync(migrationsDir)
+  .filter((f) => f.endsWith('.sql'))
+  .sort()
+  .map((f) => readFileSync(join(migrationsDir, f), 'utf8'))
+  .join('\n');
 export const PEPPER = 'test-pepper-0123456789-0123456789-0123456789';
 
 export function makeEnv(extra = {}) {

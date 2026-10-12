@@ -13,9 +13,10 @@ import {
 import { json, readJson } from '../lib/http.js';
 import { eventPrefix, hashGateKey, hashInvite, inviteHint, makeGateKey, makeInviteCode, tierCode } from '../lib/codes.js';
 
-const MAX_EVENTS_PER_USER = 20;
-const MAX_INVITES_PER_EVENT = 20000;
+export const MAX_EVENTS_PER_USER = 20;
+export const MAX_INVITES_PER_EVENT = 20000;
 const MAX_BATCH = 500;
+const MAX_PRICE_KOBO = 500_000_00; // ₦500,000, a sane ceiling for the demo
 
 function assertOrganiser(env, user) {
   const allow = String(env.ORGANISER_IDENTIFIERS || '')
@@ -54,7 +55,7 @@ const publicEvent = (e) => ({
 
 async function structure(env, eventId) {
   const zones = (await env.DB.prepare('SELECT id, name FROM zones WHERE event_id = ?1 ORDER BY sort, name').bind(eventId).all()).results;
-  const tiers = (await env.DB.prepare('SELECT id, name FROM tiers WHERE event_id = ?1 ORDER BY sort, name').bind(eventId).all()).results;
+  const tiers = (await env.DB.prepare('SELECT id, name, price_kobo FROM tiers WHERE event_id = ?1 ORDER BY sort, name').bind(eventId).all()).results;
   const links = (
     await env.DB.prepare('SELECT tier_id, zone_id FROM tier_zones WHERE tier_id IN (SELECT id FROM tiers WHERE event_id = ?1)')
       .bind(eventId)
@@ -106,6 +107,14 @@ export async function createEvent({ request, env, user }) {
     }
     return idx;
   });
+  const tierPrices = b.tiers.map((t, ti) => {
+    if (t?.price_kobo === undefined || t?.price_kobo === null || t?.price_kobo === '') return 0;
+    const p = Number.parseInt(t.price_kobo, 10);
+    if (!Number.isInteger(p) || p < 0 || p > MAX_PRICE_KOBO) {
+      throw new HttpError(400, 'invalid_price', `Enter a valid price for "${tierNames[ti]}".`);
+    }
+    return p;
+  });
 
   const owned = await env.DB.prepare('SELECT COUNT(*) AS n FROM events WHERE owner_id = ?1').bind(user.id).first();
   if (owned.n >= MAX_EVENTS_PER_USER) throw new HttpError(400, 'event_limit', `You can have up to ${MAX_EVENTS_PER_USER} events.`);
@@ -113,7 +122,7 @@ export async function createEvent({ request, env, user }) {
   const id = newId(12);
   const now = nowSec();
   const zoneRows = zoneNames.map((n, i) => ({ id: newId(10), name: n, sort: i }));
-  const tierRows = tierNames.map((n, i) => ({ id: newId(10), name: n, sort: i }));
+  const tierRows = tierNames.map((n, i) => ({ id: newId(10), name: n, sort: i, price_kobo: tierPrices[i] }));
   const linkRows = tierZones.flatMap((idxs, ti) => idxs.map((zi) => ({ t: tierRows[ti].id, z: zoneRows[zi].id })));
   const gateKey = makeGateKey();
 
@@ -139,8 +148,8 @@ export async function createEvent({ request, env, user }) {
        SELECT json_extract(value, '$.id'), ?1, json_extract(value, '$.name'), json_extract(value, '$.sort') FROM json_each(?2)`
     ).bind(id, JSON.stringify(zoneRows)),
     env.DB.prepare(
-      `INSERT INTO tiers (id, event_id, name, sort)
-       SELECT json_extract(value, '$.id'), ?1, json_extract(value, '$.name'), json_extract(value, '$.sort') FROM json_each(?2)`
+      `INSERT INTO tiers (id, event_id, name, sort, price_kobo)
+       SELECT json_extract(value, '$.id'), ?1, json_extract(value, '$.name'), json_extract(value, '$.sort'), json_extract(value, '$.price_kobo') FROM json_each(?2)`
     ).bind(id, JSON.stringify(tierRows)),
     env.DB.prepare(
       `INSERT INTO tier_zones (tier_id, zone_id)
@@ -261,8 +270,38 @@ export async function rotateGateKey({ env, user, params }) {
   return json({ gate_key: key });
 }
 
+// Mints `count` invite codes for a tier and stores them as unused invites. Returns the plain codes
+// and their row ids exactly once; only the hashes are stored, so the codes cannot be shown again.
+// A clash on the unique hash is astronomically unlikely, but handled by drawing fresh codes.
+export async function mintInvites(env, ev, tier, count, { label = null, bound = null, expires = null } = {}) {
+  const year2 = String(new Date((ev.starts_at || nowSec()) * 1000).getUTCFullYear()).slice(-2);
+  const base = { prefix: ev.prefix, year2, tier: tierCode(tier.name) };
+  const now = nowSec();
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const codes = [];
+    const rows = [];
+    for (let i = 0; i < count; i++) {
+      const code = makeInviteCode(base);
+      codes.push(code);
+      rows.push({ id: newId(12), h: await hashInvite(env.SECRET_PEPPER, code), t: inviteHint(code) });
+    }
+    try {
+      await env.DB.prepare(
+        `INSERT INTO invites (id, event_id, tier_id, code_hash, code_hint, label, bound_identifier, status, expires_at, created_at)
+         SELECT json_extract(value, '$.id'), ?1, ?2, json_extract(value, '$.h'), json_extract(value, '$.t'), ?3, ?4, 'unused', ?5, ?6
+         FROM json_each(?7)`
+      )
+        .bind(ev.id, tier.id, label, bound, expires, now, JSON.stringify(rows))
+        .run();
+      return { codes, ids: rows.map((r) => r.id) };
+    } catch (err) {
+      if (!/UNIQUE constraint failed/i.test(String(err?.message)) || attempt === 2) throw err;
+    }
+  }
+}
+
 // POST /api/events/:id/invites  { tier_id, count, label?, bound_to?, expires_at? }
-// Returns the plain codes exactly once. Only their hashes are stored, so they cannot be shown again.
 export async function createInvites({ request, env, user, params }) {
   const ev = await ownedEvent(env, user, params.id);
   const b = await readJson(request);
@@ -290,32 +329,8 @@ export async function createInvites({ request, env, user, params }) {
     throw new HttpError(400, 'invite_limit', `An event can have up to ${MAX_INVITES_PER_EVENT} invites.`);
   }
 
-  const year2 = String(new Date((ev.starts_at || nowSec()) * 1000).getUTCFullYear()).slice(-2);
-  const base = { prefix: ev.prefix, year2, tier: tierCode(tier.name) };
-  const now = nowSec();
-
-  // A clash on the unique hash is astronomically unlikely, but handle it by drawing fresh codes.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const codes = [];
-    const rows = [];
-    for (let i = 0; i < count; i++) {
-      const code = makeInviteCode(base);
-      codes.push(code);
-      rows.push({ id: newId(12), h: await hashInvite(env.SECRET_PEPPER, code), t: inviteHint(code) });
-    }
-    try {
-      await env.DB.prepare(
-        `INSERT INTO invites (id, event_id, tier_id, code_hash, code_hint, label, bound_identifier, status, expires_at, created_at)
-         SELECT json_extract(value, '$.id'), ?1, ?2, json_extract(value, '$.h'), json_extract(value, '$.t'), ?3, ?4, 'unused', ?5, ?6
-         FROM json_each(?7)`
-      )
-        .bind(ev.id, tier.id, label, bound, expires, now, JSON.stringify(rows))
-        .run();
-      return json({ tier: tier.name, label, codes }, 201);
-    } catch (err) {
-      if (!/UNIQUE constraint failed/i.test(String(err?.message)) || attempt === 2) throw err;
-    }
-  }
+  const { codes } = await mintInvites(env, ev, tier, count, { label, bound, expires });
+  return json({ tier: tier.name, label, codes }, 201);
 }
 
 // GET /api/events/:id/invites?status=&limit=&offset=

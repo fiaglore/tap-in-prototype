@@ -8,6 +8,7 @@ import * as auth from './routes/auth.js';
 import * as me from './routes/me.js';
 import * as events from './routes/events.js';
 import * as gate from './routes/gate.js';
+import * as publicSale from './routes/public.js';
 
 // [method, path, auth, handler]. auth "user" needs a signed-in session; gate routes check their own key.
 const ROUTES = [
@@ -35,7 +36,10 @@ const ROUTES = [
   ['POST', '/api/events/:id/passes/:passId/revoke', 'user', events.revokePass],
 
   ['GET', '/api/gate/info', 'none', gate.gateInfo],
-  ['POST', '/api/gate/scan', 'none', gate.gateScan]
+  ['POST', '/api/gate/scan', 'none', gate.gateScan],
+
+  ['GET', '/api/public/events/:id', 'none', publicSale.getEvent],
+  ['POST', '/api/public/events/:id/buy', 'user', publicSale.buy]
 ];
 
 const isConfigured = (env) => !!env.SECRET_PEPPER && env.SECRET_PEPPER.length >= 32;
