@@ -1,4 +1,4 @@
-import { h, mount, toast, copy, when, ago, download } from '/js/dom.js';
+import { h, wordmarkText, mount, toast, copy, when, ago, download } from '/js/dom.js';
 import { get, post, patch } from '/js/api.js';
 import { signInFlow } from '/js/auth-ui.js';
 
@@ -10,7 +10,7 @@ const reasons = { already_used: 'Already used', no_zone_access: 'Wrong area', re
 
 function header() {
   mount(top,
-    h('a', { class: 'wordmark', href: '#/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), 'Tap In ', h('span', { class: 'muted', style: 'font-weight:600;font-size:14px' }, 'Organiser')),
+    h('a', { class: 'wordmark', href: '#/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), wordmarkText(), ' ', h('span', { class: 'muted', style: 'font-weight:600;font-size:14px' }, 'Organiser')),
     h('div', { class: 'row' },
       h('a', { class: 'btn ghost small hide-sm', href: '/gate/' }, 'Open gate scanner'),
       user && h('button', { class: 'btn ghost small', type: 'button', onclick: async () => { await post('/auth/logout').catch(() => {}); user = null; boot(); } }, 'Sign out'),

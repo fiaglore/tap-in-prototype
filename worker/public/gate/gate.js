@@ -1,4 +1,4 @@
-import { h, mount, when } from '/js/dom.js';
+import { h, wordmarkText, mount, when } from '/js/dom.js';
 import { get, post } from '/js/api.js';
 
 const top = document.getElementById('top');
@@ -14,7 +14,7 @@ function load() { try { return JSON.parse(sessionStorage.getItem(KEY)) || {}; } 
 function save() { try { sessionStorage.setItem(KEY, JSON.stringify(cfg)); } catch {} }
 const auth = () => ({ Authorization: 'Bearer ' + cfg.key });
 
-mount(top, h('a', { class: 'wordmark', href: '/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), 'Tap In ', h('span', { class: 'muted', style: 'font-weight:600;font-size:14px' }, 'Gate')), window.TapTheme.button());
+mount(top, h('a', { class: 'wordmark', href: '/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), wordmarkText(), ' ', h('span', { class: 'muted', style: 'font-weight:600;font-size:14px' }, 'Gate')), window.TapTheme.button());
 
 function viewKey(err = '') {
   stopCamera();

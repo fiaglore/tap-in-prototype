@@ -1,4 +1,4 @@
-import { h, mount, toast, copy, when, ago } from '/js/dom.js';
+import { h, wordmarkText, mount, toast, copy, when, ago } from '/js/dom.js';
 import { get, post, patch } from '/js/api.js';
 import { signInFlow } from '/js/auth-ui.js';
 import { cardEl, cardNumber, loadCard, saveCard, sanitise, PRESETS, SWATCHES, FINISHES, PATTERNS, TYPES } from '/js/card.js';
@@ -65,7 +65,7 @@ const cardInfo = (status = 'Active') => ({ name: (loadCard().name || (state.user
 // ---- Shell with bottom tabs ----------------------------------------------------------------------
 function shell(content, { tabs = true, title } = {}) {
   const head = h('div', { class: 'head' },
-    h('a', { class: 'wordmark', href: '/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), 'Tap In'),
+    h('a', { class: 'wordmark', href: '/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), wordmarkText()),
     window.TapTheme.button());
   mount(root, head, h('main', { class: 'page' }, content), tabs && tabBar());
   if (title) document.title = title + ' · Tap In';
@@ -93,7 +93,7 @@ const STEPS = ['ctx', 'signin', 'passes', 'protect', 'practice'];
 function onbShell(step, ...kids) {
   const n = STEPS.indexOf(step) + 1;
   const head = h('div', { class: 'head' },
-    n > 1 ? h('button', { class: 'btn ghost small', type: 'button', onclick: () => onboarding(prevStep(step)) }, 'Back') : h('a', { class: 'wordmark', href: '/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), 'Tap In'),
+    n > 1 ? h('button', { class: 'btn ghost small', type: 'button', onclick: () => onboarding(prevStep(step)) }, 'Back') : h('a', { class: 'wordmark', href: '/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), wordmarkText()),
     window.TapTheme.button());
   mount(root, head, h('main', { class: 'page onb' },
     n > 0 && h('div', { class: 'seg3', 'aria-hidden': 'true' }, STEPS.map((_, i) => h('i', { class: i < n ? 'on' : '' }))),
@@ -126,7 +126,7 @@ function onboarding(step) {
 
 function stepWelcome() {
   mount(root,
-    h('div', { class: 'head' }, h('a', { class: 'wordmark', href: '/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), 'Tap In'), window.TapTheme.button()),
+    h('div', { class: 'head' }, h('a', { class: 'wordmark', href: '/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), wordmarkText()), window.TapTheme.button()),
     h('main', { class: 'page hero' },
       h('p', { class: 'eyebrow' }, 'Your phone is your pass'),
       h('h1', {}, 'No bands.', h('br'), 'No paper.', h('br'), 'Just tap in.'),
