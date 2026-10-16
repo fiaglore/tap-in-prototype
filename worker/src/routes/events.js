@@ -11,6 +11,7 @@ import {
   parseWhen
 } from '../lib/util.js';
 import { json, readJson } from '../lib/http.js';
+import { parseSchedule, scheduleOut } from '../lib/schedule.js';
 import { eventPrefix, hashGateKey, hashInvite, inviteHint, makeGateKey, makeInviteCode, tierCode } from '../lib/codes.js';
 
 export const MAX_EVENTS_PER_USER = 20;
@@ -32,7 +33,7 @@ function assertOrganiser(env, user) {
 
 async function ownedEvent(env, user, id) {
   const ev = await env.DB.prepare(
-    `SELECT id, name, prefix, venue, city, starts_at, allow_reentry, gate_key_hint, created_at
+    `SELECT id, name, prefix, kind, venue, city, starts_at, allow_reentry, gate_key_hint, created_at
      FROM events WHERE id = ?1 AND owner_id = ?2`
   )
     .bind(String(id).slice(0, 40), user.id)
@@ -45,6 +46,7 @@ const publicEvent = (e) => ({
   id: e.id,
   name: e.name,
   prefix: e.prefix,
+  kind: e.kind,
   venue: e.venue,
   city: e.city,
   starts_at: e.starts_at,
@@ -55,7 +57,7 @@ const publicEvent = (e) => ({
 
 async function structure(env, eventId) {
   const zones = (await env.DB.prepare('SELECT id, name FROM zones WHERE event_id = ?1 ORDER BY sort, name').bind(eventId).all()).results;
-  const tiers = (await env.DB.prepare('SELECT id, name, price_kobo FROM tiers WHERE event_id = ?1 ORDER BY sort, name').bind(eventId).all()).results;
+  const tiers = (await env.DB.prepare('SELECT id, name, price_kobo, days_mask, from_min, to_min FROM tiers WHERE event_id = ?1 ORDER BY sort, name').bind(eventId).all()).results;
   const links = (
     await env.DB.prepare('SELECT tier_id, zone_id FROM tier_zones WHERE tier_id IN (SELECT id FROM tiers WHERE event_id = ?1)')
       .bind(eventId)
@@ -63,7 +65,7 @@ async function structure(env, eventId) {
   ).results;
   return {
     zones,
-    tiers: tiers.map((t) => ({ ...t, zone_ids: links.filter((l) => l.tier_id === t.id).map((l) => l.zone_id) }))
+    tiers: tiers.map(({ days_mask, from_min, to_min, ...t }) => ({ ...t, schedule: scheduleOut({ days_mask, from_min, to_min }), zone_ids: links.filter((l) => l.tier_id === t.id).map((l) => l.zone_id) }))
   };
 }
 
@@ -84,6 +86,9 @@ function uniqueNames(list, label, min, max, maxLen) {
 export async function createEvent({ request, env, user }) {
   assertOrganiser(env, user);
   const b = await readJson(request);
+  const kind = b.kind === undefined ? 'event' : b.kind;
+  if (kind !== 'event' && kind !== 'workplace') throw new HttpError(400, 'invalid_kind', 'Choose event or workplace.');
+  const workplace = kind === 'workplace';
   const name = cleanText(b.name, 'name', { min: 2, max: 80 });
   const venue = cleanText(b.venue, 'venue', { optional: true, max: 80 });
   const city = cleanText(b.city, 'city', { optional: true, max: 60 });
@@ -107,6 +112,7 @@ export async function createEvent({ request, env, user }) {
     }
     return idx;
   });
+  const tierSchedules = b.tiers.map((t, ti) => (workplace ? parseSchedule(t, tierNames[ti]) : parseSchedule({}, tierNames[ti])));
   const tierPrices = b.tiers.map((t, ti) => {
     if (t?.price_kobo === undefined || t?.price_kobo === null || t?.price_kobo === '') return 0;
     const p = Number.parseInt(t.price_kobo, 10);
@@ -122,14 +128,14 @@ export async function createEvent({ request, env, user }) {
   const id = newId(12);
   const now = nowSec();
   const zoneRows = zoneNames.map((n, i) => ({ id: newId(10), name: n, sort: i }));
-  const tierRows = tierNames.map((n, i) => ({ id: newId(10), name: n, sort: i, price_kobo: tierPrices[i] }));
+  const tierRows = tierNames.map((n, i) => ({ id: newId(10), name: n, sort: i, price_kobo: tierPrices[i], ...tierSchedules[i] }));
   const linkRows = tierZones.flatMap((idxs, ti) => idxs.map((zi) => ({ t: tierRows[ti].id, z: zoneRows[zi].id })));
   const gateKey = makeGateKey();
 
   await env.DB.batch([
     env.DB.prepare(
-      `INSERT INTO events (id, owner_id, name, prefix, venue, city, starts_at, allow_reentry, gate_key_hash, gate_key_hint, created_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`
+      `INSERT INTO events (id, owner_id, name, prefix, venue, city, starts_at, allow_reentry, gate_key_hash, gate_key_hint, created_at, kind)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`
     ).bind(
       id,
       user.id,
@@ -138,18 +144,20 @@ export async function createEvent({ request, env, user }) {
       venue,
       city,
       startsAt,
-      b.allow_reentry ? 1 : 0,
+      workplace || b.allow_reentry ? 1 : 0, // people go in and out of an office all day
       await hashGateKey(env.SECRET_PEPPER, gateKey),
       gateKey.slice(-4),
-      now
+      now,
+      kind
     ),
     env.DB.prepare(
       `INSERT INTO zones (id, event_id, name, sort)
        SELECT json_extract(value, '$.id'), ?1, json_extract(value, '$.name'), json_extract(value, '$.sort') FROM json_each(?2)`
     ).bind(id, JSON.stringify(zoneRows)),
     env.DB.prepare(
-      `INSERT INTO tiers (id, event_id, name, sort, price_kobo)
-       SELECT json_extract(value, '$.id'), ?1, json_extract(value, '$.name'), json_extract(value, '$.sort'), json_extract(value, '$.price_kobo') FROM json_each(?2)`
+      `INSERT INTO tiers (id, event_id, name, sort, price_kobo, days_mask, from_min, to_min)
+       SELECT json_extract(value, '$.id'), ?1, json_extract(value, '$.name'), json_extract(value, '$.sort'), json_extract(value, '$.price_kobo'),
+              json_extract(value, '$.days_mask'), json_extract(value, '$.from_min'), json_extract(value, '$.to_min') FROM json_each(?2)`
     ).bind(id, JSON.stringify(tierRows)),
     env.DB.prepare(
       `INSERT INTO tier_zones (tier_id, zone_id)
@@ -165,7 +173,7 @@ export async function createEvent({ request, env, user }) {
 export async function listEvents({ env, user }) {
   const rows = (
     await env.DB.prepare(
-      `SELECT e.id, e.name, e.venue, e.city, e.starts_at, e.created_at,
+      `SELECT e.id, e.name, e.kind, e.venue, e.city, e.starts_at, e.created_at,
         (SELECT COUNT(*) FROM passes p WHERE p.event_id = e.id AND p.status = 'active') AS registered,
         (SELECT COUNT(DISTINCT s.pass_id) FROM scans s WHERE s.event_id = e.id AND s.result = 'granted') AS checked_in,
         (SELECT COUNT(*) FROM invites i WHERE i.event_id = e.id AND i.status = 'unused') AS invites_open
@@ -273,7 +281,7 @@ export async function rotateGateKey({ env, user, params }) {
 // Mints `count` invite codes for a tier and stores them as unused invites. Returns the plain codes
 // and their row ids exactly once; only the hashes are stored, so the codes cannot be shown again.
 // A clash on the unique hash is astronomically unlikely, but handled by drawing fresh codes.
-export async function mintInvites(env, ev, tier, count, { label = null, bound = null, expires = null } = {}) {
+export async function mintInvites(env, ev, tier, count, { label = null, bound = null, expires = null, accessUntil = null } = {}) {
   const year2 = String(new Date((ev.starts_at || nowSec()) * 1000).getUTCFullYear()).slice(-2);
   const base = { prefix: ev.prefix, year2, tier: tierCode(tier.name) };
   const now = nowSec();
@@ -288,11 +296,11 @@ export async function mintInvites(env, ev, tier, count, { label = null, bound = 
     }
     try {
       await env.DB.prepare(
-        `INSERT INTO invites (id, event_id, tier_id, code_hash, code_hint, label, bound_identifier, status, expires_at, created_at)
-         SELECT json_extract(value, '$.id'), ?1, ?2, json_extract(value, '$.h'), json_extract(value, '$.t'), ?3, ?4, 'unused', ?5, ?6
+        `INSERT INTO invites (id, event_id, tier_id, code_hash, code_hint, label, bound_identifier, status, expires_at, access_until, created_at)
+         SELECT json_extract(value, '$.id'), ?1, ?2, json_extract(value, '$.h'), json_extract(value, '$.t'), ?3, ?4, 'unused', ?5, ?8, ?6
          FROM json_each(?7)`
       )
-        .bind(ev.id, tier.id, label, bound, expires, now, JSON.stringify(rows))
+        .bind(ev.id, tier.id, label, bound, expires, now, JSON.stringify(rows), accessUntil)
         .run();
       return { codes, ids: rows.map((r) => r.id) };
     } catch (err) {
@@ -370,7 +378,7 @@ export async function listAttendees({ env, user, params }) {
   const ev = await ownedEvent(env, user, params.id);
   const rows = (
     await env.DB.prepare(
-      `SELECT p.id, p.status, p.created_at, t.name AS tier, u.name, u.phone, u.email,
+      `SELECT p.id, p.status, p.created_at, p.expires_at, t.name AS tier, u.name, u.phone, u.email,
         (SELECT MIN(s.at) FROM scans s WHERE s.pass_id = p.id AND s.result = 'granted') AS first_entry
        FROM passes p JOIN users u ON u.id = p.user_id JOIN tiers t ON t.id = p.tier_id
        WHERE p.event_id = ?1 ORDER BY p.created_at DESC LIMIT 500`
@@ -386,6 +394,7 @@ export async function listAttendees({ env, user, params }) {
       name: r.name,
       contact: r.phone || r.email,
       registered_at: r.created_at,
+      expires_at: r.expires_at,
       first_entry: r.first_entry
     }))
   });
@@ -399,4 +408,59 @@ export async function revokePass({ env, user, params }) {
     .run();
   if (r.meta.changes !== 1) throw new HttpError(409, 'not_revocable', 'That pass is already cancelled.');
   return json({ ok: true });
+}
+
+const MAX_PEOPLE = 200;
+
+// POST /api/events/:id/people  { tier_id, people: [{ contact, name? }], access_until? }
+// Adds staff, contractors or visitors to a workplace by phone or email. Each person gets a code tied to
+// their own contact, so it simply shows up in their Tap In app after they sign in; nothing is handed out.
+// `access_until` (a date) makes the resulting passes stop working then. Invalid and duplicate contacts
+// are reported back rather than failing the whole batch.
+export async function addPeople({ request, env, user, params }) {
+  const ev = await ownedEvent(env, user, params.id);
+  const b = await readJson(request);
+  const { tiers } = await structure(env, ev.id);
+  const tier = tiers.find((t) => t.id === b.tier_id);
+  if (!tier) throw new HttpError(400, 'invalid_tier', 'Choose an access group.');
+  if (!Array.isArray(b.people) || !b.people.length || b.people.length > MAX_PEOPLE) {
+    throw new HttpError(400, 'invalid_people', `Add between 1 and ${MAX_PEOPLE} people at a time.`);
+  }
+  const accessUntil = parseWhen(b.access_until, 'end date');
+  if (accessUntil && accessUntil <= nowSec()) throw new HttpError(400, 'invalid_expiry', 'The end date must be in the future.');
+
+  const total = await env.DB.prepare('SELECT COUNT(*) AS n FROM invites WHERE event_id = ?1').bind(ev.id).first();
+  if (total.n + b.people.length > MAX_INVITES_PER_EVENT) throw new HttpError(400, 'invite_limit', `A workplace can have up to ${MAX_INVITES_PER_EVENT} invites.`);
+
+  const added = [];
+  const skipped = [];
+  const seen = new Set();
+  for (const p of b.people) {
+    const contact = String(p?.contact ?? '').trim();
+    const id = parseIdentifier(contact);
+    if (!id) {
+      skipped.push({ contact: contact.slice(0, 80), reason: 'Not a valid phone number or email.' });
+      continue;
+    }
+    if (seen.has(id.value)) {
+      skipped.push({ contact: contact.slice(0, 80), reason: 'Listed twice.' });
+      continue;
+    }
+    seen.add(id.value);
+    const open = await env.DB.prepare(
+      `SELECT 1 AS x FROM invites WHERE event_id = ?1 AND bound_identifier = ?2 AND tier_id = ?3 AND status = 'unused'
+       UNION SELECT 1 FROM passes p JOIN users u ON u.id = p.user_id
+         WHERE p.event_id = ?1 AND p.tier_id = ?3 AND p.status = 'active' AND (u.phone = ?2 OR u.email = ?2)`
+    )
+      .bind(ev.id, id.value, tier.id)
+      .first();
+    if (open) {
+      skipped.push({ contact: id.value, reason: 'Already has access in this group.' });
+      continue;
+    }
+    const label = cleanText(p?.name, 'name', { optional: true, max: 60 });
+    await mintInvites(env, ev, tier, 1, { label, bound: id.value, accessUntil });
+    added.push({ contact: id.value, name: label });
+  }
+  return json({ tier: tier.name, added, skipped }, 201);
 }

@@ -52,6 +52,18 @@ Cookie-authenticated unless noted. JSON in, JSON out. Errors look like `{"error"
 | `POST /api/events/:id/gate-key` | Rotate the gate key |
 | `GET /api/gate/info`, `POST /api/gate/scan` `{token, zone_id}` | Gate, with `Authorization: Bearer <gate key>` |
 
+## Offices (phase 1: access for companies)
+
+An office is an event with `kind = "workplace"`, so it reuses passes, doors (zones), the gate scanner and the scan log.
+
+- **Doors and access groups.** Create it from the organiser (New office). Each access group (Staff, Contractor, Visitor) opens certain doors and can be limited to days and hours, read in Lagos time (`events.tz_offset_min`, default +60). Overnight shifts are not supported yet.
+- **Adding people.** `POST /api/events/:id/people` takes `{ tier_id, people: [{ contact, name? }], access_until? }`. Each person gets an invite tied to their own phone or email, which appears in their Tap In app after they sign in. Bad and duplicate contacts are reported back, not fatal.
+- **Visitors and contractors.** `access_until` is copied onto the pass when it is claimed; the gate refuses it afterwards (`expired`). Outside a group's hours the gate answers `outside_hours`.
+- **Offboarding.** Cancelling a pass (Who has access) shuts the door at the next scan.
+- Staff can enter again and again; offices ignore the event "re-entry" rule.
+
+Migration `0003_workplaces.sql` adds the columns. Apply it with `npm run db:migrate:remote` before deploying.
+
 ## Deploy
 
 The database `tap-in-db` already exists and has the schema applied (migration `0001_init.sql`). To put the Worker and site live:

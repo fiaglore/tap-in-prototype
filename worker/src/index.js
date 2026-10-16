@@ -32,6 +32,7 @@ const ROUTES = [
   ['GET', '/api/events/:id/invites', 'user', events.listInvites],
   ['POST', '/api/events/:id/invites', 'user', events.createInvites],
   ['POST', '/api/events/:id/invites/:inviteId/revoke', 'user', events.revokeInvite],
+  ['POST', '/api/events/:id/people', 'user', events.addPeople],
   ['GET', '/api/events/:id/attendees', 'user', events.listAttendees],
   ['POST', '/api/events/:id/passes/:passId/revoke', 'user', events.revokePass],
 

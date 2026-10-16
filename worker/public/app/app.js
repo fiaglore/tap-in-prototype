@@ -243,9 +243,13 @@ function viewAround() {
   const sel = state.sel != null && state.passes[state.sel] ? state.sel : nextIndex(state.passes);
   const p = state.passes[sel];
   const d = daysTo(p.event.starts_at);
-  const live = p.status === 'active';
+  const office = p.event.kind === 'workplace';
+  const expired = !!p.expires_at && p.expires_at * 1000 <= Date.now();
+  const live = p.status === 'active' && !expired;
   let status;
-  if (!live) status = 'This pass was cancelled. Contact the organiser.';
+  if (expired) status = 'This pass has expired.';
+  else if (!live) status = 'This pass was cancelled. Contact the organiser.';
+  else if (office) status = p.expires_at ? 'Valid until ' + when(p.expires_at, { dateStyle: 'medium', timeStyle: 'short' }) + '. Tap in at the door.' : 'You have access. Tap in at the door.';
   else if (d === null) status = 'Date to be announced. Your pass is ready.';
   else if (d < 0) status = 'This event has passed.';
   else if (d === 0) status = 'Today. Open your pass at the gate.';
@@ -256,28 +260,28 @@ function viewAround() {
     h('div', {}, h('p', { class: 'eyebrow' }, dateLine), h('h2', { style: 'margin-top:4px' }, 'Hello, ' + firstName() + '.')),
     orbit,
     h('button', { class: 'glass nu', type: 'button', onclick: () => live && showPass(p), 'aria-label': 'Open pass for ' + p.event.name },
-      h('p', { class: 'eyebrow' }, 'Next up' + (p.event.city ? ' · ' + p.event.city.toUpperCase() : '')),
-      h('div', { class: 'cd' }, h('b', {}, d === null ? '—' : String(Math.max(d, 0))), h('small', {}, 'DAYS')),
+      h('p', { class: 'eyebrow' }, (office ? 'Office access' : 'Next up') + (p.event.city ? ' · ' + p.event.city.toUpperCase() : '')),
+      !office && h('div', { class: 'cd' }, h('b', {}, d === null ? '—' : String(Math.max(d, 0))), h('small', {}, 'DAYS')),
       h('h3', { style: 'font-size:20px;margin:6px 0' }, p.event.name),
-      h('p', { class: 'muted' }, [p.event.starts_at ? when(p.event.starts_at, { weekday: 'short', day: 'numeric', month: 'short' }) : null, p.tier + ' ticket', p.zones.length + (p.zones.length === 1 ? ' area' : ' areas')].filter(Boolean).join(' · ')),
+      h('p', { class: 'muted' }, [p.event.starts_at ? when(p.event.starts_at, { weekday: 'short', day: 'numeric', month: 'short' }) : null, p.tier + (office ? '' : ' ticket'), p.zones.length + (office ? (p.zones.length === 1 ? ' door' : ' doors') : (p.zones.length === 1 ? ' area' : ' areas'))].filter(Boolean).join(' · ')),
       h('p', { style: 'margin-top:10px;font-size:13px' }, '● ' + status)),
     state.waiting.length ? waitingCards() : null), { title: 'Around me' });
 }
 
 function waitingCards() {
   return state.waiting.map((w) => h('div', { class: 'card', style: 'border-color:var(--signal)' },
-    h('p', { class: 'eyebrow' }, 'An invite is waiting for you'),
+    h('p', { class: 'eyebrow' }, w.event.kind === 'workplace' ? 'Office access is waiting for you' : 'An invite is waiting for you'),
     h('h3', { style: 'margin-top:4px' }, w.event.name),
-    h('p', { class: 'muted' }, w.tier + ' ticket'),
+    h('p', { class: 'muted' }, w.event.kind === 'workplace' ? w.tier : w.tier + ' ticket'),
     h('button', { class: 'btn primary block', style: 'margin-top:12px', type: 'button', onclick: () => claim({ invite_id: w.id }) }, 'Add to my passes')));
 }
 
 // ---- Passes --------------------------------------------------------------------------------------
 function passCard(p) {
-  const live = p.status === 'active';
+  const live = p.status === 'active' && !(p.expires_at && p.expires_at * 1000 <= Date.now());
   return h('button', { class: 'pass' + (live ? '' : ' off'), type: 'button', onclick: () => live && showPass(p), 'aria-label': `Open pass for ${p.event.name}` },
-    h('div', { class: 'spread' }, h('span', { class: 'eyebrow' }, p.event.starts_at ? when(p.event.starts_at, { dateStyle: 'medium' }) : 'Date to be announced'),
-      live ? h('span', { class: 'chip ok' }, 'Active') : h('span', { class: 'chip bad' }, 'Cancelled')),
+    h('div', { class: 'spread' }, h('span', { class: 'eyebrow' }, p.event.kind === 'workplace' ? 'Office access' : p.event.starts_at ? when(p.event.starts_at, { dateStyle: 'medium' }) : 'Date to be announced'),
+      live ? h('span', { class: 'chip ok' }, 'Active') : h('span', { class: 'chip bad' }, p.status === 'active' ? 'Expired' : 'Cancelled')),
     h('h3', {}, p.event.name),
     h('p', { class: 'muted' }, [p.event.venue, p.event.city].filter(Boolean).join(', ') || p.tier),
     h('div', { class: 'zones' }, h('span', { class: 'chip' }, p.tier), p.zones.map((z) => h('span', { class: 'chip' }, z))),

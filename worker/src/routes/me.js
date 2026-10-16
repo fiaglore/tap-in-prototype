@@ -9,7 +9,7 @@ async function loadPasses(env, userId, onlyId) {
   const bind = onlyId ? [userId, onlyId] : [userId];
   const passes = (
     await env.DB.prepare(
-      `SELECT p.id, p.status, p.created_at, e.id AS event_id, e.name AS event_name, e.venue, e.city, e.starts_at,
+      `SELECT p.id, p.status, p.created_at, p.expires_at, e.kind, e.id AS event_id, e.name AS event_name, e.venue, e.city, e.starts_at,
               t.name AS tier_name, p.tier_id
        FROM passes p JOIN events e ON e.id = p.event_id JOIN tiers t ON t.id = p.tier_id
        WHERE p.user_id = ?1 ${filter}
@@ -36,8 +36,9 @@ async function loadPasses(env, userId, onlyId) {
     passes.map(async (p) => ({
       id: p.id,
       status: p.status,
+      expires_at: p.expires_at,
       token: await passToken(env.SECRET_PEPPER, p.id),
-      event: { id: p.event_id, name: p.event_name, venue: p.venue, city: p.city, starts_at: p.starts_at },
+      event: { id: p.event_id, kind: p.kind, name: p.event_name, venue: p.venue, city: p.city, starts_at: p.starts_at },
       tier: p.tier_name,
       zones: zonesByPass[p.id] || [],
       created_at: p.created_at
@@ -50,7 +51,7 @@ export async function me({ env, user }) {
   const now = nowSec();
   const waiting = (
     await env.DB.prepare(
-      `SELECT i.id, e.name AS event_name, e.venue, e.city, e.starts_at, t.name AS tier_name
+      `SELECT i.id, e.kind, e.name AS event_name, e.venue, e.city, e.starts_at, t.name AS tier_name
        FROM invites i JOIN events e ON e.id = i.event_id JOIN tiers t ON t.id = i.tier_id
        WHERE i.bound_identifier IN (?1, ?2) AND i.status = 'unused' AND (i.expires_at IS NULL OR i.expires_at > ?3)
        ORDER BY COALESCE(e.starts_at, 9999999999)`
@@ -60,7 +61,7 @@ export async function me({ env, user }) {
   ).results.map((w) => ({
     id: w.id,
     tier: w.tier_name,
-    event: { name: w.event_name, venue: w.venue, city: w.city, starts_at: w.starts_at }
+    event: { kind: w.kind, name: w.event_name, venue: w.venue, city: w.city, starts_at: w.starts_at }
   }));
 
   return json({ user: publicUser(user), passes: await loadPasses(env, user.id), waiting });
@@ -130,8 +131,8 @@ export async function claim({ request, env, user }) {
   try {
     results = await env.DB.batch([
       env.DB.prepare(
-        `INSERT INTO passes (id, event_id, tier_id, user_id, invite_id, status, created_at)
-         SELECT ?1, event_id, tier_id, ?2, id, 'active', ?3 FROM invites
+        `INSERT INTO passes (id, event_id, tier_id, user_id, invite_id, status, created_at, expires_at)
+         SELECT ?1, event_id, tier_id, ?2, id, 'active', ?3, access_until FROM invites
          WHERE id = ?4 AND status = 'unused' AND (expires_at IS NULL OR expires_at > ?3)`
       ).bind(passId, user.id, now, invite.id),
       env.DB.prepare(

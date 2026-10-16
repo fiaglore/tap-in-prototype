@@ -5,13 +5,16 @@ import { HttpError, newId, normaliseCode, nowSec, safeEqual } from '../lib/util.
 import { clientIp, json, readJson } from '../lib/http.js';
 import { hashGateKey, parsePassToken, passMac } from '../lib/codes.js';
 import { isFull, record } from '../lib/limits.js';
+import { withinSchedule } from '../lib/schedule.js';
 
 const MESSAGES = {
   invalid_token: 'Not a valid Tap In pass.',
   wrong_event: 'This pass is for a different event.',
   revoked: 'This pass was cancelled.',
   no_zone_access: 'This pass does not include this area.',
-  already_used: 'This pass has already been used here.'
+  already_used: 'This pass has already been used here.',
+  expired: 'This pass has expired.',
+  outside_hours: 'This pass is not valid at this time.'
 };
 
 async function gateEvent(request, env) {
@@ -21,7 +24,7 @@ async function gateEvent(request, env) {
   const m = /^Bearer\s+(.{1,100})$/i.exec(request.headers.get('authorization') || '');
   const key = m ? normaliseCode(m[1]) : '';
   const ev = key
-    ? await env.DB.prepare('SELECT id, name, venue, city, allow_reentry FROM events WHERE gate_key_hash = ?1')
+    ? await env.DB.prepare('SELECT id, name, kind, venue, city, allow_reentry, tz_offset_min FROM events WHERE gate_key_hash = ?1')
         .bind(await hashGateKey(env.SECRET_PEPPER, key))
         .first()
     : null;
@@ -36,7 +39,7 @@ async function gateEvent(request, env) {
 export async function gateInfo({ request, env }) {
   const ev = await gateEvent(request, env);
   const zones = (await env.DB.prepare('SELECT id, name FROM zones WHERE event_id = ?1 ORDER BY sort, name').bind(ev.id).all()).results;
-  return json({ event: { id: ev.id, name: ev.name, venue: ev.venue, city: ev.city, allow_reentry: !!ev.allow_reentry }, zones });
+  return json({ event: { id: ev.id, name: ev.name, kind: ev.kind, venue: ev.venue, city: ev.city, allow_reentry: !!ev.allow_reentry }, zones });
 }
 
 const displayName = (name) => {
@@ -66,7 +69,7 @@ export async function gateScan({ request, env }) {
     reason = 'invalid_token';
   } else {
     pass = await env.DB.prepare(
-      `SELECT p.id, p.status, p.event_id, p.tier_id, u.name AS holder, t.name AS tier
+      `SELECT p.id, p.status, p.event_id, p.tier_id, p.expires_at, u.name AS holder, t.name AS tier, t.days_mask, t.from_min, t.to_min
        FROM passes p JOIN users u ON u.id = p.user_id JOIN tiers t ON t.id = p.tier_id WHERE p.id = ?1`
     )
       .bind(parsed.id)
@@ -74,6 +77,8 @@ export async function gateScan({ request, env }) {
     if (!pass) reason = 'invalid_token';
     else if (pass.event_id !== ev.id) reason = 'wrong_event';
     else if (pass.status !== 'active') reason = 'revoked';
+    else if (pass.expires_at && pass.expires_at <= now) reason = 'expired';
+    else if (!withinSchedule(pass, now, ev.tz_offset_min)) reason = 'outside_hours';
     else {
       const allowed = await env.DB.prepare('SELECT 1 AS ok FROM tier_zones WHERE tier_id = ?1 AND zone_id = ?2')
         .bind(pass.tier_id, zone.id)
