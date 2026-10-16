@@ -1,19 +1,8 @@
 /* Home page: immersive, futuristic layer. Everything here is decoration on top of readable content;
    prefers-reduced-motion switches the motion off (see the end of this file and js/home.js). */
-body.home{position:relative;overflow-x:hidden;--accent2:#8fb4ff}
+body.home{--accent2:#8fb4ff}
 :root[data-mode="light"] body.home{--accent2:#3b5bd6}
 body.home main,body.home .topbar{position:relative;z-index:2}
-#field{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
-.aurora{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
-.aurora i{position:absolute;width:55vmax;height:55vmax;border-radius:50%;filter:blur(90px);opacity:.38;mix-blend-mode:screen;animation:drift 26s ease-in-out infinite alternate}
-.aurora i:nth-child(1){background:#6C4A6C;left:-15vmax;top:-18vmax}
-.aurora i:nth-child(2){background:#3b6dff;right:-20vmax;top:10vmax;opacity:.22;animation-duration:32s;animation-delay:-8s}
-.aurora i:nth-child(3){background:#B5A0CC;left:25vw;bottom:-30vmax;opacity:.22;animation-duration:38s;animation-delay:-14s}
-:root[data-mode="light"] .aurora i{mix-blend-mode:multiply;opacity:.2}
-:root[data-mode="light"] .aurora i:nth-child(2){opacity:.12}
-:root[data-mode="light"] .aurora i:nth-child(3){opacity:.14}
-@keyframes drift{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(8vw,6vh,0) scale(1.25)}}
-
 body.home .topbar{position:sticky;top:0;z-index:20;max-width:none;margin:0;padding:14px max(16px,calc((100% - 1100px)/2));backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4);background:color-mix(in srgb,var(--ink) 86%,transparent);border-bottom:1px solid color-mix(in srgb,var(--line) 70%,transparent)}
 body.home .topbar::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:linear-gradient(90deg,transparent,var(--signal),transparent);opacity:.55;transform-origin:center;animation:pulse-line 5s ease-in-out infinite}
 @keyframes pulse-line{50%{opacity:.15;transform:scaleX(.6)}}
@@ -24,7 +13,7 @@ body.home .topbar::after{content:"";position:absolute;left:0;right:0;bottom:-1px
 .tag .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 var(--ok);animation:ping 2s infinite}
 @keyframes ping{70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
 .hero2 h1{font-size:clamp(38px,7.4vw,84px);line-height:.98;margin:18px 0 16px}
-.swap{display:inline-block;min-width:3.2ch;background:linear-gradient(100deg,var(--signal),var(--accent2) 45%,var(--signal));background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:sheen 5s linear infinite;font-family:var(--display)}
+.swap{display:inline-block;background:linear-gradient(100deg,var(--signal),var(--accent2) 45%,var(--signal));background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:sheen 5s linear infinite;font-family:var(--display)}
 @keyframes sheen{to{background-position:-200% 0}}
 .hero2 .lede{font-size:clamp(16px,2vw,19px);max-width:52ch}
 .cta{margin-top:26px}
@@ -131,10 +120,6 @@ body.home .topbar::after{content:"";position:absolute;left:0;right:0;bottom:-1px
 .feed li.no{border-color:var(--bad);background:var(--bad-soft)}
 @keyframes slidein{from{opacity:0;transform:translateX(-24px) scale(.97)}}
 
-/* Click ripple */
-.ripple{position:fixed;z-index:50;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;border:2px solid var(--signal);pointer-events:none;animation:ripple .9s ease-out forwards}
-@keyframes ripple{to{transform:scale(18);opacity:0}}
-
 @media(max-width:860px){
   .hero2{grid-template-columns:1fr;min-height:0}
   .stage{height:min(96vw,460px);order:-1;margin-top:-10px}
@@ -143,9 +128,101 @@ body.home .topbar::after{content:"";position:absolute;left:0;right:0;bottom:-1px
   body.home .topbar nav .btn.ghost{display:none}
 }
 @media(prefers-reduced-motion:reduce){
-  .aurora i,.orbit,.sat,.phone,.beam,.ticker-in,.swap,.btn.glow::before,.topbar::after,.hours .now,.meter i,.paid,.tag .dot,.live i{animation:none!important}
+  .orbit,.sat,.phone,.beam,.ticker-in,.swap,.btn.glow::before,.topbar::after,.hours .now,.meter i,.paid,.tag .dot,.live i{animation:none!important}
   .js .rv{opacity:1;transform:none;transition:none}
   .js .rv.in .card,.js .rv.in .steps li{animation:none}
   .steps li{opacity:1}
   .ticker-in{flex-wrap:wrap;width:auto;justify-content:center}
+}
+
+/* ===== More immersive layer ===== */
+.progress{position:fixed;top:0;left:0;right:0;height:3px;z-index:60;pointer-events:none}
+.progress i{display:block;height:100%;width:100%;transform-origin:0 50%;transform:scaleX(var(--sp,0));background:linear-gradient(90deg,var(--signal),var(--accent2),var(--ok));box-shadow:0 0 14px var(--signal)}
+.cursor-light{position:fixed;left:0;top:0;width:620px;height:620px;margin:-310px 0 0 -310px;border-radius:50%;pointer-events:none;z-index:-1;opacity:0;transition:opacity .5s;background:radial-gradient(closest-side,color-mix(in srgb,var(--signal) 26%,transparent),transparent);mix-blend-mode:screen;will-change:transform}
+.cursor-light.on{opacity:1}
+:root[data-mode="light"] .cursor-light{mix-blend-mode:multiply;background:radial-gradient(closest-side,color-mix(in srgb,var(--signal) 18%,transparent),transparent)}
+#tunnel{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
+body.home .fx-aurora{filter:hue-rotate(var(--hue,0deg));transition:filter 1.2s}
+
+/* cinematic entrance: the hero builds itself in, one piece at a time */
+.js .hero-copy>*{animation:introin .95s cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(var(--i,0)*.09s + .15s)}
+.js .hero-copy>*:nth-child(1){--i:0}.js .hero-copy>*:nth-child(2){--i:1}.js .hero-copy>*:nth-child(3){--i:3}.js .hero-copy>*:nth-child(4){--i:4}.js .hero-copy>*:nth-child(5){--i:5}
+.js .stage{animation:stagein 1.4s cubic-bezier(.2,.7,.2,1) .2s both}
+@keyframes introin{from{opacity:0;transform:translateY(34px);filter:blur(10px)}}
+@keyframes stagein{from{opacity:0;transform:scale(.72) rotateX(18deg);filter:blur(8px)}}
+.hero-copy{will-change:transform}
+
+/* floating glass fragments at different depths around the phone */
+.frag{position:absolute;z-index:3;display:flex;align-items:center;gap:7px;font:600 12px var(--mono);letter-spacing:.04em;padding:10px 14px;border-radius:14px;color:var(--muted);background:color-mix(in srgb,var(--raise) 55%,transparent);border:1px solid color-mix(in srgb,var(--signal) 45%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 20px 40px -20px rgba(0,0,0,.6),0 0 24px -8px var(--glow);transform:translate3d(var(--tx,0px),var(--ty,0px),0);will-change:transform;white-space:nowrap}
+.frag b{color:var(--fg);font-family:var(--display)}
+.frag em{font-style:normal;color:var(--ok)}
+.ok-dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok)}
+.f1{left:-2%;top:16%;animation:fbob 6s ease-in-out infinite}
+.f2{right:-4%;top:30%;animation:fbob 7.5s ease-in-out -2s infinite}
+.f3{left:2%;bottom:20%;animation:fbob 8s ease-in-out -4s infinite}
+.f4{right:2%;bottom:12%;animation:fbob 6.5s ease-in-out -1s infinite}
+@keyframes fbob{50%{translate:0 -12px}}
+
+/* huge outlined type that slides sideways as you scroll */
+.bigtext{overflow:hidden;margin-top:clamp(40px,8vw,90px);pointer-events:none;user-select:none}
+.bigtext span{display:block;white-space:nowrap;font:800 clamp(64px,13vw,190px)/1 var(--display);letter-spacing:-.03em;color:transparent;-webkit-text-stroke:1.5px color-mix(in srgb,var(--signal) 55%,transparent);transform:translateX(var(--bx,0px));will-change:transform;opacity:.7}
+
+/* pinned story: the phone stays, the world changes around it */
+.story{margin-top:clamp(10px,3vw,40px)}
+.story-track{height:340vh;position:relative}
+.story-pin{position:sticky;top:0;height:100vh;height:100svh;display:grid;align-items:center;overflow:hidden}
+.story-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(20px,5vw,70px);align-items:center;width:100%;max-width:1100px}
+.story-steps{list-style:none;margin:26px 0 0;padding:0;display:grid;gap:16px}
+.story-steps li{display:flex;gap:16px;align-items:flex-start;padding:16px 18px;border-radius:18px;border:1px solid transparent;opacity:.38;transform:scale(.97);transform-origin:left;transition:opacity .5s,transform .5s,border-color .5s,background .5s}
+.story-steps li.on{opacity:1;transform:none;border-color:var(--line);background:color-mix(in srgb,var(--card) 80%,transparent);box-shadow:0 0 40px -16px var(--glow)}
+.story-steps h3{font-size:20px;margin-bottom:4px}
+.clock{font:700 15px var(--mono);color:var(--signal);padding-top:3px;min-width:54px}
+.story-prog{margin-top:18px;height:3px;border-radius:9px;background:var(--line);overflow:hidden;max-width:340px}
+.story-prog i{display:block;height:100%;width:100%;transform-origin:0 50%;transform:scaleX(var(--p,0));background:linear-gradient(90deg,var(--signal),var(--ok))}
+.story-stage{position:relative;display:grid;place-items:center;perspective:1200px;min-height:min(70vh,560px)}
+.story-phone{position:relative;width:min(70%,300px);aspect-ratio:9/17;border-radius:36px;padding:10px;background:linear-gradient(160deg,color-mix(in srgb,var(--raise) 85%,#fff),var(--deep));border:1px solid var(--line);box-shadow:0 50px 100px -30px rgba(0,0,0,.65),0 0 80px -10px var(--glow);transform:rotateY(var(--sry,-10deg)) rotateX(var(--srx,4deg)) scale(var(--ss,1));transition:transform .2s linear;z-index:2}
+.sp-in{position:relative;height:100%;border-radius:28px;overflow:hidden;background:radial-gradient(120% 80% at 50% 0%,color-mix(in srgb,var(--plum) 55%,var(--ink)),var(--ink))}
+.screen{position:absolute;inset:0;padding:22px 16px;display:flex;flex-direction:column;align-items:center;gap:14px;opacity:0;transform:translateY(24px) scale(.96);filter:blur(6px);transition:opacity .55s,transform .55s,filter .55s}
+.screen.on{opacity:1;transform:none;filter:none}
+.sp-eyebrow{font:600 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);text-align:center}
+.sp-ok{margin-top:auto;width:100%;text-align:center;font:700 13px var(--display);padding:11px;border-radius:14px;background:var(--ok-soft);color:var(--ok);border:1px solid var(--ok)}
+.sp-hours{display:flex;justify-content:space-between;width:100%;font:12px var(--mono);color:var(--muted)}.sp-hours b{color:var(--fg)}
+.sp-code{font-size:11px;letter-spacing:.08em;color:var(--muted)}
+#storyQr{width:70%;aspect-ratio:1;border-radius:14px;background:#fff;padding:7px;image-rendering:pixelated;box-shadow:0 0 30px -6px var(--glow)}
+.sp-amt{font:800 40px var(--display);margin-top:6px}
+/* the door swings open when the screen is shown */
+.door{position:relative;width:62%;aspect-ratio:3/4;display:flex;border-radius:14px 14px 0 0;overflow:hidden;background:linear-gradient(180deg,var(--ink),var(--deep));perspective:600px;margin-top:6px;box-shadow:0 0 0 2px var(--signal)}
+.door .glow{position:absolute;inset:0;background:radial-gradient(70% 90% at 50% 100%,color-mix(in srgb,var(--ok) 70%,#fff),transparent 70%);opacity:.9}
+.door .leaf{position:relative;z-index:1;flex:1;background:linear-gradient(180deg,var(--deep),var(--raise));border:1px solid var(--line);transition:transform 1.1s cubic-bezier(.3,.8,.2,1) .35s}
+.door .leaf.l{transform-origin:0 50%}.door .leaf.r{transform-origin:100% 50%}
+.screen.s0:not(.on) .leaf.l{transform:none}.screen.s0.on .leaf.l{transform:rotateY(-78deg)}
+.screen.s0.on .leaf.r{transform:rotateY(78deg)}
+.tick{width:92px;height:92px;margin:8px 0}
+.tick svg{width:100%;height:100%;fill:none;stroke:var(--ok);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.tick circle{stroke-dasharray:145;stroke-dashoffset:145}.tick path{stroke-dasharray:44;stroke-dashoffset:44}
+.screen.s2.on .tick circle{animation:draw .8s ease .3s forwards}.screen.s2.on .tick path{animation:draw .5s ease 1s forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+.story-ring{position:absolute;border-radius:50%;border:1px dashed color-mix(in srgb,var(--signal) 45%,transparent);animation:rot 28s linear infinite;pointer-events:none}
+.story-ring.r1{width:min(96%,480px);aspect-ratio:1}.story-ring.r2{width:min(74%,380px);aspect-ratio:1;animation-direction:reverse;animation-duration:40s}
+
+/* products: tilt toward the pointer */
+.prod{transform:perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transform-style:preserve-3d;transition:transform .15s ease-out,border-color .25s,box-shadow .25s}
+.prod:hover{transform:perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translateY(-6px)}
+
+@media(max-width:860px){
+  .story-grid{grid-template-columns:1fr;gap:10px}
+  .story-pin{align-items:start;padding-top:70px}
+  .story-stage{order:-1;min-height:300px}
+  .story-phone{width:min(46%,200px)}
+  .story-steps{gap:8px;margin-top:12px}.story-steps li{padding:10px 12px}.story-steps li:not(.on) p{display:none}
+  .story-steps h3{font-size:17px}
+  .frag.f1,.frag.f4{display:none}
+}
+@media(prefers-reduced-motion:reduce){
+  .js .hero-copy>*,.js .stage,.frag,.story-ring,.screen.s2.on .tick circle,.screen.s2.on .tick path{animation:none!important}
+  .tick circle,.tick path{stroke-dashoffset:0}
+  .cursor-light,#tunnel{display:none}
+  .story-track{height:auto}.story-pin{position:static;height:auto;padding:30px 0}
+  .story-steps li{opacity:1;transform:none}.screen{transition:none}
+  .bigtext span{transform:none}
 }

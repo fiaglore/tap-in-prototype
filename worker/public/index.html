@@ -11,14 +11,17 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="/css/tapin.css">
 <link rel="stylesheet" href="/site.css">
+<link rel="stylesheet" href="/css/fx.css">
 <link rel="stylesheet" href="/home.css">
 <script src="/js/theme.js"></script>
 <script src="/js/site.js" defer></script>
+<script src="/js/fx.js" defer></script>
 <script src="/js/home.js" defer></script>
 </head>
-<body class="home">
-<canvas id="field" aria-hidden="true"></canvas>
-<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+<body class="home fx">
+<div class="progress" id="progress" aria-hidden="true"><i></i></div>
+<div class="cursor-light" id="cursorLight" aria-hidden="true"></div>
+
 <header class="topbar">
   <a class="wordmark" href="/"><img src="/logo/tap-in-app-icon.svg" alt=""><svg class="wm" viewBox="0 0 600 151" role="img" aria-label="Tap In"><polygon points="0,0 76,0 76,151 45,151 45,26 0,26"/><polygon points="80,0 120,0 120,26 93,26"/><polygon points="149,0 181,0 244,151 212,151 201,124 131,124 120,151 88,151"/><polygon points="143,97 189,97 166,42" class="wm-cut"/><polygon points="164,44 193,21 198,27 169,50" class="wm-cut"/><rect x="251" y="0" width="29" height="151"/><path d="M280,0 H320 A53,53 0 0 1 320,106 H301 L285,76 H318 A25,25 0 0 0 318,26 H280 Z"/><g class="wm-n" transform="translate(426,0)"><polygon points="0,0 31,0 31,26 0,38"/><rect x="0" y="44" width="31" height="107"/><polygon points="45,0 77,0 174,139 174,151 142,151 77,58 77,151 45,151"/><polygon points="142,0 174,0 174,113 142,90"/></g></svg></a>
   <nav class="row" aria-label="Main">
@@ -52,6 +55,10 @@
       <div class="orbit o1"><span class="sat">Offices</span></div>
       <div class="orbit o2"><span class="sat">Concerts</span></div>
       <div class="orbit o3"><span class="sat">Pay</span></div>
+      <div class="frag f1" data-depth="46"><b>Door 2</b><span class="ok-dot"></span> Open</div>
+      <div class="frag f2" data-depth="70"><b>&#8358;2,500</b> paid</div>
+      <div class="frag f3" data-depth="30"><b>VIP</b> &middot; 12 left</div>
+      <div class="frag f4" data-depth="58"><b>Live QR</b> <em id="fragTimer">0:30</em></div>
       <div class="phone" id="phone">
         <div class="phone-in">
           <div class="p-top"><span class="chip">VIP Access</span><span class="live"><i></i> LIVE</span></div>
@@ -91,6 +98,52 @@
         <div class="viz pay" aria-hidden="true"><div class="amt">&#8358;<b data-count="2500">2500</b></div><div class="paid"><i></i> Paid</div></div>
         <span class="more">Set up a vendor till &rarr;</span>
       </a>
+    </div>
+  </section>
+
+  <div class="bigtext" id="bigtext" aria-hidden="true"><span>ENTRY &middot; ACCESS &middot; PAY &middot; ENTRY &middot; ACCESS &middot; PAY &middot;</span></div>
+
+  <section class="story" id="story" aria-labelledby="storyTitle">
+    <div class="story-track">
+      <div class="story-pin">
+        <div class="story-grid wrap">
+          <div class="story-text">
+            <p class="eyebrow">A day with Tap In</p>
+            <h2 class="big" id="storyTitle">One phone. Three doors.</h2>
+            <ol class="story-steps">
+              <li class="on"><span class="clock">08:42</span><div><h3>Walk into the office</h3><p class="muted">Your staff group opens the front door between 7 and 7. Leave the company and it stops working at the next scan.</p></div></li>
+              <li><span class="clock">19:30</span><div><h3>Walk into the concert</h3><p class="muted">The code on your phone changes every 30 seconds, so a screenshot is no use to anyone else. Tickets cannot oversell.</p></div></li>
+              <li><span class="clock">22:15</span><div><h3>Pay for a drink</h3><p class="muted">Show a pay code for exactly the amount. The vendor scans it, you get a tick, and your balance can never go negative.</p></div></li>
+            </ol>
+            <div class="story-prog" aria-hidden="true"><i></i></div>
+          </div>
+          <div class="story-stage" aria-hidden="true">
+            <div class="story-phone" id="storyPhone">
+              <div class="sp-in">
+                <div class="screen on s0">
+                  <p class="sp-eyebrow">Acme HQ &middot; Staff</p>
+                  <div class="door"><i class="leaf l"></i><i class="leaf r"></i><span class="glow"></span></div>
+                  <div class="sp-ok">Front door &middot; Access granted</div>
+                  <div class="sp-hours"><span>Mon&ndash;Fri</span><b>07:00&ndash;19:00</b></div>
+                </div>
+                <div class="screen s1">
+                  <p class="sp-eyebrow">Lagos Live &middot; VIP</p>
+                  <canvas id="storyQr" width="144" height="144"></canvas>
+                  <p class="mono sp-code" id="storyCode">TQ-0000-0000</p>
+                  <div class="sp-ok">Gate A &middot; Entered</div>
+                </div>
+                <div class="screen s2">
+                  <p class="sp-eyebrow">Mama Put Kitchen</p>
+                  <div class="sp-amt">&#8358;2,500</div>
+                  <div class="tick"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="23"/><path d="M15 27l8 8 15-17"/></svg></div>
+                  <div class="sp-ok">Paid &middot; Thank you</div>
+                </div>
+              </div>
+            </div>
+            <div class="story-ring r1"></div><div class="story-ring r2"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 

@@ -1,0 +1,62 @@
+/* Shared "futuristic" layer: moving background plus glass surfaces, used by every page.
+   The layers sit behind the content (z-index -1), so no page layout has to change.
+   data-fx="calm" on <body> turns it down for tools people stare at all day (consoles, scanners).
+   prefers-reduced-motion stops the motion; see the end of this file and js/fx.js. */
+body.fx{--fx-o:1;position:relative;overflow-x:hidden}
+body.fx[data-fx="calm"]{--fx-o:.5}
+.fx-layer{position:fixed;inset:0;pointer-events:none;z-index:-1}
+#fx-field{width:100%;height:100%;opacity:var(--fx-o)}
+
+.fx-aurora{overflow:hidden;opacity:var(--fx-o);transform:translate3d(var(--ax,0px),var(--ay,0px),0)}
+.fx-aurora i{position:absolute;width:55vmax;height:55vmax;border-radius:50%;filter:blur(90px);opacity:.38;mix-blend-mode:screen;animation:fxdrift 26s ease-in-out infinite alternate}
+.fx-aurora i:nth-child(1){background:#6C4A6C;left:-15vmax;top:-18vmax}
+.fx-aurora i:nth-child(2){background:#3b6dff;right:-20vmax;top:10vmax;opacity:.22;animation-duration:32s;animation-delay:-8s}
+.fx-aurora i:nth-child(3){background:#B5A0CC;left:25vw;bottom:-30vmax;opacity:.22;animation-duration:38s;animation-delay:-14s}
+.fx-aurora i:nth-child(4){background:#19c6b7;left:55vw;top:35vh;width:34vmax;height:34vmax;opacity:.12;animation-duration:44s;animation-delay:-20s}
+:root[data-mode="light"] .fx-aurora i{mix-blend-mode:multiply;opacity:.2}
+:root[data-mode="light"] .fx-aurora i:nth-child(2){opacity:.12}
+:root[data-mode="light"] .fx-aurora i:nth-child(3){opacity:.14}
+:root[data-mode="light"] .fx-aurora i:nth-child(4){opacity:.08}
+@keyframes fxdrift{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(8vw,6vh,0) scale(1.25)}}
+
+/* A perspective grid "floor" that streams toward you */
+.fx-grid{top:auto;height:48vh;overflow:hidden;opacity:calc(.5*var(--fx-o));-webkit-mask:linear-gradient(to top,#000 5%,transparent 85%);mask:linear-gradient(to top,#000 5%,transparent 85%)}
+.fx-grid::before{content:"";position:absolute;left:-50%;right:-50%;bottom:-20%;height:150%;transform-origin:50% 100%;transform:perspective(520px) rotateX(64deg);
+  background-image:linear-gradient(var(--signal) 1px,transparent 1px),linear-gradient(90deg,var(--signal) 1px,transparent 1px);background-size:56px 56px;opacity:.5;animation:fxgrid 2.8s linear infinite}
+:root[data-mode="light"] .fx-grid{opacity:calc(.32*var(--fx-o))}
+@keyframes fxgrid{to{background-position:0 56px,0 0}}
+
+/* Glass: top bars, cards, tab bar, full-screen pass */
+body.fx .topbar,body.fx .head{position:relative}
+body.fx .topbar{backdrop-filter:blur(14px) saturate(1.3);-webkit-backdrop-filter:blur(14px) saturate(1.3);background:color-mix(in srgb,var(--ink) 70%,transparent);max-width:none;margin:0;padding-inline:max(16px,calc((100% - 1240px)/2))}
+body.fx .topbar::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:linear-gradient(90deg,transparent,var(--signal),transparent);opacity:.5;animation:fxline 5s ease-in-out infinite}
+@keyframes fxline{50%{opacity:.15;transform:scaleX(.6)}}
+body.fx .card,body.fx .glass,body.fx .pass,body.fx .item,body.fx .fld2,body.fx .side{backdrop-filter:blur(10px) saturate(1.2);-webkit-backdrop-filter:blur(10px) saturate(1.2)}
+body.fx .card,body.fx .glass,body.fx .pass{position:relative;box-shadow:0 18px 44px -30px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.05);transition:border-color .25s,box-shadow .25s,transform .25s}
+body.fx a.card:hover,body.fx .pass:hover,body.fx button.glass:hover{border-color:var(--signal);transform:translateY(-3px);box-shadow:0 26px 60px -26px var(--glow)}
+/* the cursor-following spotlight (js/fx.js sets --mx and --my) */
+body.fx .card::before,body.fx .glass::before,body.fx .pass::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .3s;background:radial-gradient(380px circle at var(--mx,50%) var(--my,50%),var(--glow),transparent 60%)}
+body.fx .card:hover::before,body.fx .glass:hover::before,body.fx .pass:hover::before{opacity:1}
+body.fx .tabs{background:color-mix(in srgb,var(--ink) 78%,transparent);backdrop-filter:blur(16px) saturate(1.3);-webkit-backdrop-filter:blur(16px) saturate(1.3)}
+body.fx .overlay{background:color-mix(in srgb,var(--ink) 90%,transparent);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+body.fx .btn.primary{box-shadow:0 0 0 1px color-mix(in srgb,var(--signal) 55%,transparent),0 10px 34px -12px var(--glow);transition:transform .15s,box-shadow .25s,opacity .2s}
+body.fx .btn.primary:hover{box-shadow:0 0 0 1px var(--signal),0 14px 44px -10px var(--glow)}
+body.fx .input{backdrop-filter:blur(6px)}
+body.fx .input:focus{outline:none;border-color:var(--signal);box-shadow:0 0 0 3px var(--glow)}
+body.fx main,body.fx .page,body.fx .shell>main{animation:fxin .55s cubic-bezier(.2,.7,.2,1) both}
+@keyframes fxin{from{opacity:0;transform:translateY(14px)}}
+
+/* Scanner and till results pop and glow so a decision is felt across the room */
+body.fx .result{animation:fxpop .4s cubic-bezier(.2,.9,.3,1.3)}
+body.fx .result.granted{box-shadow:0 0 70px -12px var(--ok)}
+body.fx .result.denied{box-shadow:0 0 70px -12px var(--bad)}
+@keyframes fxpop{from{transform:scale(.9);opacity:.2}}
+
+/* Tap ripple under the pointer */
+.fx-ripple{position:fixed;z-index:60;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;border:2px solid var(--signal);pointer-events:none;animation:fxripple .9s ease-out forwards}
+@keyframes fxripple{to{transform:scale(18);opacity:0}}
+
+@media(max-width:700px){.fx-grid{height:34vh}.fx-aurora i{filter:blur(70px)}}
+@media(prefers-reduced-motion:reduce){
+  .fx-aurora i,.fx-grid::before,body.fx .topbar::after,body.fx main,body.fx .page,body.fx .shell>main,body.fx .result{animation:none!important}
+}
