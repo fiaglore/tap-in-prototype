@@ -55,12 +55,17 @@ function tierPage(ev) {
     h('p', { class: 'eyebrow' }, 'Demo checkout — no real payment is taken'),
     h('h1', { style: 'font-size:30px;margin-top:4px' }, ev.event.name),
     when_ && h('p', { class: 'muted', style: 'margin-top:4px' }, when_),
+    ev.event.sales === 'upcoming' && h('div', { class: 'notice warn', style: 'margin-top:14px' }, 'Tickets are not on sale yet' + (ev.event.sales_start ? '. Sales open ' + when(ev.event.sales_start) + '.' : '.')),
+    ev.event.sales === 'closed' && h('div', { class: 'notice warn', style: 'margin-top:14px' }, 'Ticket sales for this event have closed.'),
     h('div', { class: 'stack', style: 'margin-top:20px' }, ev.tiers.map((t) => {
       const qty = h('select', { class: 'input', style: 'width:84px', 'aria-label': `Quantity for ${t.name}` },
         [1, 2, 3, 4, 5, 6, 7, 8].map((n) => h('option', { value: n }, String(n))));
+      const canBuy = ev.event.sales === 'open' && !t.sold_out;
       return h('div', { class: 'card row', style: 'justify-content:space-between' },
-        h('div', {}, h('div', { style: 'font-weight:700' }, t.name), h('div', { class: 'muted' }, naira(t.price_kobo))),
-        h('div', { class: 'row' }, qty,
+        h('div', {}, h('div', { style: 'font-weight:700' }, t.name),
+          h('div', { class: 'muted' }, naira(t.price_kobo)),
+          t.sold_out ? h('div', { class: 'chip bad', style: 'margin-top:6px' }, 'Sold out') : t.left !== null && t.left > 0 && h('div', { class: 'chip', style: 'margin-top:6px' }, 'Only ' + t.left + ' left')),
+        canBuy && h('div', { class: 'row' }, qty,
           h('button', { class: 'btn primary small', type: 'button', onclick: () => buyFlow(ev.event, t, Number.parseInt(qty.value, 10)) }, 'Get ticket')));
     })),
     ev.tiers.length === 0 && h('p', { class: 'muted', style: 'margin-top:12px' }, 'Tickets for this event are not on sale yet.'));

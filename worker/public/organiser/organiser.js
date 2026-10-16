@@ -8,7 +8,7 @@ const top = document.getElementById('top');
 const main = document.getElementById('main');
 let user = null;
 let timer = null;
-const reasons = { already_used: 'Already used', no_zone_access: 'Wrong area', revoked: 'Cancelled pass', expired: 'Pass expired', outside_hours: 'Outside hours', invalid_token: 'Unreadable / fake', wrong_event: 'Other event' };
+const reasons = { already_used: 'Already used', no_zone_access: 'Wrong area', revoked: 'Cancelled pass', expired: 'Pass expired', outside_hours: 'Outside hours', stale_code: 'Old code / screenshot', static_pass: 'Screenshot or printout', invalid_token: 'Unreadable / fake', wrong_event: 'Other event' };
 
 function header() {
   mount(top,
@@ -92,16 +92,19 @@ function viewNew(err = '', draft, office = false) {
   document.title = T.page + ' · Tap In';
   const d = draft || (office
     ? { name: '', venue: '', city: 'Lagos', starts_at: '', zones: ['Front door'], tiers: [{ name: 'Staff', zones: ['Front door'], days: [0, 1, 2, 3, 4], from: '07:00', to: '19:00' }], reentry: true }
-    : { name: '', venue: '', city: 'Lagos', starts_at: '', zones: ['Main entrance'], tiers: [{ name: 'General', zones: ['Main entrance'], price: '' }], reentry: false });
+    : { name: '', venue: '', city: 'Lagos', starts_at: '', zones: ['Main entrance'], tiers: [{ name: 'General', zones: ['Main entrance'], price: '', capacity: '' }], reentry: false, sales_start: '', sales_end: '', secure_qr: false });
   const name = h('input', { class: 'input', id: 'n', value: d.name, maxlength: '80', required: true });
   const venue = h('input', { class: 'input', id: 'v', value: d.venue, maxlength: '80' });
   const city = h('input', { class: 'input', id: 'c', value: d.city, maxlength: '80' });
   const starts = h('input', { class: 'input', id: 's', type: 'datetime-local', value: d.starts_at });
   const reentry = h('input', { type: 'checkbox', id: 'r', checked: d.reentry });
+  const secure = h('input', { type: 'checkbox', id: 'q', checked: !!d.secure_qr });
+  const salesStart = h('input', { class: 'input', id: 'ss', type: 'datetime-local', value: d.sales_start || '' });
+  const salesEnd = h('input', { class: 'input', id: 'se', type: 'datetime-local', value: d.sales_end || '' });
   const zoneInputs = [];
   const zoneBox = h('div', { class: 'stack' });
   const tierBox = h('div', { class: 'stack' });
-  const tiers = d.tiers.map((t) => ({ ...t, zones: new Set(t.zones), price: t.price ?? '', days: new Set(t.days ?? [0, 1, 2, 3, 4, 5, 6]), from: t.from ?? '', to: t.to ?? '' }));
+  const tiers = d.tiers.map((t) => ({ ...t, zones: new Set(t.zones), price: t.price ?? '', capacity: t.capacity ?? '', days: new Set(t.days ?? [0, 1, 2, 3, 4, 5, 6]), from: t.from ?? '', to: t.to ?? '' }));
 
   function zoneNames() { return zoneInputs.map((i) => i.value.trim()).filter(Boolean); }
   function drawZones(names) {
@@ -118,6 +121,7 @@ function viewNew(err = '', draft, office = false) {
       h('div', { class: 'row' },
         h('div', { style: 'flex:1' }, h('input', { class: 'input', value: t.name, maxlength: '60', 'aria-label': T.groupOne + ' name', oninput: (e) => { t.name = e.target.value; } })),
         !office && h('input', { class: 'input', style: 'width:110px', value: t.price, inputmode: 'decimal', placeholder: 'Free', 'aria-label': 'Price in naira, blank for free', oninput: (e) => { t.price = e.target.value; } }),
+        !office && h('input', { class: 'input', style: 'width:110px', value: t.capacity, inputmode: 'numeric', placeholder: 'No limit', 'aria-label': 'Most tickets of this type, blank for no limit', oninput: (e) => { t.capacity = e.target.value; } }),
         tiers.length > 1 && h('button', { class: 'btn ghost small', type: 'button', onclick: () => { tiers.splice(i, 1); drawTiers(); } }, 'Remove')),
       h('div', { class: 'checks' }, zs.map((z) => h('label', {}, h('input', { type: 'checkbox', checked: t.zones.has(z), onchange: (e) => { e.target.checked ? t.zones.add(z) : t.zones.delete(z); } }), z))),
       office && h('div', { style: 'margin-top:10px' },
@@ -146,13 +150,16 @@ function viewNew(err = '', draft, office = false) {
           starts_at: starts.value && !office ? new Date(starts.value).toISOString() : undefined,
           zones: zs,
           tiers: tiers.map((t) => ({ name: t.name, zones: zs.filter((z) => t.zones.has(z)),
-            ...(office ? { days: [...t.days].sort(), from: t.from || undefined, to: t.to || undefined } : { price_kobo: t.price.trim() ? Math.round(parseFloat(t.price) * 100) : 0 }) }))
+            ...(office ? { days: [...t.days].sort(), from: t.from || undefined, to: t.to || undefined } : { price_kobo: t.price.trim() ? Math.round(parseFloat(t.price) * 100) : 0, capacity: String(t.capacity).trim() || undefined }) })),
+          secure_qr: !office && secure.checked,
+          sales_start: !office && salesStart.value ? new Date(salesStart.value).toISOString() : undefined,
+          sales_end: !office && salesEnd.value ? new Date(salesEnd.value).toISOString() : undefined
         };
         try {
           const r = await post('/events', body);
           showGateKey(r.event, r.gate_key, () => { location.hash = '#/e/' + r.event.id + (office ? '/people' : '/invites'); });
         } catch (ex) {
-          viewNew(ex.message, { office, name: name.value, venue: venue.value, city: city.value, starts_at: starts.value, zones: zs, tiers: tiers.map((t) => ({ name: t.name, zones: [...t.zones], price: t.price, days: [...t.days], from: t.from, to: t.to })), reentry: reentry.checked });
+          viewNew(ex.message, { office, name: name.value, venue: venue.value, city: city.value, starts_at: starts.value, zones: zs, tiers: tiers.map((t) => ({ name: t.name, zones: [...t.zones], price: t.price, capacity: t.capacity, days: [...t.days], from: t.from, to: t.to })), reentry: reentry.checked, secure_qr: secure.checked, sales_start: salesStart.value, sales_end: salesEnd.value });
         }
       }
     },
@@ -162,8 +169,13 @@ function viewNew(err = '', draft, office = false) {
       h('h3', { style: 'margin-top:22px' }, T.area), zoneBox,
       h('button', { class: 'btn ghost small', style: 'margin-top:8px', type: 'button', onclick: () => { drawZones([...zoneNames(), '']); drawTiers(); } }, 'Add ' + T.areaOne),
       h('h3', { style: 'margin-top:22px' }, T.group), tierBox,
-      h('button', { class: 'btn ghost small', style: 'margin-top:8px', type: 'button', onclick: () => { tiers.push({ name: '', zones: new Set(), days: new Set([0, 1, 2, 3, 4, 5, 6]), from: '', to: '', price: '' }); drawTiers(); } }, 'Add ' + T.groupOne),
-      !office && h('div', { class: 'checks', style: 'margin-top:20px' }, h('label', {}, reentry, 'Allow re-entry (a pass can be scanned in again at the same area)')),
+      h('button', { class: 'btn ghost small', style: 'margin-top:8px', type: 'button', onclick: () => { tiers.push({ name: '', zones: new Set(), days: new Set([0, 1, 2, 3, 4, 5, 6]), from: '', to: '', price: '', capacity: '' }); drawTiers(); } }, 'Add ' + T.groupOne),
+      !office && h('div', { class: 'grid two', style: 'margin-top:14px' },
+        h('div', { class: 'field' }, h('label', { for: 'ss' }, 'Ticket sales open (optional)'), salesStart),
+        h('div', { class: 'field' }, h('label', { for: 'se' }, 'Ticket sales close (optional)'), salesEnd)),
+      !office && h('div', { class: 'checks', style: 'margin-top:20px' },
+        h('label', {}, reentry, 'Allow re-entry (a pass can be scanned in again at the same area)'),
+        h('label', {}, secure, 'Live QR: the pass code changes every 30 seconds so screenshots stop working (phones need a connection)')),
       err && h('div', { class: 'error', role: 'alert' }, err),
       h('div', { style: 'margin-top:20px' }, btn))));
 }
@@ -187,7 +199,7 @@ async function viewEvent(id, tab) {
     if (office !== OFFICE) { location.replace((office ? '/offices/' : '/organiser/') + '#/e/' + id); return; }
     const tabs = office
       ? [['overview', 'Overview'], ['people', 'Add people'], ['attendees', 'Who has access'], ['gate', 'Doors & key']]
-      : [['overview', 'Overview'], ['invites', 'Invite codes'], ['attendees', 'Attendees'], ['gate', 'Gate key & rules']];
+      : [['overview', 'Overview'], ['tickets', 'Tickets'], ['invites', 'Invite codes'], ['attendees', 'Attendees'], ['gate', 'Gate key & rules']];
     const items = [{ href: '#/', text: OFFICE ? '\u2190 All offices' : '\u2190 All events' }, { label: data.event.name }]
       .concat(tabs.map(([k, label]) => ({ href: `#/e/${id}/${k}`, text: label, on: tab === k })))
       .concat([{ href: '/gate/', text: 'Open scanner' }]);
@@ -197,7 +209,7 @@ async function viewEvent(id, tab) {
         h('div', {}, h('h1', { style: 'font-size:34px' }, data.event.name), h('p', { class: 'muted' }, [data.event.venue, data.event.city, data.event.starts_at && when(data.event.starts_at)].filter(Boolean).join(' \u00b7 '))),
         !office && h('button', { class: 'btn ghost small', type: 'button', onclick: () => copy(location.origin + '/e/?id=' + id, 'Sales page link copied') }, 'Copy sales page link')),
       body)));
-    ({ overview: tabOverview, invites: tabInvites, people: tabPeople, attendees: tabAttendees, gate: tabGate }[tab] || tabOverview)(body, data);
+    ({ overview: tabOverview, tickets: tabTickets, invites: tabInvites, people: tabPeople, attendees: tabAttendees, gate: tabGate }[tab] || tabOverview)(body, data);
   } catch (ex) { fail(ex); }
 }
 
@@ -271,6 +283,45 @@ async function tabPeople(body, data) {
     h('div', { class: 'field' }, h('label', { for: 'unt' }, 'Access ends (optional, for visitors and contractors)'), until),
     h('p', { class: 'hint' }, 'Up to 200 at a time. Remove someone later from \u201cWho has access\u201d and their pass stops working at once.'),
     h('div', { style: 'margin-top:14px' }, btn)), out);
+}
+
+// Ticket types: price, limit and how many are issued; sales window; live QR.
+async function tabTickets(body, data) {
+  const id = data.event.id;
+  const local = (sec) => { if (!sec) return ''; const d = new Date(sec * 1000); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+  const rows = data.tiers.map((t) => {
+    const cap = h('input', { class: 'input', style: 'width:110px', inputmode: 'numeric', value: t.capacity ?? '', placeholder: 'No limit', 'aria-label': `Limit for ${t.name}` });
+    const price = h('input', { class: 'input', style: 'width:110px', inputmode: 'decimal', value: t.price_kobo ? String(t.price_kobo / 100) : '', placeholder: 'Free', 'aria-label': `Price for ${t.name}` });
+    const left = t.capacity === null ? 'No limit' : Math.max(0, t.capacity - t.issued) + ' left';
+    return h('tr', {}, h('td', {}, h('strong', {}, t.name)), h('td', {}, price), h('td', {}, cap),
+      h('td', {}, t.issued + ' issued', h('div', { class: 'hint' }, left)),
+      h('td', {}, h('button', { class: 'btn small primary', type: 'button', onclick: async () => {
+        try {
+          await patch(`/events/${id}/tiers/${t.id}`, { capacity: cap.value.trim() ? cap.value.trim() : null, price_kobo: price.value.trim() ? Math.round(parseFloat(price.value) * 100) : 0 });
+          toast('Saved'); viewEvent(id, 'tickets');
+        } catch (ex) { toast(ex.message); }
+      } }, 'Save')));
+  });
+  const start = h('input', { class: 'input', id: 'ts', type: 'datetime-local', value: local(data.event.sales_start) });
+  const end = h('input', { class: 'input', id: 'te', type: 'datetime-local', value: local(data.event.sales_end) });
+  const secure = h('input', { type: 'checkbox', checked: data.event.secure_qr, onchange: async (e) => {
+    try { await patch('/events/' + id, { secure_qr: e.target.checked }); toast('Saved'); } catch (ex) { e.target.checked = !e.target.checked; toast(ex.message); }
+  } });
+  body.append(
+    h('div', { class: 'card' }, h('h3', {}, 'Ticket types'),
+      h('p', { class: 'hint', style: 'margin:4px 0 8px' }, 'A limit is the most tickets that can be issued (cancelled invites free their place). Price changes apply to tickets sold from now on.'),
+      h('div', { class: 'scroll-x' }, h('table', {}, h('thead', {}, h('tr', {}, ['Type', 'Price (₦)', 'Limit', 'Issued', ''].map((c) => h('th', {}, c)))), h('tbody', {}, rows)))),
+    h('div', { class: 'grid two', style: 'margin-top:14px' },
+      h('form', { class: 'card', onsubmit: async (e) => {
+        e.preventDefault();
+        try { await patch('/events/' + id, { sales_start: start.value ? new Date(start.value).toISOString() : null, sales_end: end.value ? new Date(end.value).toISOString() : null }); toast('Saved'); } catch (ex) { toast(ex.message); }
+      } }, h('h3', {}, 'Sales window'),
+        h('p', { class: 'hint', style: 'margin:4px 0 8px' }, 'The public page only sells between these times. You can still issue codes yourself outside them.'),
+        h('div', { class: 'field' }, h('label', { for: 'ts' }, 'Opens'), start), h('div', { class: 'field' }, h('label', { for: 'te' }, 'Closes'), end),
+        h('button', { class: 'btn primary small', style: 'margin-top:12px', type: 'submit' }, 'Save window')),
+      h('div', { class: 'card' }, h('h3', {}, 'Live QR'),
+        h('p', { class: 'muted', style: 'margin-top:6px' }, 'The pass code changes every 30 seconds, so a screenshot or forwarded picture is useless. Guests need a phone connection at the gate. Printed or screenshotted codes are refused.'),
+        h('div', { class: 'checks', style: 'margin-top:10px' }, h('label', {}, secure, 'Use live QR for this event')))));
 }
 
 function csvCell(v) { const s = String(v ?? ''); return /^[=+\-@\t\r]/.test(s) ? `"'${s.replace(/"/g, '""')}"` : /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }

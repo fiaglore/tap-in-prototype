@@ -64,6 +64,14 @@ An office is an event with `kind = "workplace"`, so it reuses passes, doors (zon
 
 Migration `0003_workplaces.sql` adds the columns. Apply it with `npm run db:migrate:remote` before deploying.
 
+## Events and concerts (phase 2)
+
+- **Ticket limits.** A ticket type can have a limit (the most tickets that may be issued; cancelled invites free their place). It is checked inside the database insert, so two buyers cannot both take the last ticket, and a batch that does not fit issues nothing (`409 sold_out`). Organisers change limits and prices in the Tickets tab (`PATCH /api/events/:id/tiers/:tierId`); a limit cannot go below what is already issued. The public page shows "Sold out", and "Only N left" once it is 20 or fewer, and never the real counts.
+- **Sales window.** `sales_start` and `sales_end` limit when the public page sells (`sales_not_open`, `sales_closed`). Organisers can still issue codes themselves outside it.
+- **Live QR.** Turn on `secure_qr` for an event and the app never receives the permanent pass code. It asks `GET /api/me/passes/:id/live` every 20 seconds for a code that is good for about 90 seconds, so a screenshot is useless almost at once. The gate refuses the permanent code on such an event (`static_pass`) and old codes (`stale_code`). Phones need a connection at the gate, so it is off by default.
+
+Migration `0005_event_sales.sql` adds the columns.
+
 ## Payments (phase 3: customers and vendors)
 
 **Demo money only.** `PAYMENTS_MODE` is `demo` in `wrangler.jsonc`: wallets hold play money, top-ups and payouts are only recorded, and nothing real moves. In `live` mode the server refuses top-ups and payouts (`501 payments_not_connected`) until a payment provider is wired in. Holding or moving real customer money in Nigeria also has regulatory requirements (licensing, KYC, settlement through a licensed partner), so take advice before going live.

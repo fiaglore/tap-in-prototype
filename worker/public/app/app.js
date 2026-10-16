@@ -331,16 +331,42 @@ async function claim(body, btn) {
 
 function showPass(p) {
   const prev = document.body.style.overflow;
-  const close = () => { overlay.remove(); document.body.style.overflow = prev; };
+  let timer = null;
+  const close = () => { clearInterval(timer); overlay.remove(); document.body.style.overflow = prev; };
+  const qrBox = h('div', { class: 'qrbox' });
+  const tokenEl = h('p', { class: 'token' });
+  const note = h('p', { class: 'hint', style: 'margin-top:14px;text-align:center;max-width:320px' });
+  const copyBtn = h('button', { class: 'btn ghost small', style: 'margin-top:12px', type: 'button', onclick: () => copy(tokenEl.textContent, 'Pass code copied') }, 'Copy pass code');
+  function draw(token) { mount(qrBox, qrSvg(token)); tokenEl.textContent = token; }
+  if (p.live) {
+    // Secure event: the code changes every 30 seconds, so keep asking the server for a fresh one.
+    note.textContent = 'Getting your live code…';
+    copyBtn.hidden = true;
+    let last = 0;
+    const fetchLive = async () => {
+      try {
+        const r = await get('/me/passes/' + p.id + '/live');
+        draw(r.token);
+        last = Date.now();
+        note.textContent = 'This code refreshes every few seconds, so a screenshot will not work. Hold it up to the scanner.';
+      } catch (ex) {
+        note.textContent = ex.status === 409 ? 'This pass is no longer active.' : (Date.now() - last > 60000 ? 'No connection. Reconnect to show a fresh code.' : note.textContent);
+        if (ex.status === 409) { mount(qrBox); tokenEl.textContent = ''; clearInterval(timer); }
+      }
+    };
+    fetchLive();
+    timer = setInterval(fetchLive, 20000);
+  } else {
+    draw(p.token);
+    note.textContent = 'Hold this up to the scanner. If the scanner cannot read it, staff can type the code under the picture.';
+  }
   const overlay = h('div', { class: 'overlay', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Pass for ' + p.event.name },
     h('div', { class: 'spread', style: 'width:100%;max-width:460px' }, h('button', { class: 'btn ghost small', type: 'button', onclick: close }, 'Close'), h('span', { class: 'chip' }, p.tier)),
     h('h2', { style: 'margin-top:14px;text-align:center' }, p.event.name),
     h('p', { class: 'muted', style: 'text-align:center' }, state.user.name || ''),
-    h('div', { class: 'qrbox' }, qrSvg(p.token)),
-    h('p', { class: 'token' }, p.token),
+    qrBox, tokenEl,
     h('div', { class: 'zones', style: 'margin-top:12px;justify-content:center' }, p.zones.map((z) => h('span', { class: 'chip' }, z))),
-    h('p', { class: 'hint', style: 'margin-top:14px;text-align:center;max-width:320px' }, 'Hold this up to the scanner. If the scanner cannot read it, staff can type the code under the picture.'),
-    h('button', { class: 'btn ghost small', style: 'margin-top:12px', type: 'button', onclick: () => copy(p.token, 'Pass code copied') }, 'Copy pass code'));
+    note, copyBtn);
   document.body.style.overflow = 'hidden';
   document.body.append(overlay);
   overlay.querySelector('button').focus();
@@ -429,7 +455,7 @@ function showPayCode(r) {
 
 // ---- History -------------------------------------------------------------------------------------
 function viewHistory() {
-  const reasons = { already_used: 'Already used', no_zone_access: 'Not allowed in this area', revoked: 'Pass cancelled', invalid_token: 'Not recognised', wrong_event: 'Wrong event' };
+  const reasons = { stale_code: 'Old code', static_pass: 'Needs the live code', expired: 'Pass expired', outside_hours: 'Outside allowed hours', already_used: 'Already used', no_zone_access: 'Not allowed in this area', revoked: 'Pass cancelled', invalid_token: 'Not recognised', wrong_event: 'Wrong event' };
   shell(h('div', { class: 'stack' }, h('h2', {}, 'History'),
     state.history.length
       ? h('div', { class: 'list' }, state.history.map((s) => h('div', { class: 'item' },

@@ -3,7 +3,7 @@
 
 import { HttpError, newId, normaliseCode, nowSec, safeEqual } from '../lib/util.js';
 import { clientIp, json, readJson } from '../lib/http.js';
-import { hashGateKey, parsePassToken, passMac } from '../lib/codes.js';
+import { hashGateKey, liveMacFor, liveWindowFresh, parseLiveToken, parsePassToken, passMac } from '../lib/codes.js';
 import { isFull, record } from '../lib/limits.js';
 import { withinSchedule } from '../lib/schedule.js';
 
@@ -14,6 +14,8 @@ const MESSAGES = {
   no_zone_access: 'This pass does not include this area.',
   already_used: 'This pass has already been used here.',
   expired: 'This pass has expired.',
+  stale_code: 'This pass code is out of date. Ask them to reopen their pass.',
+  static_pass: 'This event needs the live code from the app. Screenshots and printed codes do not work.',
   outside_hours: 'This pass is not valid at this time.'
 };
 
@@ -24,7 +26,7 @@ async function gateEvent(request, env) {
   const m = /^Bearer\s+(.{1,100})$/i.exec(request.headers.get('authorization') || '');
   const key = m ? normaliseCode(m[1]) : '';
   const ev = key
-    ? await env.DB.prepare('SELECT id, name, kind, venue, city, allow_reentry, tz_offset_min FROM events WHERE gate_key_hash = ?1')
+    ? await env.DB.prepare('SELECT id, name, kind, venue, city, allow_reentry, secure_qr, tz_offset_min FROM events WHERE gate_key_hash = ?1')
         .bind(await hashGateKey(env.SECRET_PEPPER, key))
         .first()
     : null;
@@ -64,9 +66,14 @@ export async function gateScan({ request, env }) {
   const now = nowSec();
   let reason = null;
   let pass = null;
-  const parsed = parsePassToken(body.token);
-  if (!parsed || !safeEqual(await passMac(env.SECRET_PEPPER, parsed.id), parsed.mac)) {
+  const live = parseLiveToken(body.token);
+  const parsed = live || parsePassToken(body.token);
+  if (!parsed) {
     reason = 'invalid_token';
+  } else if (live ? !safeEqual(await liveMacFor(env.SECRET_PEPPER, live.id, live.win), live.mac) : !safeEqual(await passMac(env.SECRET_PEPPER, parsed.id), parsed.mac)) {
+    reason = 'invalid_token';
+  } else if (live && !liveWindowFresh(live.win, now)) {
+    reason = 'stale_code';
   } else {
     pass = await env.DB.prepare(
       `SELECT p.id, p.status, p.event_id, p.tier_id, p.expires_at, u.name AS holder, t.name AS tier, t.days_mask, t.from_min, t.to_min
@@ -77,6 +84,7 @@ export async function gateScan({ request, env }) {
     if (!pass) reason = 'invalid_token';
     else if (pass.event_id !== ev.id) reason = 'wrong_event';
     else if (pass.status !== 'active') reason = 'revoked';
+    else if (ev.secure_qr && !live) reason = 'static_pass';
     else if (pass.expires_at && pass.expires_at <= now) reason = 'expired';
     else if (!withinSchedule(pass, now, ev.tz_offset_min)) reason = 'outside_hours';
     else {

@@ -62,6 +62,47 @@ export function parsePassToken(raw) {
   return m ? { id: m[1].slice(0, 10), mac: m[1].slice(10) } : null;
 }
 
+// ---------- 3b. live (rotating) pass tokens ----------
+// token = "TQ" + id (10) + window (6, base32 of the 30-second window number) + mac (10).
+// mac = HMAC(pepper, "live|" + id + "|" + window). Only a phone that asked the server in the last
+// minute or so holds a token the gate will accept, so a screenshot goes stale almost at once.
+
+export const LIVE_STEP = 30; // seconds per window
+export const LIVE_GRACE = 2; // windows after the current one that the gate still accepts (about 90 s in all)
+
+const encodeWindow = (w) => {
+  let out = '';
+  for (let i = 0; i < 6; i++) {
+    out = B32[w % 32] + out;
+    w = Math.floor(w / 32);
+  }
+  return out;
+};
+const decodeWindow = (s) => [...s].reduce((n, c) => n * 32 + B32.indexOf(c), 0);
+export const liveWindow = (nowSec) => Math.floor(nowSec / LIVE_STEP);
+
+async function liveMac(pepper, id, win) {
+  return base32(await hmacBytes(pepper, `live|${id}|${win}`)).slice(0, 10);
+}
+
+export async function liveToken(pepper, id, nowSec) {
+  const win = encodeWindow(liveWindow(nowSec));
+  const s = id + win + (await liveMac(pepper, id, win));
+  return `TQ-${s.slice(0, 5)}-${s.slice(5, 10)}-${s.slice(10, 15)}-${s.slice(15, 20)}-${s.slice(20, 26)}`;
+}
+
+export function parseLiveToken(raw) {
+  const m = /^TQ([0-9A-Z]{26})$/.exec(normaliseCode(raw));
+  return m ? { id: m[1].slice(0, 10), win: m[1].slice(10, 16), mac: m[1].slice(16) } : null;
+}
+
+// Is the window recent enough, and does the mac match? (Caller compares in constant time.)
+export function liveWindowFresh(win, nowSec) {
+  const age = liveWindow(nowSec) - decodeWindow(win);
+  return age >= -1 && age <= LIVE_GRACE; // one window of clock skew into the future
+}
+export const liveMacFor = liveMac;
+
 // ---------- gate keys ----------
 
 export function makeGateKey() {
