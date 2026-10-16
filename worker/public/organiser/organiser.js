@@ -2,6 +2,8 @@ import { h, wordmarkText, mount, toast, copy, when, ago, download } from '/js/do
 import { get, post, patch } from '/js/api.js';
 import { signInFlow } from '/js/auth-ui.js';
 
+const OFFICE = document.body.dataset.console === 'office';
+const CONSOLE = OFFICE ? 'Offices' : 'Organiser';
 const top = document.getElementById('top');
 const main = document.getElementById('main');
 let user = null;
@@ -10,9 +12,9 @@ const reasons = { already_used: 'Already used', no_zone_access: 'Wrong area', re
 
 function header() {
   mount(top,
-    h('a', { class: 'wordmark', href: '#/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), wordmarkText(), ' ', h('span', { class: 'muted', style: 'font-weight:600;font-size:14px' }, 'Organiser')),
+    h('a', { class: 'wordmark', href: '#/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), wordmarkText(), ' ', h('span', { class: 'muted', style: 'font-weight:600;font-size:14px' }, CONSOLE)),
     h('div', { class: 'row' },
-      h('a', { class: 'btn ghost small hide-sm', href: '/gate/' }, 'Open gate scanner'),
+      h('a', { class: 'btn ghost small hide-sm', href: '/gate/' }, 'Open scanner'),
       user && h('button', { class: 'btn ghost small', type: 'button', onclick: async () => { await post('/auth/logout').catch(() => {}); user = null; boot(); } }, 'Sign out'),
       window.TapTheme.button()));
 }
@@ -35,14 +37,14 @@ window.addEventListener('hashchange', () => user && route());
 function viewSignIn() {
   const box = h('div', { class: 'narrow card', style: 'margin-top:6vh' });
   mount(main, box);
-  signInFlow(box, { title: 'Organiser sign-in', lede: 'Sign in with the phone number or email you will run events from.', onDone: (u) => { user = u; header(); location.hash = '#/'; route(); } });
+  signInFlow(box, { title: OFFICE ? 'Offices sign-in' : 'Organiser sign-in', lede: OFFICE ? 'Sign in with the phone number or email you will manage your office from.' : 'Sign in with the phone number or email you will run events from.', onDone: (u) => { user = u; header(); location.hash = '#/'; route(); } });
 }
 
 function route() {
   stopTimer();
   const parts = (location.hash.replace(/^#\/?/, '') || '').split('/').filter(Boolean);
   if (!parts.length) return viewEvents();
-  if (parts[0] === 'new') return viewNew('', undefined, parts[1] === 'office');
+  if (parts[0] === 'new') return viewNew('', undefined, OFFICE);
   if (parts[0] === 'e' && parts[1]) return viewEvent(parts[1], parts[2] || 'overview');
   viewEvents();
 }
@@ -56,28 +58,28 @@ function layout(items, content) {
       : h('a', { href: i.href, 'aria-current': i.on ? 'page' : null }, i.text))),
     h('div', { class: 'main' }, content));
 }
-const listNav = (on) => [{ href: '#/', text: 'All events and offices', on: on === 'list' }, { href: '#/new', text: 'New event', on: on === 'new' }, { href: '#/new/office', text: 'New office', on: on === 'new-office' }, { href: '/gate/', text: 'Open scanner' }];
+const listNav = (on) => [{ href: '#/', text: OFFICE ? 'Your offices' : 'Your events', on: on === 'list' }, { href: '#/new', text: OFFICE ? 'New office' : 'New event', on: on === 'new' }, { href: '/gate/', text: 'Open scanner' }];
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const fail = (ex) => {
   if (ex.status === 401) { user = null; boot(); return; }
-  mount(main, h('div', { class: 'error' }, ex.message), h('p', { style: 'margin-top:12px' }, h('a', { href: '#/' }, 'Back to events')));
+  mount(main, h('div', { class: 'error' }, ex.message), h('p', { style: 'margin-top:12px' }, h('a', { href: '#/' }, OFFICE ? 'Back to offices' : 'Back to events')));
 };
 
 // ---- Events list -------------------------------------------------------------------------------------
 async function viewEvents() {
   try {
-    const { events } = await get('/events');
-    document.title = 'Events · Tap In';
+    const { events } = await get('/events?kind=' + (OFFICE ? 'workplace' : 'event'));
+    document.title = (OFFICE ? 'Offices' : 'Events') + ' · Tap In';
     mount(main, layout(listNav('list'), h('div', {},
-      h('div', { class: 'spread' }, h('h1', { style: 'font-size:34px' }, 'Your events and offices'), h('div', { class: 'row' }, h('a', { class: 'btn ghost', href: '#/new/office' }, 'New office'), h('a', { class: 'btn primary', href: '#/new' }, 'New event'))),
+      h('div', { class: 'spread' }, h('h1', { style: 'font-size:34px' }, OFFICE ? 'Your offices' : 'Your events'), h('a', { class: 'btn primary', href: '#/new' }, OFFICE ? 'New office' : 'New event')),
       events.length
         ? h('div', { class: 'grid two', style: 'margin-top:18px' }, events.map((e) => h('a', { class: 'card', href: '#/e/' + e.id, style: 'text-decoration:none;color:inherit' },
             h('p', { class: 'eyebrow' }, e.kind === 'workplace' ? 'Office access' : e.starts_at ? when(e.starts_at, { dateStyle: 'medium' }) : 'Date to be announced'),
             h('h3', { style: 'font-size:20px;margin:4px 0' }, e.name),
             h('p', { class: 'muted' }, [e.venue, e.city].filter(Boolean).join(', ')),
             h('div', { class: 'row', style: 'margin-top:12px' }, h('span', { class: 'chip' }, e.registered + (e.kind === 'workplace' ? ' people' : ' registered')), h('span', { class: 'chip ok' }, e.checked_in + (e.kind === 'workplace' ? ' seen' : ' checked in')), h('span', { class: 'chip' }, e.invites_open + (e.kind === 'workplace' ? ' waiting to join' : ' invites open'))))))
-        : h('div', { class: 'card', style: 'margin-top:18px;text-align:center;padding:40px' }, h('p', {}, 'No events yet.'), h('a', { class: 'btn primary', style: 'margin-top:14px', href: '#/new' }, 'Create your first event')))));
+        : h('div', { class: 'card', style: 'margin-top:18px;text-align:center;padding:40px' }, h('p', {}, OFFICE ? 'No offices yet.' : 'No events yet.'), h('a', { class: 'btn primary', style: 'margin-top:14px', href: '#/new' }, OFFICE ? 'Set up your first office' : 'Create your first event')))));
   } catch (ex) { fail(ex); }
 }
 
@@ -130,7 +132,7 @@ function viewNew(err = '', draft, office = false) {
 
   const btn = h('button', { class: 'btn primary', type: 'submit' }, T.create);
   mount(main, h('div', { class: 'narrow' },
-    h('a', { href: '#/' }, '← Events'),
+    h('a', { href: '#/' }, OFFICE ? '← Offices' : '← Events'),
     h('h1', { style: 'font-size:34px;margin:8px 0 4px' }, T.page),
     h('p', { class: 'muted' }, T.lede),
     h('form', {
@@ -182,10 +184,11 @@ async function viewEvent(id, tab) {
     const data = await get('/events/' + id);
     document.title = data.event.name + ' · Tap In';
     const office = data.event.kind === 'workplace';
+    if (office !== OFFICE) { location.replace((office ? '/offices/' : '/organiser/') + '#/e/' + id); return; }
     const tabs = office
       ? [['overview', 'Overview'], ['people', 'Add people'], ['attendees', 'Who has access'], ['gate', 'Doors & key']]
       : [['overview', 'Overview'], ['invites', 'Invite codes'], ['attendees', 'Attendees'], ['gate', 'Gate key & rules']];
-    const items = [{ href: '#/', text: '\u2190 All events and offices' }, { label: data.event.name }]
+    const items = [{ href: '#/', text: OFFICE ? '\u2190 All offices' : '\u2190 All events' }, { label: data.event.name }]
       .concat(tabs.map(([k, label]) => ({ href: `#/e/${id}/${k}`, text: label, on: tab === k })))
       .concat([{ href: '/gate/', text: 'Open scanner' }]);
     const body = h('div', {});

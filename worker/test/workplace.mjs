@@ -84,6 +84,14 @@ await test('an unknown kind is refused', async () => {
   assert.equal(r.body.error.code, 'invalid_kind');
 });
 
+await test('the events list and the offices list are kept apart', async () => {
+  const offices = (await boss.get('/api/events?kind=workplace')).body.events;
+  const events = (await boss.get('/api/events?kind=event')).body.events;
+  assert.ok(offices.length >= 1 && offices.every((e) => e.kind === 'workplace'));
+  assert.ok(events.length >= 1 && events.every((e) => e.kind === 'event'));
+  assert.equal((await boss.get('/api/events')).body.events.length, offices.length + events.length);
+});
+
 group('Adding people');
 await test('staff are added by phone or email; bad and duplicate contacts are reported, not fatal', async () => {
   const r = await boss.post(`/api/events/${office.event.id}/people`, {

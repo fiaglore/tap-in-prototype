@@ -170,16 +170,17 @@ export async function createEvent({ request, env, user }) {
 }
 
 // GET /api/events
-export async function listEvents({ env, user }) {
+export async function listEvents({ env, user, url }) {
+  const kind = url.searchParams.get('kind');
   const rows = (
     await env.DB.prepare(
       `SELECT e.id, e.name, e.kind, e.venue, e.city, e.starts_at, e.created_at,
         (SELECT COUNT(*) FROM passes p WHERE p.event_id = e.id AND p.status = 'active') AS registered,
         (SELECT COUNT(DISTINCT s.pass_id) FROM scans s WHERE s.event_id = e.id AND s.result = 'granted') AS checked_in,
         (SELECT COUNT(*) FROM invites i WHERE i.event_id = e.id AND i.status = 'unused') AS invites_open
-       FROM events e WHERE e.owner_id = ?1 ORDER BY e.created_at DESC`
+       FROM events e WHERE e.owner_id = ?1 AND (?2 IS NULL OR e.kind = ?2) ORDER BY e.created_at DESC`
     )
-      .bind(user.id)
+      .bind(user.id, kind === 'event' || kind === 'workplace' ? kind : null)
       .all()
   ).results;
   return json({ events: rows });

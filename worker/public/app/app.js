@@ -369,6 +369,7 @@ function viewMe() {
     state.config.otp_mode === 'demo' && h('div', { class: 'notice warn' }, 'Demo mode: sign-in codes are shown on screen instead of being texted. This is for trying Tap In out.'),
     h('div', { class: 'row' },
       h('a', { class: 'btn ghost', href: '/organiser/' }, 'Organiser console'),
+      h('a', { class: 'btn ghost', href: '/offices/' }, 'Offices console'),
       h('button', { class: 'btn ghost', type: 'button', onclick: () => { flag(false); onboarding('ctx'); } }, 'Replay intro'),
       h('button', { class: 'btn ghost', type: 'button', onclick: async () => { await post('/auth/logout').catch(() => {}); state.user = null; state.passes = []; state.waiting = []; flag(false); onboarding('welcome'); } }, 'Sign out'))), { title: 'Me' });
 }
