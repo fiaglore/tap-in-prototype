@@ -1,5 +1,6 @@
 // Classic script loaded in <head> so the right colours apply before first paint.
 (function () {
+  document.documentElement.classList.add('js'); // lets pages hide things for scroll reveals only when scripts run
   var KEY = 'tapin-mode';
   var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
   function saved() { try { var v = localStorage.getItem(KEY); return v === 'light' || v === 'dark' ? v : null; } catch (e) { return null; } }

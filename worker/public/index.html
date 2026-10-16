@@ -11,10 +11,14 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="/css/tapin.css">
 <link rel="stylesheet" href="/site.css">
+<link rel="stylesheet" href="/home.css">
 <script src="/js/theme.js"></script>
 <script src="/js/site.js" defer></script>
+<script src="/js/home.js" defer></script>
 </head>
-<body>
+<body class="home">
+<canvas id="field" aria-hidden="true"></canvas>
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
 <header class="topbar">
   <a class="wordmark" href="/"><img src="/logo/tap-in-app-icon.svg" alt=""><svg class="wm" viewBox="0 0 600 151" role="img" aria-label="Tap In"><polygon points="0,0 76,0 76,151 45,151 45,26 0,26"/><polygon points="80,0 120,0 120,26 93,26"/><polygon points="149,0 181,0 244,151 212,151 201,124 131,124 120,151 88,151"/><polygon points="143,97 189,97 166,42" class="wm-cut"/><polygon points="164,44 193,21 198,27 169,50" class="wm-cut"/><rect x="251" y="0" width="29" height="151"/><path d="M280,0 H320 A53,53 0 0 1 320,106 H301 L285,76 H318 A25,25 0 0 0 318,26 H280 Z"/><g class="wm-n" transform="translate(426,0)"><polygon points="0,0 31,0 31,26 0,38"/><rect x="0" y="44" width="31" height="107"/><polygon points="45,0 77,0 174,139 174,151 142,151 77,58 77,151 45,151"/><polygon points="142,0 174,0 174,113 142,90"/></g></svg></a>
   <nav class="row" aria-label="Main">
@@ -27,53 +31,116 @@
 </header>
 
 <main>
-  <section class="wrap hero">
-    <p class="eyebrow">Entry without bands</p>
-    <h1>Your phone is the pass.</h1>
-    <p class="lede">Organisers send an invite code. You add it once. At the door you show your phone and walk in. No wristbands to print, hand out, lose or throw away.</p>
-    <div class="row" style="margin-top:26px">
-      <a class="btn primary" href="/app/">Add my pass</a>
-      <a class="btn ghost" href="/organiser/">Run an event</a>
-      <a class="btn ghost" href="/offices/">Open up an office</a>
+  <section class="hero2 wrap">
+    <div class="hero-copy">
+      <p class="eyebrow tag"><span class="dot"></span> Entry without bands &middot; now with payments</p>
+      <h1>Your phone is the <span class="swap" id="swap" aria-live="off">pass</span>.</h1>
+      <p class="lede">Offices, concerts and the till, all with one tap. Add an invite once, show your phone at the door, and walk in. Tap In is the pass, the key and the wallet.</p>
+      <div class="row cta">
+        <a class="btn primary glow" href="/app/">Add my pass</a>
+        <a class="btn ghost" href="/organiser/">Run an event</a>
+        <a class="btn ghost" href="/offices/">Open up an office</a>
+      </div>
+      <ul class="pills" aria-label="What Tap In does">
+        <li><b data-count="3">3</b> products</li>
+        <li><b data-count="30">30</b> second live QR</li>
+        <li><b data-count="0">0</b> wristbands</li>
+      </ul>
+    </div>
+
+    <div class="stage" id="stage" aria-hidden="true">
+      <div class="orbit o1"><span class="sat">Offices</span></div>
+      <div class="orbit o2"><span class="sat">Concerts</span></div>
+      <div class="orbit o3"><span class="sat">Pay</span></div>
+      <div class="phone" id="phone">
+        <div class="phone-in">
+          <div class="p-top"><span class="chip">VIP Access</span><span class="live"><i></i> LIVE</span></div>
+          <p class="p-name">Lagos Live &middot; Gate A</p>
+          <div class="qrwrap"><canvas id="qr" width="168" height="168"></canvas><div class="beam"></div></div>
+          <p class="p-code mono" id="code">TQ-0000-0000-0000</p>
+          <div class="p-status" id="status">Scanning…</div>
+        </div>
+        <div class="glare"></div>
+      </div>
     </div>
   </section>
 
-  <section class="wrap">
-    <h2>How it works</h2>
-    <div class="grid three" style="margin-top:16px">
-      <article class="card"><p class="eyebrow">1 · Organiser</p><h3>Create the event</h3><p class="muted">Name the areas you control (main gate, VIP lounge, backstage) and the ticket types that can enter each one. Generate invite codes in bulk, or tie a code to one person.</p></article>
-      <article class="card"><p class="eyebrow">2 · Attendee</p><h3>Add the invite</h3><p class="muted">Sign in with your phone number or email, type the code once, and the pass lives in your phone. Each code works one time only.</p></article>
-      <article class="card"><p class="eyebrow">3 · Gate</p><h3>Show it, get in</h3><p class="muted">Gate staff scan the QR on your pass. They see a clear admit or do not admit, your first name, and your ticket type. Every scan is logged live.</p></article>
+  <div class="ticker" aria-hidden="true"><div class="ticker-in">
+    <span>TAP IN</span><span>OFFICES</span><span>CONCERTS</span><span>FESTIVALS</span><span>PAYMENTS</span><span>LIVE QR</span><span>NO WRISTBANDS</span><span>VENDORS</span><span>TAP IN</span><span>OFFICES</span><span>CONCERTS</span><span>FESTIVALS</span><span>PAYMENTS</span><span>LIVE QR</span><span>NO WRISTBANDS</span><span>VENDORS</span>
+  </div></div>
+
+  <section class="wrap sec rv">
+    <p class="eyebrow">One tap, three worlds</p>
+    <h2 class="big">Doors, stages and tills.</h2>
+    <div class="grid three products" style="margin-top:22px">
+      <a class="card prod spot" href="/offices/">
+        <p class="eyebrow">1 &middot; Offices</p><h3>Access for companies</h3>
+        <p class="muted">Staff, contractors and visitors, by phone or email. Each group opens certain doors, only at certain hours. Leave the company and the door closes.</p>
+        <div class="viz hours" aria-hidden="true"><div class="bar"><i class="win"></i><i class="now"></i></div><div class="ticks"><span>06</span><span>12</span><span>18</span><span>24</span></div></div>
+        <span class="more">Open the offices console &rarr;</span>
+      </a>
+      <a class="card prod spot" href="/organiser/">
+        <p class="eyebrow">2 &middot; Events</p><h3>Access for concerts</h3>
+        <p class="muted">Ticket limits that cannot oversell, sales windows, and a live QR that changes every 30 seconds so screenshots stop working.</p>
+        <div class="viz cap" aria-hidden="true"><div class="meter"><i></i></div><div class="cap-l"><span>Regular</span><b>Only <em data-count="12">12</em> left</b></div></div>
+        <span class="more">Run an event &rarr;</span>
+      </a>
+      <a class="card prod spot" href="/vendor/">
+        <p class="eyebrow">3 &middot; Payments</p><h3>Pay with a tap</h3>
+        <p class="muted">Customers show a pay code for an exact amount; vendors scan it on the till. Balances can never go negative. Demo money for now.</p>
+        <div class="viz pay" aria-hidden="true"><div class="amt">&#8358;<b data-count="2500">2500</b></div><div class="paid"><i></i> Paid</div></div>
+        <span class="more">Set up a vendor till &rarr;</span>
+      </a>
     </div>
   </section>
 
-  <section class="wrap">
-    <h2>At the gate, today</h2>
-    <div class="card" style="margin-top:16px">
+  <section class="wrap sec rv" id="how">
+    <p class="eyebrow">How it works</p>
+    <h2 class="big">Three steps. No wristband.</h2>
+    <ol class="steps">
+      <li><span class="n">01</span><div><h3>Set it up</h3><p class="muted">Name the doors or areas you control, then the groups or ticket types that can enter each one. Generate invites, or add people by email.</p></div></li>
+      <li><span class="n">02</span><div><h3>Add the invite</h3><p class="muted">Sign in with a phone number or email, add the code once, and the pass lives on your phone. Each code works one time only.</p></div></li>
+      <li><span class="n">03</span><div><h3>Show it, get in</h3><p class="muted">Staff scan your pass and see admit or do not admit, your first name and your group. Every scan is logged. At the till, pay the same way.</p></div></li>
+    </ol>
+  </section>
+
+  <section class="wrap sec rv">
+    <div class="gatebox spot">
+      <div class="gate-head"><div><p class="eyebrow">At the gate</p><h2 class="big" style="font-size:clamp(22px,4vw,32px)">Watch a gate work.</h2></div><span class="chip">Simulated</span></div>
+      <div class="gate-grid">
+        <div class="counts"><div><b id="cIn">0</b><span>Entered</span></div><div><b id="cNo">0</b><span>Turned away</span></div></div>
+        <ul class="feed" id="feed" aria-live="off"></ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap sec rv">
+    <h2 class="big">Built for trust.</h2>
+    <div class="grid three" style="margin-top:18px">
+      <article class="card spot"><h3>Invites that cannot be reused</h3><p class="muted">Codes are checked and used up in a single step, so two people cannot share one invite or take the last ticket.</p></article>
+      <article class="card spot"><h3>Codes never stored in the clear</h3><p class="muted">Only a scrambled version is kept. Even someone who read the database could not turn it back into working invites or keys.</p></article>
+      <article class="card spot"><h3>Privacy at the door</h3><p class="muted">Staff see a first name and last initial, not your phone number or email. A till never sees your balance.</p></article>
+    </div>
+  </section>
+
+  <section class="wrap sec rv">
+    <div class="card spot" style="padding:0;overflow:hidden">
       <table>
-        <thead><tr><th>Method</th><th>Status</th><th>Notes</th></tr></thead>
+        <thead><tr><th>At the gate, today</th><th>Status</th><th>Notes</th></tr></thead>
         <tbody>
           <tr><td>QR on the phone, scanned by a staff phone camera</td><td><span class="chip ok">Works now</span></td><td>Chrome on Android with a camera. Other phones can use a USB scanner or typing.</td></tr>
           <tr><td>USB or Bluetooth barcode scanner</td><td><span class="chip ok">Works now</span></td><td>The scanner types the code into the gate page.</td></tr>
           <tr><td>Typed pass code</td><td><span class="chip ok">Works now</span></td><td>Fallback if a screen is cracked or a camera is struggling.</td></tr>
-          <tr><td>Tap the phone on a receiver (NFC)</td><td><span class="chip">Coming next</span></td><td>Needs a native app. Browsers cannot act as a tap-to-enter card, and iPhone access to this is restricted, so we will not pretend it is in the website.</td></tr>
+          <tr><td>Tap the phone on a receiver (NFC)</td><td><span class="chip">Coming next</span></td><td>Needs a native app. Browsers cannot act as a tap-to-enter card, and iPhone access to this is restricted, so we will not pretend it is possible yet.</td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
-  <section class="wrap">
-    <h2>Built for trust</h2>
-    <div class="grid three" style="margin-top:16px">
-      <article class="card"><h3>Invites that cannot be reused</h3><p class="muted">Codes are checked and used up in a single step, so two people cannot share one invite.</p></article>
-      <article class="card"><h3>Codes never stored in the clear</h3><p class="muted">Only a scrambled version is kept. Even someone who read the database could not turn it back into working invites.</p></article>
-      <article class="card"><h3>Privacy at the door</h3><p class="muted">Staff see a first name and last initial, not your phone number or email.</p></article>
-    </div>
-  </section>
-
-  <footer class="wrap muted" style="padding-top:32px;font-size:13px">
-    <p>Tap In is a work in progress. Sign-in codes are shown on screen in demo mode until a text or email provider is connected.</p>
+  <footer class="wrap muted" style="padding:32px 0 60px;font-size:13px">
+    <p>Tap In is a work in progress. Sign-in codes are shown on screen in demo mode until a text or email provider is connected, and payments use demo money.</p>
   </footer>
 </main>
+<noscript><style>.rv{opacity:1!important;transform:none!important}</style></noscript>
 </body>
 </html>
