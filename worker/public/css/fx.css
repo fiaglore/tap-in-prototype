@@ -53,3 +53,7 @@ body.fx .result.denied{box-shadow:0 0 70px -12px var(--bad)}
 @media(prefers-reduced-motion:reduce){
   .fx-aurora i,body.fx .topbar::after,body.fx main,body.fx .page,body.fx .shell>main,body.fx .result{animation:none!important}
 }
+
+/* WebGL liquid background (js/liquid.js). The CSS aurora above is only the fallback. */
+#liquid{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
+body.liquid .fx-aurora{display:none}
