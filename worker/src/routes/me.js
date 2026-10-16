@@ -1,6 +1,6 @@
 import { HttpError, normaliseCode, newId, nowSec } from '../lib/util.js';
 import { clientIp, json, readJson } from '../lib/http.js';
-import { hashInvite, passToken } from '../lib/codes.js';
+import { LIVE_GRACE, LIVE_STEP, hashInvite, liveToken, passToken } from '../lib/codes.js';
 import { isFull, record } from '../lib/limits.js';
 import { publicUser } from '../lib/session.js';
 
@@ -9,7 +9,7 @@ async function loadPasses(env, userId, onlyId) {
   const bind = onlyId ? [userId, onlyId] : [userId];
   const passes = (
     await env.DB.prepare(
-      `SELECT p.id, p.status, p.created_at, p.expires_at, e.kind, e.id AS event_id, e.name AS event_name, e.venue, e.city, e.starts_at,
+      `SELECT p.id, p.status, p.created_at, p.expires_at, e.kind, e.secure_qr, e.id AS event_id, e.name AS event_name, e.venue, e.city, e.starts_at,
               t.name AS tier_name, p.tier_id
        FROM passes p JOIN events e ON e.id = p.event_id JOIN tiers t ON t.id = p.tier_id
        WHERE p.user_id = ?1 ${filter}
@@ -37,8 +37,10 @@ async function loadPasses(env, userId, onlyId) {
       id: p.id,
       status: p.status,
       expires_at: p.expires_at,
-      token: await passToken(env.SECRET_PEPPER, p.id),
-      event: { id: p.event_id, kind: p.kind, name: p.event_name, venue: p.venue, city: p.city, starts_at: p.starts_at },
+      // On a secure-QR event the permanent code is never handed out; the phone asks for a live one.
+      token: p.secure_qr ? null : await passToken(env.SECRET_PEPPER, p.id),
+      live: !!p.secure_qr,
+      event: { id: p.event_id, kind: p.kind, secure_qr: !!p.secure_qr, name: p.event_name, venue: p.venue, city: p.city, starts_at: p.starts_at },
       tier: p.tier_name,
       zones: zonesByPass[p.id] || [],
       created_at: p.created_at
@@ -147,4 +149,16 @@ export async function claim({ request, env, user }) {
 
   const [pass] = await loadPasses(env, user.id, passId);
   return json({ pass }, 201);
+}
+
+// GET /api/me/passes/:id/live  -> a pass code that stays valid for about a minute and a half.
+// The app asks again every 20 seconds, so a screenshot of the QR is useless almost at once.
+export async function liveCode({ env, user, params }) {
+  const p = await env.DB.prepare("SELECT id, status, expires_at FROM passes WHERE id = ?1 AND user_id = ?2")
+    .bind(String(params.id).slice(0, 40), user.id)
+    .first();
+  if (!p) throw new HttpError(404, 'not_found', 'Pass not found.');
+  const now = nowSec();
+  if (p.status !== 'active' || (p.expires_at && p.expires_at <= now)) throw new HttpError(409, 'pass_not_active', 'This pass is not active.');
+  return json({ token: await liveToken(env.SECRET_PEPPER, p.id, now), valid_for: LIVE_STEP * (LIVE_GRACE + 1), refresh_in: 20 });
 }

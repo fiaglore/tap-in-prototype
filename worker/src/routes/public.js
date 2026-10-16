@@ -8,8 +8,15 @@ import { MAX_INVITES_PER_EVENT, mintInvites } from './events.js';
 
 const MAX_QTY = 8;
 
+// 'upcoming' before sales open, 'closed' after they end, otherwise 'open'.
+export function salesState(ev, now) {
+  if (ev.sales_start && now < ev.sales_start) return 'upcoming';
+  if (ev.sales_end && now >= ev.sales_end) return 'closed';
+  return 'open';
+}
+
 async function saleEvent(env, id) {
-  const ev = await env.DB.prepare('SELECT id, name, prefix, venue, city, starts_at FROM events WHERE id = ?1')
+  const ev = await env.DB.prepare('SELECT id, name, prefix, kind, venue, city, starts_at, sales_start, sales_end FROM events WHERE id = ?1')
     .bind(String(id).slice(0, 40))
     .first();
   if (!ev) throw new HttpError(404, 'not_found', 'Event not found.');
@@ -20,11 +27,21 @@ async function saleEvent(env, id) {
 export async function getEvent({ env, params }) {
   const ev = await saleEvent(env, params.id);
   const tiers = (
-    await env.DB.prepare('SELECT id, name, price_kobo FROM tiers WHERE event_id = ?1 ORDER BY sort, name').bind(ev.id).all()
+    await env.DB.prepare(
+      `SELECT id, name, price_kobo, capacity,
+        (SELECT COUNT(*) FROM invites i WHERE i.tier_id = tiers.id AND i.status != 'revoked') AS issued
+       FROM tiers WHERE event_id = ?1 ORDER BY sort, name`
+    )
+      .bind(ev.id)
+      .all()
   ).results;
   return json({
-    event: { id: ev.id, name: ev.name, venue: ev.venue, city: ev.city, starts_at: ev.starts_at },
-    tiers
+    event: { id: ev.id, name: ev.name, venue: ev.venue, city: ev.city, starts_at: ev.starts_at, sales: salesState(ev, nowSec()), sales_start: ev.sales_start, sales_end: ev.sales_end },
+    // Exact counts are the organiser's business; buyers only learn how many are left once it is few.
+    tiers: tiers.map((t) => {
+      const left = t.capacity === null ? null : Math.max(0, t.capacity - t.issued);
+      return { id: t.id, name: t.name, price_kobo: t.price_kobo, sold_out: left === 0, left: left !== null && left <= 20 ? left : null };
+    })
   });
 }
 
@@ -34,7 +51,10 @@ export async function getEvent({ env, params }) {
 export async function buy({ request, env, user, params }) {
   const ev = await saleEvent(env, params.id);
   const b = await readJson(request);
-  const tier = await env.DB.prepare('SELECT id, name FROM tiers WHERE id = ?1 AND event_id = ?2').bind(b.tier_id, ev.id).first();
+  const state = salesState(ev, nowSec());
+  if (state === 'upcoming') throw new HttpError(409, 'sales_not_open', 'Ticket sales have not opened yet.');
+  if (state === 'closed') throw new HttpError(409, 'sales_closed', 'Ticket sales for this event have closed.');
+  const tier = await env.DB.prepare('SELECT id, name, capacity FROM tiers WHERE id = ?1 AND event_id = ?2').bind(b.tier_id, ev.id).first();
   if (!tier) throw new HttpError(400, 'invalid_tier', 'Choose a ticket type.');
 
   const qty = b.qty === undefined ? 1 : Number.parseInt(b.qty, 10);

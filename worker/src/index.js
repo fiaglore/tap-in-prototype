@@ -25,11 +25,13 @@ const ROUTES = [
   ['PATCH', '/api/me', 'user', auth.patchMe],
   ['GET', '/api/me/history', 'user', me.history],
   ['POST', '/api/claim', 'user', me.claim],
+  ['GET', '/api/me/passes/:id/live', 'user', me.liveCode],
 
   ['GET', '/api/events', 'user', events.listEvents],
   ['POST', '/api/events', 'user', events.createEvent],
   ['GET', '/api/events/:id', 'user', events.getEvent],
   ['PATCH', '/api/events/:id', 'user', events.patchEvent],
+  ['PATCH', '/api/events/:id/tiers/:tierId', 'user', events.patchTier],
   ['GET', '/api/events/:id/scans', 'user', events.listScans],
   ['POST', '/api/events/:id/gate-key', 'user', events.rotateGateKey],
   ['GET', '/api/events/:id/invites', 'user', events.listInvites],
