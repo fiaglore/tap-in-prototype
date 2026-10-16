@@ -6,6 +6,7 @@ import { clientIp, json, readJson } from '../lib/http.js';
 import { hashGateKey, liveMacFor, liveWindowFresh, parseLiveToken, parsePassToken, passMac } from '../lib/codes.js';
 import { isFull, record } from '../lib/limits.js';
 import { withinSchedule } from '../lib/schedule.js';
+import { NEW_PHOTO_SECS, photoDataUrl } from '../lib/photo.js';
 
 const MESSAGES = {
   invalid_token: 'Not a valid Tap In pass.',
@@ -26,7 +27,7 @@ async function gateEvent(request, env) {
   const m = /^Bearer\s+(.{1,100})$/i.exec(request.headers.get('authorization') || '');
   const key = m ? normaliseCode(m[1]) : '';
   const ev = key
-    ? await env.DB.prepare('SELECT id, name, kind, venue, city, allow_reentry, secure_qr, tz_offset_min FROM events WHERE gate_key_hash = ?1')
+    ? await env.DB.prepare('SELECT id, name, kind, venue, city, allow_reentry, secure_qr, require_photo, tz_offset_min FROM events WHERE gate_key_hash = ?1')
         .bind(await hashGateKey(env.SECRET_PEPPER, key))
         .first()
     : null;
@@ -76,7 +77,7 @@ export async function gateScan({ request, env }) {
     reason = 'stale_code';
   } else {
     pass = await env.DB.prepare(
-      `SELECT p.id, p.status, p.event_id, p.tier_id, p.expires_at, u.name AS holder, t.name AS tier, t.days_mask, t.from_min, t.to_min
+      `SELECT p.id, p.status, p.event_id, p.tier_id, p.expires_at, p.user_id, u.name AS holder, t.name AS tier, t.days_mask, t.from_min, t.to_min
        FROM passes p JOIN users u ON u.id = p.user_id JOIN tiers t ON t.id = p.tier_id WHERE p.id = ?1`
     )
       .bind(parsed.id)
@@ -127,7 +128,17 @@ export async function gateScan({ request, env }) {
   }
 
   const known = pass && pass.event_id === ev.id;
+  // For events that ask for it, show the face on file, on every scan of a known pass (refusals too: a refused
+  // "already used" scan shown with the face is how staff spot a shared screenshot).
+  let face = {};
+  if (known && ev.require_photo) {
+    const ph = await env.DB.prepare('SELECT jpeg_b64, updated_at FROM user_photos WHERE user_id = ?1').bind(pass.user_id).first();
+    face = ph
+      ? { photo: photoDataUrl(ph.jpeg_b64), photo_new: now - ph.updated_at < NEW_PHOTO_SECS, photo_set_at: ph.updated_at }
+      : { photo: null, photo_missing: true };
+  }
   return json({
+    ...face,
     result: reason ? 'denied' : 'granted',
     reason,
     message: reason ? MESSAGES[reason] : 'Welcome in.',

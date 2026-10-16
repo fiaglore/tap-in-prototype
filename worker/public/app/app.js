@@ -1,5 +1,6 @@
 import { h, wordmarkText, mount, toast, copy, when, ago } from '/js/dom.js';
-import { get, post, patch } from '/js/api.js';
+import { get, post, patch, put, del } from '/js/api.js';
+import { selfieModal } from '/js/selfie.js';
 import { signInFlow } from '/js/auth-ui.js';
 import { cardEl, cardNumber, loadCard, saveCard, sanitise, PRESETS, SWATCHES, FINISHES, PATTERNS, TYPES } from '/js/card.js';
 import { orbitSvg, nextIndex, daysTo } from '/app/orbit.js';
@@ -171,7 +172,7 @@ function stepPasses() {
   const btn = h('button', { class: 'btn primary block', type: 'submit' }, 'Add pass');
   async function claim(body) {
     try {
-      await post('/claim', body);
+      await postClaim(body);
       await refresh();
       toast('Pass added');
       stepPasses();
@@ -287,6 +288,7 @@ function passCard(p) {
     h('h3', {}, p.event.name),
     h('p', { class: 'muted' }, [p.event.venue, p.event.city].filter(Boolean).join(', ') || p.tier),
     h('div', { class: 'zones' }, h('span', { class: 'chip' }, p.tier), p.zones.map((z) => h('span', { class: 'chip' }, z))),
+    live && needsPhoto(p) && h('span', { class: 'chip bad' }, 'Photo needed'),
     live && h('span', { style: 'font-weight:700' }, 'Show pass →'));
 }
 
@@ -314,7 +316,7 @@ function viewAdd(err = '') {
 
 async function claim(body, btn) {
   try {
-    const r = await post('/claim', body);
+    const r = await postClaim(body);
     await refresh();
     state.sel = null;
     state.tab = 'passes';
@@ -328,6 +330,24 @@ async function claim(body, btn) {
     else toast(ex.message);
   }
 }
+
+// Some events want a selfie on every pass. If the server says so, take one, save it, and try the claim again.
+async function ensurePhoto(note) {
+  const shot = await selfieModal({ title: 'Add your photo', note: note || 'Door staff will compare this with your face when your pass is scanned.' });
+  if (!shot) return false;
+  await put('/me/photo', { image: shot });
+  if (state.user) state.user.has_photo = true;
+  return true;
+}
+async function postClaim(body) {
+  try {
+    return await post('/claim', body);
+  } catch (ex) {
+    if (ex.code === 'photo_required' && (await ensurePhoto('This event checks passes against a photo of you.'))) return post('/claim', body);
+    throw ex;
+  }
+}
+const needsPhoto = (p) => p.event.require_photo && state.user && !state.user.has_photo;
 
 function showPass(p) {
   const prev = document.body.style.overflow;
@@ -364,6 +384,8 @@ function showPass(p) {
     h('div', { class: 'spread', style: 'width:100%;max-width:460px' }, h('button', { class: 'btn ghost small', type: 'button', onclick: close }, 'Close'), h('span', { class: 'chip' }, p.tier)),
     h('h2', { style: 'margin-top:14px;text-align:center' }, p.event.name),
     h('p', { class: 'muted', style: 'text-align:center' }, state.user.name || ''),
+    needsPhoto(p) && h('div', { class: 'notice warn', style: 'max-width:340px;text-align:center' }, 'This event checks passes against a photo of you. ',
+      h('button', { class: 'btn small primary', style: 'margin-top:8px', type: 'button', onclick: async () => { try { if (await ensurePhoto()) { toast('Photo saved'); close(); render(); } } catch (ex) { toast(ex.message); } } }, 'Add my photo')),
     qrBox, tokenEl,
     h('div', { class: 'zones', style: 'margin-top:12px;justify-content:center' }, p.zones.map((z) => h('span', { class: 'chip' }, z))),
     note, copyBtn);
@@ -474,12 +496,32 @@ function viewMe() {
       h('div', { class: 'field', style: 'margin-top:0' }, h('label', { for: 'nm' }, 'Name'), name),
       h('p', { class: 'hint', style: 'margin-top:8px' }, 'Signed in as ' + state.user.identifier),
       h('button', { class: 'btn primary small', style: 'margin-top:12px', type: 'submit' }, 'Save name')),
+    photoCard(),
     state.config.otp_mode === 'demo' && h('div', { class: 'notice warn' }, 'Demo mode: sign-in codes are shown on screen instead of being texted. This is for trying Tap In out.'),
     h('div', { class: 'row' },
       h('a', { class: 'btn ghost', href: '/organiser/' }, 'Organiser console'),
       h('a', { class: 'btn ghost', href: '/offices/' }, 'Offices console'),
       h('button', { class: 'btn ghost', type: 'button', onclick: () => { flag(false); onboarding('ctx'); } }, 'Replay intro'),
       h('button', { class: 'btn ghost', type: 'button', onclick: async () => { await post('/auth/logout').catch(() => {}); state.user = null; state.passes = []; state.waiting = []; flag(false); onboarding('welcome'); } }, 'Sign out'))), { title: 'Me' });
+}
+
+// ---- My photo (shown to door staff only at events that ask for it) -----------------------------------
+function photoCard() {
+  const box = h('div', { class: 'card' });
+  async function draw() {
+    let ph = null;
+    try { ph = (await get('/me/photo')).photo; } catch {}
+    mount(box,
+      h('div', { class: 'row', style: 'gap:14px;align-items:center' },
+        ph ? h('img', { class: 'mephoto', src: ph, alt: 'Your photo' }) : h('div', { class: 'mephoto', style: 'display:grid;place-items:center;font-size:28px' }, '☺'),
+        h('div', { style: 'flex:1' }, h('h3', {}, 'Your photo'),
+          h('p', { class: 'hint' }, ph ? 'Door staff at events that ask for it see this next to your name when your pass is scanned.' : 'Some events and offices ask for a selfie so door staff can match your face to your pass.'))),
+      h('div', { class: 'row', style: 'margin-top:12px' },
+        h('button', { class: 'btn small primary', type: 'button', onclick: async () => { try { if (await ensurePhoto()) { toast('Photo saved'); draw(); } } catch (ex) { toast(ex.message); } } }, ph ? 'Retake' : 'Add a photo'),
+        ph && h('button', { class: 'btn small danger', type: 'button', onclick: async () => { if (!confirm('Delete your photo? Events that need one will ask for it again.')) return; try { await del('/me/photo'); state.user.has_photo = false; toast('Photo deleted'); draw(); } catch (ex) { toast(ex.message); } } }, 'Delete')));
+  }
+  draw();
+  return box;
 }
 
 // ---- Customise card ------------------------------------------------------------------------------

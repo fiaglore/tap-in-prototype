@@ -9,7 +9,7 @@ async function loadPasses(env, userId, onlyId) {
   const bind = onlyId ? [userId, onlyId] : [userId];
   const passes = (
     await env.DB.prepare(
-      `SELECT p.id, p.status, p.created_at, p.expires_at, e.kind, e.secure_qr, e.id AS event_id, e.name AS event_name, e.venue, e.city, e.starts_at,
+      `SELECT p.id, p.status, p.created_at, p.expires_at, e.kind, e.secure_qr, e.require_photo, e.id AS event_id, e.name AS event_name, e.venue, e.city, e.starts_at,
               t.name AS tier_name, p.tier_id
        FROM passes p JOIN events e ON e.id = p.event_id JOIN tiers t ON t.id = p.tier_id
        WHERE p.user_id = ?1 ${filter}
@@ -40,7 +40,7 @@ async function loadPasses(env, userId, onlyId) {
       // On a secure-QR event the permanent code is never handed out; the phone asks for a live one.
       token: p.secure_qr ? null : await passToken(env.SECRET_PEPPER, p.id),
       live: !!p.secure_qr,
-      event: { id: p.event_id, kind: p.kind, secure_qr: !!p.secure_qr, name: p.event_name, venue: p.venue, city: p.city, starts_at: p.starts_at },
+      event: { id: p.event_id, kind: p.kind, secure_qr: !!p.secure_qr, require_photo: !!p.require_photo, name: p.event_name, venue: p.venue, city: p.city, starts_at: p.starts_at },
       tier: p.tier_name,
       zones: zonesByPass[p.id] || [],
       created_at: p.created_at
@@ -66,7 +66,8 @@ export async function me({ env, user }) {
     event: { kind: w.kind, name: w.event_name, venue: w.venue, city: w.city, starts_at: w.starts_at }
   }));
 
-  return json({ user: publicUser(user), passes: await loadPasses(env, user.id), waiting });
+  const ph = await env.DB.prepare('SELECT 1 AS x FROM user_photos WHERE user_id = ?1').bind(user.id).first();
+  return json({ user: { ...publicUser(user), has_photo: !!ph }, passes: await loadPasses(env, user.id), waiting });
 }
 
 // GET /api/me/history  -> every time one of my passes was scanned
@@ -124,6 +125,16 @@ export async function claim({ request, env, user }) {
   if (invite.expires_at && invite.expires_at <= now) await fail(410, 'expired', 'This invite has expired.');
   if (invite.bound_identifier && ![user.phone, user.email].includes(invite.bound_identifier)) {
     await fail(403, 'wrong_holder', 'This invite was issued to someone else.');
+  }
+
+  // Some events want a selfie on every pass. Ask for it before the invite is used up.
+  const need = await env.DB.prepare(
+    'SELECT e.require_photo, EXISTS (SELECT 1 FROM user_photos ph WHERE ph.user_id = ?2) AS has FROM events e WHERE e.id = ?1'
+  )
+    .bind(invite.event_id, user.id)
+    .first();
+  if (need && need.require_photo && !need.has) {
+    throw new HttpError(428, 'photo_required', 'This event needs a photo of you so door staff can match it to your face. Add one to continue.');
   }
 
   // Claim atomically. Both statements run in one transaction; the insert only happens while the invite

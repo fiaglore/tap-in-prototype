@@ -76,3 +76,12 @@ th,td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 .scroll-x{overflow-x:auto}
 
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* selfie capture */
+.overlay.selfie{overflow:auto}
+.selfie-stage{position:relative;width:min(72vw,300px);aspect-ratio:1;border-radius:50%;overflow:hidden;margin:16px 0 8px;background:#000;box-shadow:0 0 0 3px var(--signal),0 0 50px -4px var(--glow)}
+.selfie-video,.selfie-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.selfie-video{transform:scaleX(-1)} /* a mirror view feels natural; the saved picture is not mirrored */
+.selfie-ring{position:absolute;inset:8%;border-radius:50%;border:2px dashed rgba(255,255,255,.55);pointer-events:none}
+.who{display:block;width:132px;height:132px;border-radius:24px;object-fit:cover;margin:0 auto 10px;border:3px solid var(--line);background:var(--card-on)}
+.mephoto{width:84px;height:84px;border-radius:50%;object-fit:cover;border:2px solid var(--line);background:var(--card-on)}

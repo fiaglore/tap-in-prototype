@@ -8,7 +8,7 @@
     "dev": "wrangler dev --local --port 8787",
     "db:migrate:local": "wrangler d1 migrations apply tap-in-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply tap-in-db --remote",
-    "test": "node test/smoke.mjs && node test/workplace.mjs && node test/payments.mjs && node test/events.mjs",
+    "test": "node test/smoke.mjs && node test/workplace.mjs && node test/payments.mjs && node test/events.mjs && node test/photos.mjs",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {

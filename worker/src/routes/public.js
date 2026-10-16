@@ -16,7 +16,7 @@ export function salesState(ev, now) {
 }
 
 async function saleEvent(env, id) {
-  const ev = await env.DB.prepare('SELECT id, name, prefix, kind, venue, city, starts_at, sales_start, sales_end FROM events WHERE id = ?1')
+  const ev = await env.DB.prepare('SELECT id, name, prefix, kind, venue, city, starts_at, sales_start, sales_end, require_photo FROM events WHERE id = ?1')
     .bind(String(id).slice(0, 40))
     .first();
   if (!ev) throw new HttpError(404, 'not_found', 'Event not found.');
@@ -36,7 +36,7 @@ export async function getEvent({ env, params }) {
       .all()
   ).results;
   return json({
-    event: { id: ev.id, name: ev.name, venue: ev.venue, city: ev.city, starts_at: ev.starts_at, sales: salesState(ev, nowSec()), sales_start: ev.sales_start, sales_end: ev.sales_end },
+    event: { id: ev.id, name: ev.name, venue: ev.venue, city: ev.city, starts_at: ev.starts_at, require_photo: !!ev.require_photo, sales: salesState(ev, nowSec()), sales_start: ev.sales_start, sales_end: ev.sales_end },
     // Exact counts are the organiser's business; buyers only learn how many are left once it is few.
     tiers: tiers.map((t) => {
       const left = t.capacity === null ? null : Math.max(0, t.capacity - t.issued);
@@ -51,6 +51,10 @@ export async function getEvent({ env, params }) {
 export async function buy({ request, env, user, params }) {
   const ev = await saleEvent(env, params.id);
   const b = await readJson(request);
+  if (ev.require_photo) {
+    const ph = await env.DB.prepare('SELECT 1 AS x FROM user_photos WHERE user_id = ?1').bind(user.id).first();
+    if (!ph) throw new HttpError(428, 'photo_required', 'This event needs a photo of you so door staff can match it to your face. Add one to continue.');
+  }
   const state = salesState(ev, nowSec());
   if (state === 'upcoming') throw new HttpError(409, 'sales_not_open', 'Ticket sales have not opened yet.');
   if (state === 'closed') throw new HttpError(409, 'sales_closed', 'Ticket sales for this event have closed.');

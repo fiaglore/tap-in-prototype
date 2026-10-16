@@ -53,7 +53,7 @@ const otherDay = (today + 3) % 7;
 await test('creates a workplace with doors, access groups and hours; re-entry is always on', async () => {
   boss = await signIn(env, 'boss@acme.test', '10.20.0.1', 'Ada Boss');
   const r = await boss.post('/api/events', {
-    kind: 'workplace', name: 'Acme HQ', city: 'Lagos', allow_reentry: false,
+    kind: 'workplace', name: 'Acme HQ', city: 'Lagos', allow_reentry: false, require_photo: false,
     zones: ['Front door', 'Server room'],
     tiers: [
       { name: 'Staff', zones: ['Front door', 'Server room'] },
@@ -143,7 +143,7 @@ await test('the gate reports that it is guarding a workplace', async () => {
 });
 await test('a group limited to other days is turned away with a clear reason', async () => {
   const r = await boss.post('/api/events', {
-    kind: 'workplace', name: 'Acme Annex', zones: ['Door'],
+    kind: 'workplace', name: 'Acme Annex', require_photo: false, zones: ['Door'],
     tiers: [{ name: 'Weekend crew', zones: ['Door'], days: [otherDay] }]
   });
   const gkey = r.body.gate_key;

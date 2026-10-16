@@ -72,6 +72,19 @@ Migration `0003_workplaces.sql` adds the columns. Apply it with `npm run db:migr
 
 Migration `0005_event_sales.sql` adds the columns.
 
+## Selfie on the pass
+
+A pass is only as good as the check at the door, and a name alone cannot be matched to a face. With **Selfie check** on (a setting per event or office; offices default to on), a person adds a selfie when they claim a pass, and door staff see it next to their name on every scan.
+
+- **Capture.** In the app (and on the ticket page) the browser opens the camera, crops the picture square, shrinks it to 256px and re-encodes it as a JPEG (which drops camera metadata such as GPS). If the camera is unavailable there is a file-picker fallback. `js/selfie.js`.
+- **Claiming.** If the event asks for a photo and the person has none, `/api/claim` and the public buy endpoint answer `428 photo_required` *without* using up the invite; the app takes the selfie and retries.
+- **At the gate.** The scan response carries `photo` (a data URL) for every scan of a known pass at that event, refusals included, because a refused "already used" scan shown with the face is how staff spot a shared screenshot. `photo_new` flags a photo added or changed in the last 24 hours, and `photo_missing` flags a pass with no photo (so staff check ID instead).
+- **Storage and privacy.** One small photo per person in `user_photos` (base64 text, 60 KB limit, validated server-side: JPEG only, 96 to 640 px, no EXIF/XMP/comment segments). It is returned only to its owner (`GET/PUT/DELETE /api/me/photo`) and inside a gate scan for an event that asks for it. Organisers see only whether a photo is on file; it is never listed, exported or shown to other events. People can delete theirs any time (Me tab). Changing it is limited to 6 a day, and the daily clean-up deletes a photo a month after it was last set unless its owner still has an active office pass or a recent event pass.
+
+**What it does not do.** It does not prove the photo is of the account holder or that a real person took it (there is no liveness check), so someone who deliberately uploads another person's face can still pass it on. It makes casual sharing, screenshots and resale visible and awkward, and the "photo changed recently" flag makes a last-minute swap stand out. A face photo is sensitive personal data: tell people why you collect it, and take advice on Nigerian data-protection rules before relying on it.
+
+Migration `0006_photos.sql` adds `events.require_photo` and the `user_photos` table.
+
 ## Payments (phase 3: customers and vendors)
 
 **Demo money only.** `PAYMENTS_MODE` is `demo` in `wrangler.jsonc`: wallets hold play money, top-ups and payouts are only recorded, and nothing real moves. In `live` mode the server refuses top-ups and payouts (`501 payments_not_connected`) until a payment provider is wired in. Holding or moving real customer money in Nigeria also has regulatory requirements (licensing, KYC, settlement through a licensed partner), so take advice before going live.

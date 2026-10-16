@@ -1,7 +1,8 @@
 // Public ticket sales page (demo). Anyone can see prices; buying needs a signed-in session so the
 // ticket has somewhere to land. No real payment runs here — this stands in for a checkout step.
 import { h, mount, when } from '/js/dom.js';
-import { get, post } from '/js/api.js';
+import { get, post, put } from '/js/api.js';
+import { selfieModal } from '/js/selfie.js';
 import { signInFlow } from '/js/auth-ui.js';
 
 const root = document.getElementById('root');
@@ -33,6 +34,11 @@ function buyFlow(ev, tier, qty) {
       const r = await post(`/public/events/${ev.id}/buy`, { tier_id: tier.id, qty });
       confirmed(tier.name, r.extra_codes || []);
     } catch (ex) {
+      if (ex.code === 'photo_required') {
+        // This event checks passes against a photo of the holder.
+        const shot = await selfieModal({ title: 'Add your photo', note: 'This event checks tickets against a photo of you at the door.' });
+        if (shot) { try { await put('/me/photo', { image: shot }); return run(); } catch (e2) { ex = e2; } }
+      }
       if (ex.status === 401) {
         signInFlow(root, {
           title: 'Sign in to get your ticket',

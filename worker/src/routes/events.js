@@ -33,7 +33,7 @@ function assertOrganiser(env, user) {
 
 async function ownedEvent(env, user, id) {
   const ev = await env.DB.prepare(
-    `SELECT id, name, prefix, kind, venue, city, starts_at, allow_reentry, secure_qr, sales_start, sales_end, gate_key_hint, created_at
+    `SELECT id, name, prefix, kind, venue, city, starts_at, allow_reentry, secure_qr, require_photo, sales_start, sales_end, gate_key_hint, created_at
      FROM events WHERE id = ?1 AND owner_id = ?2`
   )
     .bind(String(id).slice(0, 40), user.id)
@@ -52,6 +52,7 @@ const publicEvent = (e) => ({
   starts_at: e.starts_at,
   allow_reentry: !!e.allow_reentry,
   secure_qr: !!e.secure_qr,
+  require_photo: !!e.require_photo,
   sales_start: e.sales_start,
   sales_end: e.sales_end,
   gate_key_hint: e.gate_key_hint,
@@ -157,8 +158,8 @@ export async function createEvent({ request, env, user }) {
 
   await env.DB.batch([
     env.DB.prepare(
-      `INSERT INTO events (id, owner_id, name, prefix, venue, city, starts_at, allow_reentry, gate_key_hash, gate_key_hint, created_at, kind, secure_qr, sales_start, sales_end)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)`
+      `INSERT INTO events (id, owner_id, name, prefix, venue, city, starts_at, allow_reentry, gate_key_hash, gate_key_hint, created_at, kind, secure_qr, sales_start, sales_end, require_photo)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)`
     ).bind(
       id,
       user.id,
@@ -174,7 +175,8 @@ export async function createEvent({ request, env, user }) {
       kind,
       b.secure_qr ? 1 : 0,
       salesStart,
-      salesEnd
+      salesEnd,
+      (b.require_photo === undefined ? workplace : !!b.require_photo) ? 1 : 0 // offices ask for a selfie by default
     ),
     env.DB.prepare(
       `INSERT INTO zones (id, event_id, name, sort)
@@ -285,6 +287,9 @@ export async function patchEvent({ request, env, user, params }) {
   const b = await readJson(request);
   if (typeof b.allow_reentry === 'boolean') {
     await env.DB.prepare('UPDATE events SET allow_reentry = ?1 WHERE id = ?2').bind(b.allow_reentry ? 1 : 0, ev.id).run();
+  }
+  if (typeof b.require_photo === 'boolean') {
+    await env.DB.prepare('UPDATE events SET require_photo = ?1 WHERE id = ?2').bind(b.require_photo ? 1 : 0, ev.id).run();
   }
   if (typeof b.secure_qr === 'boolean') {
     await env.DB.prepare('UPDATE events SET secure_qr = ?1 WHERE id = ?2').bind(b.secure_qr ? 1 : 0, ev.id).run();
@@ -443,7 +448,8 @@ export async function listAttendees({ env, user, params }) {
   const rows = (
     await env.DB.prepare(
       `SELECT p.id, p.status, p.created_at, p.expires_at, t.name AS tier, u.name, u.phone, u.email,
-        (SELECT MIN(s.at) FROM scans s WHERE s.pass_id = p.id AND s.result = 'granted') AS first_entry
+        (SELECT MIN(s.at) FROM scans s WHERE s.pass_id = p.id AND s.result = 'granted') AS first_entry,
+        EXISTS (SELECT 1 FROM user_photos ph WHERE ph.user_id = p.user_id) AS has_photo
        FROM passes p JOIN users u ON u.id = p.user_id JOIN tiers t ON t.id = p.tier_id
        WHERE p.event_id = ?1 ORDER BY p.created_at DESC LIMIT 500`
     )
@@ -459,6 +465,7 @@ export async function listAttendees({ env, user, params }) {
       contact: r.phone || r.email,
       registered_at: r.created_at,
       expires_at: r.expires_at,
+      has_photo: !!r.has_photo, // whether one exists; the picture itself is never listed
       first_entry: r.first_entry
     }))
   });

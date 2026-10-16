@@ -12,6 +12,7 @@ import * as publicSale from './routes/public.js';
 import * as wallet from './routes/wallet.js';
 import * as vendors from './routes/vendors.js';
 import * as till from './routes/till.js';
+import * as photo from './routes/photo.js';
 
 // [method, path, auth, handler]. auth "user" needs a signed-in session; gate routes check their own key.
 const ROUTES = [
@@ -24,6 +25,9 @@ const ROUTES = [
   ['GET', '/api/me', 'user', me.me],
   ['PATCH', '/api/me', 'user', auth.patchMe],
   ['GET', '/api/me/history', 'user', me.history],
+  ['GET', '/api/me/photo', 'user', photo.getPhoto],
+  ['PUT', '/api/me/photo', 'user', photo.putPhoto],
+  ['DELETE', '/api/me/photo', 'user', photo.deletePhoto],
   ['POST', '/api/claim', 'user', me.claim],
   ['GET', '/api/me/passes/:id/live', 'user', me.liveCode],
 
@@ -120,7 +124,14 @@ export async function purge(env) {
   await env.DB.batch([
     env.DB.prepare('DELETE FROM otps WHERE expires_at < ?1').bind(now - 86400),
     env.DB.prepare('DELETE FROM sessions WHERE expires_at < ?1').bind(now),
-    env.DB.prepare('DELETE FROM rate_events WHERE at < ?1').bind(now - 86400)
+    env.DB.prepare('DELETE FROM rate_events WHERE at < ?1').bind(now - 86400),
+    // Storage limitation: drop a selfie a month after it was last set unless its owner still needs it
+    // (an active pass at an office, or at an event that is undated or recent).
+    env.DB.prepare(
+      `DELETE FROM user_photos WHERE updated_at < ?1 AND user_id NOT IN (
+         SELECT p.user_id FROM passes p JOIN events e ON e.id = p.event_id
+         WHERE p.status = 'active' AND (e.kind = 'workplace' OR e.starts_at IS NULL OR e.starts_at > ?2))`
+    ).bind(now - 30 * 86400, now - 7 * 86400)
   ]);
 }
 

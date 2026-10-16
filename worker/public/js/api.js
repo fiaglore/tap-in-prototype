@@ -30,3 +30,5 @@ export async function api(method, path, body, headers = {}) {
 export const get = (p, h) => api('GET', p, undefined, h);
 export const post = (p, b = {}, h) => api('POST', p, b, h);
 export const patch = (p, b) => api('PATCH', p, b);
+export const put = (p, b) => api('PUT', p, b);
+export const del = (p) => api('DELETE', p);

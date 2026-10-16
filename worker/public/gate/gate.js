@@ -101,6 +101,10 @@ function paintResult(box, r) {
   const ok = r.result === 'granted';
   mount(box, h('div', { class: 'result ' + r.result, role: 'status' },
     h('div', { class: 'big' }, ok ? 'Let them in' : 'Do not admit'),
+    // The face on file, next to the name, so staff match the person in front of them, not just a name.
+    r.photo && h('img', { class: 'who ' + r.result, src: r.photo, alt: 'Photo on file for ' + (r.holder || 'this pass') }),
+    r.photo_missing && h('div', { class: 'notice warn', style: 'margin:10px auto;max-width:340px' }, 'No photo on file for this pass. Check ID.'),
+    r.photo_new && h('div', { class: 'notice warn', style: 'margin:10px auto;max-width:340px' }, 'This photo was added or changed in the last 24 hours. Look closely.'),
     r.holder && h('p', { style: 'font-size:22px;font-weight:700;margin-top:8px' }, r.holder),
     r.tier && h('p', { class: 'muted' }, r.tier + (r.zone ? ' · ' + r.zone : '')),
     h('p', { style: 'margin-top:8px' }, r.message),
