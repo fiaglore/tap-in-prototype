@@ -12,7 +12,7 @@ const reasons = { already_used: 'Already used', no_zone_access: 'Wrong area', re
 
 function header() {
   mount(top,
-    h('a', { class: 'wordmark', href: '#/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), wordmarkText(), ' ', h('span', { class: 'muted', style: 'font-weight:600;font-size:14px' }, CONSOLE)),
+    h('a', { class: 'wordmark', href: '#/' }, wordmarkText(), ' ', h('span', { class: 'muted', style: 'font-weight:600;font-size:14px' }, CONSOLE)),
     h('div', { class: 'row' },
       h('a', { class: 'btn ghost small hide-sm', href: '/gate/' }, 'Open scanner'),
       !user && h('span', { class: 'hint hide-sm' }, 'Sign in below'),

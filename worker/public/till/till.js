@@ -15,7 +15,7 @@ function save() { try { sessionStorage.setItem(KEY, JSON.stringify(cfg)); } catc
 const auth = () => ({ Authorization: 'Bearer ' + cfg.key });
 const naira = (kobo) => '₦' + (kobo / 100).toLocaleString('en-NG', { minimumFractionDigits: kobo % 100 ? 2 : 0, maximumFractionDigits: 2 });
 
-mount(top, h('a', { class: 'wordmark', href: '/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), wordmarkText(), ' ', h('span', { class: 'muted', style: 'font-weight:600;font-size:14px' }, 'Till')), window.TapTheme.button());
+mount(top, h('a', { class: 'wordmark', href: '/' }, wordmarkText(), ' ', h('span', { class: 'muted', style: 'font-weight:600;font-size:14px' }, 'Till')), window.TapTheme.button());
 
 function viewKey(err = '') {
   stopCamera();

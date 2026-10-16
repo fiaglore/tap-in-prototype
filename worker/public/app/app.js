@@ -67,7 +67,7 @@ const cardInfo = (status = 'Active') => ({ name: (loadCard().name || (state.user
 // ---- Shell with bottom tabs ----------------------------------------------------------------------
 function shell(content, { tabs = true, title } = {}) {
   const head = h('div', { class: 'head' },
-    h('a', { class: 'wordmark', href: '/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), wordmarkText()),
+    h('a', { class: 'wordmark', href: '/' }, wordmarkText()),
     window.TapTheme.button());
   mount(root, head, h('main', { class: 'page' }, content), tabs && tabBar());
   if (title) document.title = title + ' · Tap In';
@@ -98,7 +98,7 @@ const STEPS = ['ctx', 'signin', 'passes', 'protect', 'practice'];
 function onbShell(step, ...kids) {
   const n = STEPS.indexOf(step) + 1;
   const head = h('div', { class: 'head' },
-    n > 1 ? h('button', { class: 'btn ghost small', type: 'button', onclick: () => onboarding(prevStep(step)) }, 'Back') : h('a', { class: 'wordmark', href: '/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), wordmarkText()),
+    n > 1 ? h('button', { class: 'btn ghost small', type: 'button', onclick: () => onboarding(prevStep(step)) }, 'Back') : h('a', { class: 'wordmark', href: '/' }, wordmarkText()),
     window.TapTheme.button());
   mount(root, head, h('main', { class: 'page onb' },
     n > 0 && h('div', { class: 'seg3', 'aria-hidden': 'true' }, STEPS.map((_, i) => h('i', { class: i < n ? 'on' : '' }))),
@@ -131,10 +131,10 @@ function onboarding(step) {
 
 function stepWelcome() {
   mount(root,
-    h('div', { class: 'head' }, h('a', { class: 'wordmark', href: '/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), wordmarkText()), window.TapTheme.button()),
+    h('div', { class: 'head' }, h('a', { class: 'wordmark', href: '/' }, wordmarkText()), window.TapTheme.button()),
     h('main', { class: 'page hero' },
       h('p', { class: 'eyebrow' }, 'Your phone is your pass'),
-      h('h1', {}, 'No bands.', h('br'), 'No paper.', h('br'), 'Just tap in.'),
+      h('h1', {}, 'No bands.', h('br'), 'No paper.'),
       h('p', {}, 'One app for festival gates, office doors and the guest list at the club. Your pass is ready on your phone when you arrive.'),
       h('div', { class: 'obc' }, cardEl(loadCard(), { name: 'Your name', num: 'TI •••• 0173', status: 'Ready' })),
       h('div', { class: 'stack' },

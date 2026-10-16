@@ -11,7 +11,7 @@ const toKobo = (v) => { const n = Number.parseFloat(String(v).replace(/,/g, ''))
 
 function header() {
   mount(top,
-    h('a', { class: 'wordmark', href: '/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), wordmarkText(), ' ', h('span', { class: 'muted', style: 'font-weight:600;font-size:14px' }, 'Vendors')),
+    h('a', { class: 'wordmark', href: '/' }, wordmarkText(), ' ', h('span', { class: 'muted', style: 'font-weight:600;font-size:14px' }, 'Vendors')),
     h('div', { class: 'row' },
       h('a', { class: 'btn ghost small hide-sm', href: '/till/' }, 'Open till'),
       user && h('button', { class: 'btn ghost small', type: 'button', onclick: async () => { await post('/auth/logout').catch(() => {}); user = null; boot(); } }, 'Sign out'),

@@ -14,7 +14,7 @@ function load() { try { return JSON.parse(sessionStorage.getItem(KEY)) || {}; } 
 function save() { try { sessionStorage.setItem(KEY, JSON.stringify(cfg)); } catch {} }
 const auth = () => ({ Authorization: 'Bearer ' + cfg.key });
 
-mount(top, h('a', { class: 'wordmark', href: '/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), wordmarkText(), ' ', h('span', { class: 'muted', style: 'font-weight:600;font-size:14px' }, 'Gate')), window.TapTheme.button());
+mount(top, h('a', { class: 'wordmark', href: '/' }, wordmarkText(), ' ', h('span', { class: 'muted', style: 'font-weight:600;font-size:14px' }, 'Gate')), window.TapTheme.button());
 
 function viewKey(err = '') {
   stopCamera();
