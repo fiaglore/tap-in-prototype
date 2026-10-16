@@ -18,8 +18,22 @@
 <script src="/js/fx.js" defer></script>
 <script src="/js/liquid.js" defer></script>
 <script src="/js/home.js" defer></script>
+<script src="/js/intro.js" defer></script>
 </head>
 <body class="home fx">
+<div class="intro" id="intro" role="dialog" aria-modal="true" aria-label="Welcome to Tap In">
+  <i class="panel l"><b aria-hidden="true">TAP</b></i>
+  <i class="panel r"><b aria-hidden="true">IN</b></i>
+  <span class="seam" aria-hidden="true"></span>
+  <span class="spill" aria-hidden="true"></span>
+  <div class="intro-center" id="introCenter">
+    <img class="intro-mark" src="/logo/tap-in-app-icon.svg" alt="">
+    <p class="eyebrow">Entry without bands</p>
+    <h2>Your phone is the key.</h2>
+    <button class="tapbtn" id="introEnter" type="button"><span class="rings" aria-hidden="true"><i></i><i></i><i></i></span><span class="tapdot" aria-hidden="true"></span><span class="lbl">Tap to enter</span></button>
+  </div>
+  <button class="intro-skip" id="introSkip" type="button">Skip &rarr;</button>
+</div>
 <div class="progress" id="progress" aria-hidden="true"><i></i></div>
 <div class="cursor-light" id="cursorLight" aria-hidden="true"></div>
 
@@ -192,7 +206,7 @@
   </section>
 
   <footer class="wrap muted" style="padding:32px 0 60px;font-size:13px">
-    <p>Tap In is a work in progress. Sign-in codes are shown on screen in demo mode until a text or email provider is connected, and payments use demo money.</p>
+    <p>Tap In is a work in progress. Sign-in codes are shown on screen in demo mode until a text or email provider is connected, and payments use demo money. <a href="/?intro=1">Replay intro</a></p>
   </footer>
 </main>
 <noscript><style>.rv{opacity:1!important;transform:none!important}</style></noscript>
