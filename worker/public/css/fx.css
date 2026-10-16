@@ -19,13 +19,6 @@ body.fx[data-fx="calm"]{--fx-o:.5}
 :root[data-mode="light"] .fx-aurora i:nth-child(4){opacity:.08}
 @keyframes fxdrift{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(8vw,6vh,0) scale(1.25)}}
 
-/* A perspective grid "floor" that streams toward you */
-.fx-grid{top:auto;height:48vh;overflow:hidden;opacity:calc(.5*var(--fx-o));-webkit-mask:linear-gradient(to top,#000 5%,transparent 85%);mask:linear-gradient(to top,#000 5%,transparent 85%)}
-.fx-grid::before{content:"";position:absolute;left:-50%;right:-50%;bottom:-20%;height:150%;transform-origin:50% 100%;transform:perspective(520px) rotateX(64deg);
-  background-image:linear-gradient(var(--signal) 1px,transparent 1px),linear-gradient(90deg,var(--signal) 1px,transparent 1px);background-size:56px 56px;opacity:.5;animation:fxgrid 2.8s linear infinite}
-:root[data-mode="light"] .fx-grid{opacity:calc(.32*var(--fx-o))}
-@keyframes fxgrid{to{background-position:0 56px,0 0}}
-
 /* Glass: top bars, cards, tab bar, full-screen pass */
 body.fx .topbar,body.fx .head{position:relative}
 body.fx .topbar{backdrop-filter:blur(14px) saturate(1.3);-webkit-backdrop-filter:blur(14px) saturate(1.3);background:color-mix(in srgb,var(--ink) 70%,transparent);max-width:none;margin:0;padding-inline:max(16px,calc((100% - 1240px)/2))}
@@ -56,7 +49,7 @@ body.fx .result.denied{box-shadow:0 0 70px -12px var(--bad)}
 .fx-ripple{position:fixed;z-index:60;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;border:2px solid var(--signal);pointer-events:none;animation:fxripple .9s ease-out forwards}
 @keyframes fxripple{to{transform:scale(18);opacity:0}}
 
-@media(max-width:700px){.fx-grid{height:34vh}.fx-aurora i{filter:blur(70px)}}
+@media(max-width:700px){.fx-aurora i{filter:blur(70px)}}
 @media(prefers-reduced-motion:reduce){
-  .fx-aurora i,.fx-grid::before,body.fx .topbar::after,body.fx main,body.fx .page,body.fx .shell>main,body.fx .result{animation:none!important}
+  .fx-aurora i,body.fx .topbar::after,body.fx main,body.fx .page,body.fx .shell>main,body.fx .result{animation:none!important}
 }

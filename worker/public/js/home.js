@@ -81,21 +81,15 @@
   var swap = $('#swap');
   if (swap && !reduce) {
     var words = ['pass', 'key', 'wallet', 'ticket', 'door'], wi = 0, busy = false;
+    // A clean fade between real words: nothing garbled is ever shown, and the line never changes height.
     var decode = function (to) {
       if (busy) return; busy = true;
-      var from = swap.textContent, len = Math.max(from.length, to.length), f = 0, total = 16;
-      var t = setInterval(function () {
-        var out = '';
-        for (var i = 0; i < len; i++) {
-          var settle = Math.floor((i + 1) / len * total * .8) ;
-          if (f >= settle || i >= to.length && f > total * .7) out += to[i] || '';
-          else out += B32[rand(32)].toLowerCase();
-        }
-        swap.textContent = out; f++;
-        if (f > total) { clearInterval(t); swap.textContent = to; busy = false; }
-      }, 38);
+      swap.classList.add('out');
+      setTimeout(function () { swap.textContent = to; swap.classList.remove('out'); busy = false; }, 260);
     };
-    setInterval(function () { if (visible) { wi = (wi + 1) % words.length; decode(words[wi]); } }, 3200);
+    var held = false, heroBox = $('.hero-copy');
+    if (heroBox) { heroBox.addEventListener('pointerenter', function () { held = true; }); heroBox.addEventListener('pointerleave', function () { held = false; }); heroBox.addEventListener('focusin', function () { held = true; }); heroBox.addEventListener('focusout', function () { held = false; }); }
+    setInterval(function () { if (visible && !held) { wi = (wi + 1) % words.length; decode(words[wi]); } }, 3800);
   }
 
   // ---- 5. Scroll reveal, counters, how-it-works progress -----------------------------------------
@@ -175,85 +169,12 @@
   // ======================= More immersive layer =======================
   var vh = function () { return window.innerHeight; };
   var scrollNow = function () { return window.pageYOffset || 0; };
-  var colr = { sig: '#B5A0CC', ok: '#7FE0B4', a2: '#8fb4ff' };
-  function readCols() {
-    var cs = getComputedStyle(document.body);
-    colr.sig = cs.getPropertyValue('--signal').trim() || colr.sig;
-    colr.ok = cs.getPropertyValue('--ok').trim() || colr.ok;
-    colr.a2 = cs.getPropertyValue('--accent2').trim() || colr.a2;
-  }
-  readCols();
-  if (window.MutationObserver) new MutationObserver(readCols).observe(document.documentElement, { attributes: true, attributeFilter: ['data-mode'] });
-
-  // ---- 7. Flight through a tunnel of glowing doorways; scrolling is acceleration ------------------
-  var tun = document.createElement('canvas');
-  tun.id = 'tunnel'; tun.setAttribute('aria-hidden', 'true');
-  var gridLayer = $('.fx-grid');
-  if (gridLayer && gridLayer.parentNode) gridLayer.parentNode.insertBefore(tun, gridLayer.nextSibling); else document.body.insertBefore(tun, document.body.firstChild);
-  var tx = tun.getContext('2d'), TW = 0, TH = 0, tdpr = 1, rings = [], lite = false, slow = 0;
-  var vp = { x: 0, y: 0, tx: 0, ty: 0 }, last = performance.now(), svel = 0, lastSy = scrollNow();
-  var RING_N = 26;
-  function tsize() {
-    tdpr = Math.min(window.devicePixelRatio || 1, 2);
-    TW = window.innerWidth; TH = window.innerHeight;
-    tun.width = TW * tdpr; tun.height = TH * tdpr; tx.setTransform(tdpr, 0, 0, tdpr, 0, 0);
-    vp.tx = vp.x = TW / 2; vp.ty = vp.y = TH * .46;
-    rings = [];
-    for (var i = 0; i < RING_N; i++) rings.push({ z: i / RING_N, hot: i % 5 === 0 });
-  }
-  function rr(x, y, w, h, r) {
-    tx.beginPath(); tx.moveTo(x + r, y); tx.arcTo(x + w, y, x + w, y + h, r); tx.arcTo(x + w, y + h, x, y + h, r); tx.arcTo(x, y + h, x, y, r); tx.arcTo(x, y, x + w, y, r); tx.closePath();
-  }
-  function tframe(now) {
-    var dt = Math.min(64, now - last); last = now;
-    // adaptive quality: if frames are slow for a while, thin the tunnel out
-    if (dt > 30) slow++; else if (slow > 0) slow--;
-    if (slow > 50 && !lite) { lite = true; rings = rings.filter(function (r, i) { return i % 2 === 0; }); }
-    var sy = scrollNow(), dv = (sy - lastSy) / Math.max(1, dt); lastSy = sy;
-    svel += (clamp(Math.abs(dv), 0, 6) - svel) * .12;                    // smoothed scroll speed
-    var top = clamp(1 - sy / (vh() * 1.1), 0, 1);                        // strongest in the hero
-    var power = .22 + top * .78;
-    tx.clearRect(0, 0, TW, TH);
-    vp.x += (vp.tx - vp.x) * .06; vp.y += (vp.ty - vp.y) * .06;
-    var cx = vp.x, cy = vp.y - sy * .05;
-    var speed = (.0009 + svel * .0042) * dt;                              // drift plus scroll boost
-    var maxS = Math.max(TW, TH) * 1.7, i, r;
-    // speed lines when scrolling fast
-    if (svel > .9) {
-      tx.strokeStyle = colr.sig; tx.lineWidth = 1;
-      for (i = 0; i < 18; i++) { var an = (i / 18) * 6.2832 + .3, len = clamp(svel * 70, 0, 340); tx.globalAlpha = clamp((svel - .9) * .12, 0, .22) * power; tx.beginPath(); tx.moveTo(cx + Math.cos(an) * 90, cy + Math.sin(an) * 90); tx.lineTo(cx + Math.cos(an) * (90 + len), cy + Math.sin(an) * (90 + len)); tx.stroke(); }
-    }
-    for (i = 0; i < rings.length; i++) {
-      r = rings[i];
-      r.z -= speed * (.4 + r.z);                                         // nearer rings move faster: depth
-      if (r.z < .012) { r.z += 1; r.hot = Math.random() < .2; }
-      var k = Math.pow(1 - r.z, 2.4);                                    // 0 far, 1 at the camera
-      var w = 24 + k * maxS * .62, h = w * 1.55;
-      var x = cx - w / 2 + (TW / 2 - cx) * k * .5, y = cy - h / 2 + (TH / 2 - cy) * k * .5;
-      // fade a doorway out before it grows taller than the screen, so you always see a whole doorway and never bare vertical bars
-      var fit = clamp((TH * .92 - h) / (TH * .5), 0, 1);
-      var a = Math.sin(Math.PI * clamp(k * 1.05, 0, 1)) * .5 * power * fit;
-      if (a < .01) continue;
-      tx.strokeStyle = r.hot ? colr.ok : colr.sig;
-      tx.globalAlpha = a * .3; tx.lineWidth = 5 + k * 5; rr(x, y, w, h, 8 + k * 26); tx.stroke();   // soft glow
-      tx.globalAlpha = a; tx.lineWidth = 1 + k * 1.6; rr(x, y, w, h, 8 + k * 26); tx.stroke();        // crisp edge
-    }
-    tx.globalAlpha = 1;
-  }
-  if (!reduce) {
-    tsize();
-    window.addEventListener('resize', function () { setTimeout(tsize, 120); });
-    window.addEventListener('pointermove', function (e) { vp.tx = e.clientX * .5 + TW * .25; vp.ty = e.clientY * .4 + TH * .28; }, { passive: true });
-    (function tloop(now) { if (visible) tframe(now); else last = now; requestAnimationFrame(tloop); })(performance.now());
-  }
-
   // ---- 8. Depth parallax: headline and glass fragments move at different speeds ---------------------
   var heroCopy = $('.hero-copy'), frags = $$('.frag'), pp = { x: 0, y: 0, sx: 0, sy: 0 };
   if (!reduce && fine) {
     window.addEventListener('pointermove', function (e) { pp.x = e.clientX / window.innerWidth - .5; pp.y = e.clientY / window.innerHeight - .5; }, { passive: true });
     (function par() {
       pp.sx += (pp.x - pp.sx) * .07; pp.sy += (pp.y - pp.sy) * .07;
-      if (heroCopy) heroCopy.style.transform = 'translate3d(' + (pp.sx * -10).toFixed(2) + 'px,' + (pp.sy * -8).toFixed(2) + 'px,0)';
       frags.forEach(function (f) { var d = Number(f.getAttribute('data-depth')) || 30; f.style.setProperty('--tx', (pp.sx * d * -1.4).toFixed(1) + 'px'); f.style.setProperty('--ty', (pp.sy * d * -1.1).toFixed(1) + 'px'); });
       requestAnimationFrame(par);
     })();

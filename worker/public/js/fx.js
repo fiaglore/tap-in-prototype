@@ -15,8 +15,6 @@
   var cv = document.createElement('canvas');
   cv.id = 'fx-field'; cv.className = 'fx-layer'; cv.setAttribute('aria-hidden', 'true');
   var aurora = layer('div', 'fx-aurora', '<i></i><i></i><i></i><i></i>');
-  var grid = layer('div', 'fx-grid');
-  body.insertBefore(grid, body.firstChild);
   body.insertBefore(aurora, body.firstChild);
   body.insertBefore(cv, body.firstChild);
 
@@ -58,21 +56,6 @@
     ptr.sx += (ptr.x - ptr.sx) * .08; ptr.sy += (ptr.y - ptr.sy) * .08;
     aurora.style.setProperty('--ax', ((ptr.sx / W - .5) * -34).toFixed(1) + 'px');
     aurora.style.setProperty('--ay', ((ptr.sy / H - .5) * -26 - scrollY * .02).toFixed(1) + 'px');
-
-    // flowing signal waves
-    if (!calm) {
-      ctx.strokeStyle = col.sig; ctx.lineWidth = 1.2;
-      for (j = 0; j < 3; j++) {
-        ctx.globalAlpha = .07 + j * .03;
-        ctx.beginPath();
-        var base = H * (.22 + j * .27) - scrollY * (.03 + j * .02), amp = 22 + j * 12;
-        for (i = 0; i <= W; i += 14) {
-          var y = base + Math.sin(i * .007 + t * (.7 + j * .35) + j * 2) * amp + Math.sin(i * .017 - t * .9) * amp * .35;
-          if (i === 0) ctx.moveTo(i, y); else ctx.lineTo(i, y);
-        }
-        ctx.stroke();
-      }
-    }
 
     for (i = 0; i < nodes.length; i++) {
       a = nodes[i];
