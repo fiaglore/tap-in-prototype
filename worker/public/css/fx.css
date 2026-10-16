@@ -2,7 +2,7 @@
    The layers sit behind the content (z-index -1), so no page layout has to change.
    data-fx="calm" on <body> turns it down for tools people stare at all day (consoles, scanners).
    prefers-reduced-motion stops the motion; see the end of this file and js/fx.js. */
-body.fx{--fx-o:1;position:relative;overflow-x:hidden}
+body.fx{--fx-o:1;position:relative;overflow-x:clip}
 body.fx[data-fx="calm"]{--fx-o:.5}
 .fx-layer{position:fixed;inset:0;pointer-events:none;z-index:-1}
 #fx-field{width:100%;height:100%;opacity:var(--fx-o)}
