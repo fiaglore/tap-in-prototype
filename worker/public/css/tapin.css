@@ -85,3 +85,25 @@ th,td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 .selfie-ring{position:absolute;inset:8%;border-radius:50%;border:2px dashed rgba(255,255,255,.55);pointer-events:none}
 .who{display:block;width:132px;height:132px;border-radius:24px;object-fit:cover;margin:0 auto 10px;border:3px solid var(--line);background:var(--card-on)}
 .mephoto{width:84px;height:84px;border-radius:50%;object-fit:cover;border:2px solid var(--line);background:var(--card-on)}
+
+/* Never scroll sideways: decorative layers may extend past the edge, the page itself may not */
+html{overflow-x:clip}
+
+/* Phone menu: the marketing nav collapses into a Menu button (built by js/site.js) */
+.menu-btn{display:none;align-items:center;justify-content:center;min-height:38px;padding:0 14px;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:99px;font:700 13px var(--body,inherit);cursor:pointer}
+.menu-panel{position:absolute;left:12px;right:12px;top:calc(100% + 6px);z-index:40;display:grid;gap:8px;padding:12px;background:var(--ink);border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 60px -20px rgba(0,0,0,.6)}
+.menu-panel[hidden]{display:none}
+.menu-panel a{justify-content:flex-start}
+@media(max-width:860px){
+  .topbar{position:relative}
+  .topbar nav[aria-label="Main"] .btn.ghost{display:none}
+  .menu-btn{display:inline-flex}
+  .topbar nav[aria-label="Main"]{flex-wrap:nowrap;gap:8px}
+  .topbar nav[aria-label="Main"] .btn{white-space:nowrap;padding-inline:12px}
+}
+/* Touch targets: at least 44px tall on phones and touch screens */
+@media(max-width:860px),(pointer:coarse){
+  .btn,.btn.small{min-height:44px}
+  .theme-btn{width:44px;height:44px}
+  .menu-btn{min-height:44px}
+}

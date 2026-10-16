@@ -133,7 +133,6 @@ body.home .topbar::after{content:"";position:absolute;left:0;right:0;bottom:-1px
   .hero-copy{padding-top:30px}
   .gate-grid{grid-template-columns:1fr}
   .counts{grid-template-columns:1fr 1fr}
-  body.home .topbar nav .btn.ghost{display:none}
 }
 @media(prefers-reduced-motion:reduce){
   .orbit,.sat,.phone,.beam,.ticker-in,.swap,.btn.glow::before,.topbar::after,.hours .now,.meter i,.paid,.tag .dot,.live i{animation:none!important}
@@ -179,7 +178,7 @@ body.home .fx-aurora{filter:hue-rotate(var(--hue,0deg));transition:filter 1.2s}
 .story-pin{position:sticky;top:0;height:100vh;height:100svh;display:grid;align-items:center;overflow:hidden}
 .story-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(20px,5vw,70px);align-items:center;width:100%;max-width:1100px}
 .story-steps{list-style:none;margin:26px 0 0;padding:0;display:grid;gap:16px}
-.story-steps li{display:flex;gap:16px;align-items:flex-start;padding:16px 18px;border-radius:18px;border:1px solid transparent;opacity:.38;transform:scale(.97);transform-origin:left;transition:opacity .5s,transform .5s,border-color .5s,background .5s}
+.story-steps li{display:flex;gap:16px;align-items:flex-start;padding:16px 18px;border-radius:18px;border:1px solid transparent;opacity:.62;transform:scale(.97);transform-origin:left;transition:opacity .5s,transform .5s,border-color .5s,background .5s}
 .story-steps li.on{opacity:1;transform:none;border-color:var(--line);background:color-mix(in srgb,var(--card) 80%,transparent);box-shadow:0 0 40px -16px var(--glow)}
 .story-steps h3{font-size:20px;margin-bottom:4px}
 .clock{font:700 15px var(--mono);color:var(--signal);padding-top:3px;min-width:54px}
@@ -345,7 +344,10 @@ body.entered .hero2{animation:push 1.7s cubic-bezier(.2,.7,.2,1) both}
   .pane{flex:1 1 0;justify-content:center;align-items:flex-start;text-align:left;padding:14px 22px}
   .pane+.pane{border-left:0;border-top:1px solid color-mix(in srgb,var(--line) 75%,transparent)}
   .split:hover .pane,.split .pane:hover{flex-grow:1}
-  .pane-bottom{display:none}
+  /* touch screens cannot hover, so each pane keeps its one-line description; the demo widgets stay desktop-only */
+  .pane-bottom{display:block;margin:0;max-width:none}
+  .pane .viz,.pane .more{display:none}
+  .pane-text{font-size:13.5px;line-height:1.4;margin-top:2px;color:var(--fg);opacity:.82}
   .pane-top{justify-items:start}
   /* the orb sits low over the bottom row, so that row's word stays up above it */
   .pane.pay{justify-content:flex-start;padding-top:20px}
@@ -363,3 +365,13 @@ body.entered .hero2{animation:push 1.7s cubic-bezier(.2,.7,.2,1) both}
 .split{margin-top:clamp(8px,2vw,24px)}
 
 @media(min-width:861px) and (max-height:700px){.pane .viz{display:none}}
+
+/* small phones: the floating chips and satellites crowd the mockup and fall off the edge */
+@media(max-width:600px){.frag,.sat{display:none}}
+/* phones: the PASS orb sits bottom-right so it never covers the PAY description */
+@media(max-width:860px){
+  .passbtn{left:auto;right:16px;bottom:16px}
+  .js .passbtn{transform:none;animation-name:orbin-m}
+  .pane.pay .pane-text{max-width:calc(100% - 130px)}
+}
+@keyframes orbin-m{from{opacity:0;transform:translateY(40px) scale(.3)}}
