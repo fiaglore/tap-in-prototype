@@ -5,7 +5,7 @@ import { cardEl, cardNumber, loadCard, saveCard, sanitise, PRESETS, SWATCHES, FI
 import { orbitSvg, nextIndex, daysTo } from '/app/orbit.js';
 
 const root = document.getElementById('app');
-const state = { user: null, passes: [], waiting: [], history: [], tab: 'around', config: {}, sel: null, ctx: [] };
+const state = { user: null, passes: [], waiting: [], history: [], wallet: null, tab: 'around', config: {}, sel: null, ctx: [] };
 const ONB = 'tapin-onboarded';
 const flag = (v) => { try { if (v === undefined) return localStorage.getItem(ONB) === '1'; v ? localStorage.setItem(ONB, '1') : localStorage.removeItem(ONB); } catch { return false; } };
 
@@ -15,6 +15,7 @@ const icons = {
   passes: 'M4 7h16v10H4zM4 11h16',
   add: 'M12 5v14M5 12h14',
   history: 'M12 7v5l3 2M4 12a8 8 0 1 0 3-6.2M4 4v4h4',
+  wallet: 'M4 7h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4zM4 7a2 2 0 0 1 2-2h10M16 14h2',
   me: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 20a7 7 0 0 1 14 0'
 };
 const icon = (name) => {
@@ -28,7 +29,7 @@ const icon = (name) => {
 };
 
 // ---- QR code as inline SVG (one path, no innerHTML) --------------------------------------------
-function qrSvg(text) {
+function qrSvg(text, label = 'Your Tap In pass QR code') {
   const qr = qrcode(0, 'M');
   qr.addData(text);
   qr.make();
@@ -39,7 +40,7 @@ function qrSvg(text) {
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('viewBox', `0 0 ${n + quiet * 2} ${n + quiet * 2}`);
   svg.setAttribute('role', 'img');
-  svg.setAttribute('aria-label', 'Your Tap In pass QR code');
+  svg.setAttribute('aria-label', label);
   svg.setAttribute('shape-rendering', 'crispEdges');
   const bg = document.createElementNS(NS, 'rect');
   bg.setAttribute('width', n + quiet * 2);
@@ -72,18 +73,19 @@ function shell(content, { tabs = true, title } = {}) {
   window.scrollTo(0, 0);
 }
 function tabBar() {
-  const items = [['around', 'Around me'], ['passes', 'Passes'], ['add', 'Add'], ['history', 'History'], ['me', 'Me']];
+  const items = [['around', 'Around me'], ['passes', 'Passes'], ['wallet', 'Wallet'], ['add', 'Add'], ['history', 'History'], ['me', 'Me']];
   return h('nav', { class: 'tabs', 'aria-label': 'Main' }, h('div', {},
     items.map(([k, label]) => h('button', { type: 'button', 'aria-current': state.tab === k ? 'page' : null, onclick: () => go(k) }, icon(k), label))));
 }
 async function go(tab) {
   state.tab = tab;
   if (tab === 'history') { try { state.history = (await get('/me/history')).scans; } catch { state.history = []; } }
+  if (tab === 'wallet') { try { state.wallet = await get('/wallet'); } catch (ex) { if (ex.status === 401) return onboarding('signin'); state.wallet = null; } }
   if (tab === 'around' || tab === 'passes') { try { await refresh(); } catch (ex) { if (ex.status === 401) return onboarding('signin'); } }
   render();
 }
 function render() {
-  ({ around: viewAround, passes: viewPasses, add: viewAdd, history: viewHistory, me: viewMe, custom: viewCustom })[state.tab]();
+  ({ around: viewAround, passes: viewPasses, add: viewAdd, history: viewHistory, wallet: viewWallet, me: viewMe, custom: viewCustom })[state.tab]();
 }
 
 // ---- Onboarding ----------------------------------------------------------------------------------
@@ -342,6 +344,86 @@ function showPass(p) {
   document.body.style.overflow = 'hidden';
   document.body.append(overlay);
   overlay.querySelector('button').focus();
+  overlay.addEventListener('keydown', (e) => e.key === 'Escape' && close());
+}
+
+// ---- Wallet --------------------------------------------------------------------------------------
+const naira = (kobo) => '₦' + (kobo / 100).toLocaleString('en-NG', { minimumFractionDigits: kobo % 100 ? 2 : 0, maximumFractionDigits: 2 });
+const toKobo = (v) => { const n = Number.parseFloat(String(v).replace(/,/g, '')); return Number.isFinite(n) ? Math.round(n * 100) : NaN; };
+const ENTRY = { topup: 'Added money', payment: 'Paid', refund: 'Refund from', payout: 'Payout' };
+
+async function viewWallet() {
+  const w = state.wallet;
+  if (!w) return shell(h('div', { class: 'empty' }, h('p', {}, 'Could not load your wallet.'), h('button', { class: 'btn primary', style: 'margin-top:14px', type: 'button', onclick: () => go('wallet') }, 'Try again')), { title: 'Wallet' });
+  const demo = w.mode === 'demo';
+  const amount = h('input', { class: 'input', id: 'payamt', inputmode: 'decimal', placeholder: 'Amount in naira, e.g. 2500', autocomplete: 'off' });
+  const err = h('div', { role: 'alert' });
+  async function add(kobo) {
+    try { state.wallet = await post('/wallet/topup', { amount_kobo: kobo }); toast('Added ' + naira(kobo)); viewWallet(); } catch (ex) { toast(ex.message); }
+  }
+  shell(h('div', { class: 'stack' },
+    h('div', { class: 'card' },
+      h('div', { class: 'spread' }, h('p', { class: 'eyebrow' }, 'Tap In wallet'), demo && h('span', { class: 'chip' }, 'Demo money')),
+      h('div', { style: 'font:800 40px var(--display);margin:6px 0' }, naira(w.balance_kobo)),
+      demo
+        ? h('div', {}, h('p', { class: 'hint' }, 'Add play money to try paying. Nothing real moves yet.'),
+            h('div', { class: 'row', style: 'margin-top:10px' }, [1000, 5000, 10000].map((n) => h('button', { class: 'btn ghost small', type: 'button', onclick: () => add(n * 100) }, '+ ' + naira(n * 100)))))
+        : h('p', { class: 'hint' }, 'Adding real money is not available yet.')),
+    h('form', { class: 'card', onsubmit: async (e) => {
+      e.preventDefault();
+      const kobo = toKobo(amount.value);
+      if (!(kobo > 0)) return mount(err, h('div', { class: 'error' }, 'Enter how much you are paying.'));
+      if (kobo > w.balance_kobo) return mount(err, h('div', { class: 'error' }, 'That is more than your balance. Add money first.'));
+      try { const r = await post('/wallet/pay-code', { amount_kobo: kobo }); mount(err); showPayCode(r); } catch (ex) { mount(err, h('div', { class: 'error' }, ex.message)); }
+    } },
+      h('h3', {}, 'Pay a vendor'),
+      h('p', { class: 'hint', style: 'margin-top:4px' }, 'Enter the amount, then show the code to the vendor. They can only charge exactly that amount.'),
+      h('div', { class: 'field' }, h('label', { for: 'payamt' }, 'Amount (₦)'), amount), err,
+      h('button', { class: 'btn primary block', style: 'margin-top:12px', type: 'submit' }, 'Show pay code')),
+    h('div', { class: 'card' }, h('h3', {}, 'Recent'),
+      w.entries.length
+        ? h('div', { class: 'list', style: 'margin-top:8px' }, w.entries.map((e) => h('div', { class: 'item' },
+            h('div', {}, h('strong', {}, (ENTRY[e.kind] || e.kind) + (e.vendor ? ' ' + e.vendor : '')), h('div', { class: 'hint' }, ago(e.created_at))),
+            h('strong', { class: e.kind === 'payment' ? '' : 'ok-text' }, (e.kind === 'payment' ? '−' : '+') + naira(e.amount_kobo)))))
+        : h('p', { class: 'muted', style: 'margin-top:6px' }, 'No payments yet.')),
+    h('div', { class: 'card', id: 'enabled' })), { title: 'Wallet' });
+  // The "Tap In enabled" list is nice to have; the wallet works without it.
+  get('/public/vendors').then((r) => {
+    const box = document.getElementById('enabled');
+    if (box) mount(box, h('h3', {}, 'Tap In enabled'), r.vendors.length ? h('div', { class: 'zones', style: 'margin-top:8px' }, r.vendors.map((v) => h('span', { class: 'chip' }, v.name + (v.category ? ' · ' + v.category : '')))) : h('p', { class: 'muted', style: 'margin-top:6px' }, 'No vendors yet. Run a business? Set it up at /vendor/.'));
+  }).catch(() => {});
+}
+
+function showPayCode(r) {
+  const prev = document.body.style.overflow;
+  let poll = null;
+  let tick = null;
+  const close = () => { clearInterval(poll); clearInterval(tick); overlay.remove(); document.body.style.overflow = prev; go('wallet'); };
+  const left = h('p', { class: 'hint', style: 'margin-top:8px' });
+  const qr = h('div', { class: 'qrbox' }, qrSvg(r.code, 'Your Tap In pay code'));
+  const overlay = h('div', { class: 'overlay', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Pay code' },
+    h('div', { class: 'spread', style: 'width:100%;max-width:460px' }, h('button', { class: 'btn ghost small', type: 'button', onclick: close }, 'Cancel'), h('span', { class: 'chip' }, 'Pay code')),
+    h('h2', { style: 'margin-top:14px;text-align:center' }, 'Pay ' + naira(r.amount_kobo)),
+    qr, h('p', { class: 'token' }, r.code), left,
+    h('p', { class: 'hint', style: 'margin-top:10px;text-align:center;max-width:320px' }, 'Hold this up to the vendor. It works once, for exactly this amount.'));
+  document.body.style.overflow = 'hidden';
+  document.body.append(overlay);
+  overlay.querySelector('button').focus();
+  const start = state.wallet.balance_kobo;
+  const endAt = Date.now() + r.expires_in * 1000;
+  tick = setInterval(() => { const s = Math.max(0, Math.round((endAt - Date.now()) / 1000)); left.textContent = s ? `Good for ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : 'This code has expired. Close it and make a new one.'; }, 1000);
+  // Watch for the vendor's charge landing so the customer sees confirmation straight away.
+  poll = setInterval(async () => {
+    try {
+      const w = await get('/wallet');
+      if (w.balance_kobo < start) {
+        clearInterval(poll); clearInterval(tick);
+        state.wallet = w;
+        mount(qr, h('div', { style: 'font:800 64px var(--display);color:var(--ok);text-align:center' }, '✓'));
+        left.textContent = 'Paid ' + naira(start - w.balance_kobo) + '. Thank you.';
+      }
+    } catch {}
+  }, 3000);
   overlay.addEventListener('keydown', (e) => e.key === 'Escape' && close());
 }
 

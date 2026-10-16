@@ -19,6 +19,7 @@ export function makeEnv(extra = {}) {
     DB: createD1(schema),
     SECRET_PEPPER: PEPPER,
     OTP_MODE: 'demo',
+    PAYMENTS_MODE: 'demo',
     ORGANISER_IDENTIFIERS: '',
     ASSETS: { fetch: async () => new Response('asset', { status: 200 }) },
     ...extra

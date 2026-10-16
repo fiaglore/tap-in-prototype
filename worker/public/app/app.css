@@ -25,8 +25,9 @@
 .empty{text-align:center;padding:48px 12px;color:var(--muted)}
 
 /* Phase 1: onboarding, Around me, card */
-.tabs div{grid-template-columns:repeat(5,1fr)}
-.tabs button{font-size:11px}
+.tabs div{grid-template-columns:repeat(6,1fr)}
+.tabs button{font-size:10.5px;padding:8px 2px}
+.ok-text{color:var(--ok)}
 .onb h1.ob,h1.ob{font-size:34px;margin:10px 0 8px}
 .seg3{display:flex;gap:6px;margin:6px 0 10px}
 .seg3 i{flex:1;height:3px;border-radius:9px;background:var(--line)}

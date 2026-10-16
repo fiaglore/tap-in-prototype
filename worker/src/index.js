@@ -9,6 +9,9 @@ import * as me from './routes/me.js';
 import * as events from './routes/events.js';
 import * as gate from './routes/gate.js';
 import * as publicSale from './routes/public.js';
+import * as wallet from './routes/wallet.js';
+import * as vendors from './routes/vendors.js';
+import * as till from './routes/till.js';
 
 // [method, path, auth, handler]. auth "user" needs a signed-in session; gate routes check their own key.
 const ROUTES = [
@@ -39,6 +42,22 @@ const ROUTES = [
   ['GET', '/api/gate/info', 'none', gate.gateInfo],
   ['POST', '/api/gate/scan', 'none', gate.gateScan],
 
+  ['GET', '/api/wallet', 'user', wallet.wallet],
+  ['POST', '/api/wallet/topup', 'user', wallet.topup],
+  ['POST', '/api/wallet/pay-code', 'user', wallet.payCode],
+
+  ['GET', '/api/vendors', 'user', vendors.listVendors],
+  ['POST', '/api/vendors', 'user', vendors.createVendor],
+  ['GET', '/api/vendors/:id', 'user', vendors.getVendor],
+  ['PATCH', '/api/vendors/:id', 'user', vendors.patchVendor],
+  ['POST', '/api/vendors/:id/till-key', 'user', vendors.rotateTillKey],
+  ['POST', '/api/vendors/:id/refunds', 'user', vendors.refund],
+  ['POST', '/api/vendors/:id/payout', 'user', vendors.payout],
+
+  ['GET', '/api/till/info', 'none', till.tillInfo],
+  ['POST', '/api/till/charge', 'none', till.tillCharge],
+
+  ['GET', '/api/public/vendors', 'none', vendors.publicVendors],
   ['GET', '/api/public/events/:id', 'none', publicSale.getEvent],
   ['POST', '/api/public/events/:id/buy', 'user', publicSale.buy]
 ];

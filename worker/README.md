@@ -56,13 +56,25 @@ Cookie-authenticated unless noted. JSON in, JSON out. Errors look like `{"error"
 
 An office is an event with `kind = "workplace"`, so it reuses passes, doors (zones), the gate scanner and the scan log.
 
-- **Doors and access groups.** Create it from the organiser (New office). Each access group (Staff, Contractor, Visitor) opens certain doors and can be limited to days and hours, read in Lagos time (`events.tz_offset_min`, default +60). Overnight shifts are not supported yet.
+- **Doors and access groups.** Offices have their own console at `/offices/`, separate from the organiser (`/organiser/`, events only). Each access group (Staff, Contractor, Visitor) opens certain doors and can be limited to days and hours, read in Lagos time (`events.tz_offset_min`, default +60). Overnight shifts are not supported yet.
 - **Adding people.** `POST /api/events/:id/people` takes `{ tier_id, people: [{ contact, name? }], access_until? }`. Each person gets an invite tied to their own phone or email, which appears in their Tap In app after they sign in. Bad and duplicate contacts are reported back, not fatal.
 - **Visitors and contractors.** `access_until` is copied onto the pass when it is claimed; the gate refuses it afterwards (`expired`). Outside a group's hours the gate answers `outside_hours`.
 - **Offboarding.** Cancelling a pass (Who has access) shuts the door at the next scan.
 - Staff can enter again and again; offices ignore the event "re-entry" rule.
 
 Migration `0003_workplaces.sql` adds the columns. Apply it with `npm run db:migrate:remote` before deploying.
+
+## Payments (phase 3: customers and vendors)
+
+**Demo money only.** `PAYMENTS_MODE` is `demo` in `wrangler.jsonc`: wallets hold play money, top-ups and payouts are only recorded, and nothing real moves. In `live` mode the server refuses top-ups and payouts (`501 payments_not_connected`) until a payment provider is wired in. Holding or moving real customer money in Nigeria also has regulatory requirements (licensing, KYC, settlement through a licensed partner), so take advice before going live.
+
+- **Customer** (`/app/`, Wallet tab): a balance, demo top-ups, and "Pay a vendor". The customer enters an amount and shows a pay code (QR). The amount is inside the signed code, so the vendor can only charge exactly that, the code works once, and it expires after about 5 minutes.
+- **Vendor** (`/vendor/`): create a business and get a till key (shown once, stored only as a hash). See sales, refund a payment (once, out of the business balance), record a payout, make a new till key, and choose whether to appear in the public "Tap In enabled" list.
+- **Till** (`/till/`): a device enters the till key, then scans or types the customer's pay code. The till never sees the customer's balance.
+- **API:** `GET /api/wallet`, `POST /api/wallet/topup`, `POST /api/wallet/pay-code`; `GET/POST /api/vendors`, `GET/PATCH /api/vendors/:id`, `POST /api/vendors/:id/{till-key,refunds,payout}`; `GET /api/till/info`, `POST /api/till/charge`; `GET /api/public/vendors`.
+- **Money safety.** Amounts are integer kobo. Every movement is one database batch (one transaction) with its ledger row. Balances have `CHECK (>= 0)`, so the database itself refuses an overdraft, even when two payments race. A unique index makes a pay code chargeable once, and another allows one refund per payment. A test checks that wallets + vendor balances + payouts always equal top-ups.
+
+Migration `0004_payments.sql` creates `wallets`, `vendors` and `ledger`.
 
 ## Deploy
 

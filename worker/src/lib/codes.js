@@ -6,7 +6,7 @@
 //
 // Plus the gate key staff use to authorise a scanner: GK-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX.
 
-import { base32, hmacBytes, hmacHex, normaliseCode, randomBase32, randomInt } from './util.js';
+import { B32, base32, hmacBytes, hmacHex, normaliseCode, randomBase32, randomInt } from './util.js';
 
 // ---------- 1. invite codes ----------
 
@@ -69,3 +69,49 @@ export function makeGateKey() {
   return 'GK-' + r.match(/.{4}/g).join('-'); // 120 bits
 }
 export const hashGateKey = (pepper, key) => hmacHex(pepper, 'gate|' + normaliseCode(key));
+
+// ---------- pay codes and till keys ----------
+// A pay code is what a customer shows a vendor: "TPAY" + user id (12) + amount in kobo (6, base32)
+// + minute window (6) + nonce (4) + mac (10). The amount is inside the signed code, so a vendor
+// cannot charge more than the customer chose, and the till key alone cannot create a charge.
+
+export const PAY_STEP = 60; // seconds per window
+export const PAY_WINDOWS = 5; // a code is good for about five minutes
+export const MAX_PAY_KOBO = 100_000_00; // N100,000 per payment
+
+const enc = (n, len) => {
+  let out = '';
+  for (let i = 0; i < len; i++) {
+    out = B32[n % 32] + out;
+    n = Math.floor(n / 32);
+  }
+  return out;
+};
+const dec = (s) => [...s].reduce((n, c) => n * 32 + B32.indexOf(c), 0);
+
+const payMac = async (pepper, id, amt, win, nonce) => base32(await hmacBytes(pepper, `pay|${id}|${amt}|${win}|${nonce}`)).slice(0, 10);
+
+export async function makePayCode(pepper, userId, amountKobo, nowSec) {
+  const amt = enc(amountKobo, 6);
+  const win = enc(Math.floor(nowSec / PAY_STEP), 6);
+  const nonce = randomBase32(4);
+  const s = userId + amt + win + nonce + (await payMac(pepper, userId, amt, win, nonce));
+  return 'TPAY-' + s.match(/.{1,6}/g).join('-');
+}
+
+export function parsePayCode(raw) {
+  const m = /^TPAY([0-9A-Z]{12})([0-9A-Z]{6})([0-9A-Z]{6})([0-9A-Z]{4})([0-9A-Z]{10})$/.exec(normaliseCode(raw));
+  return m ? { id: m[1], amt: m[2], win: m[3], nonce: m[4], mac: m[5], amountKobo: dec(m[2]), minute: dec(m[3]) } : null;
+}
+export const payCodeMac = payMac;
+export const payCodeFresh = (p, nowSec) => {
+  const age = Math.floor(nowSec / PAY_STEP) - p.minute;
+  return age >= -1 && age <= PAY_WINDOWS;
+};
+// What the ledger remembers, so one code can only ever be charged once.
+export const payCodeRef = (p) => `${p.id}${p.amt}${p.win}${p.nonce}`;
+
+export function makeTillKey() {
+  return 'TK-' + randomBase32(24).match(/.{4}/g).join('-'); // 120 bits
+}
+export const hashTillKey = (pepper, key) => hmacHex(pepper, 'till|' + normaliseCode(key));
