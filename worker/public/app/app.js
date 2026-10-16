@@ -74,11 +74,13 @@ function shell(content, { tabs = true, title } = {}) {
   window.scrollTo(0, 0);
 }
 function tabBar() {
-  const items = [['around', 'Around me'], ['passes', 'Passes'], ['wallet', 'Wallet'], ['add', 'Add'], ['history', 'History'], ['me', 'Me']];
+  // The wallet tab only exists while payments are switched on (PAYMENTS_MODE is not "off").
+  const items = [['around', 'Around me'], ['passes', 'Passes'], ...(state.config.payments === false ? [] : [['wallet', 'Wallet']]), ['add', 'Add'], ['history', 'History'], ['me', 'Me']];
   return h('nav', { class: 'tabs', 'aria-label': 'Main' }, h('div', {},
     items.map(([k, label]) => h('button', { type: 'button', 'aria-current': state.tab === k ? 'page' : null, onclick: () => go(k) }, icon(k), label))));
 }
 async function go(tab) {
+  if (tab === 'wallet' && state.config.payments === false) tab = 'passes';
   state.tab = tab;
   if (tab === 'history') { try { state.history = (await get('/me/history')).scans; } catch { state.history = []; } }
   if (tab === 'wallet') { try { state.wallet = await get('/wallet'); } catch (ex) { if (ex.status === 401) return onboarding('signin'); state.wallet = null; } }
@@ -500,7 +502,7 @@ function viewMe() {
     state.config.otp_mode === 'demo' && h('div', { class: 'notice warn' }, 'Demo mode: sign-in codes are shown on screen instead of being texted. This is for trying Tap In out.'),
     h('div', { class: 'row' },
       h('a', { class: 'btn ghost', href: '/organiser/' }, 'Organiser console'),
-      h('a', { class: 'btn ghost', href: '/offices/' }, 'Offices console'),
+      h('a', { class: 'btn ghost', href: '/business/' }, 'Tap In for Business'),
       h('button', { class: 'btn ghost', type: 'button', onclick: () => { flag(false); onboarding('ctx'); } }, 'Replay intro'),
       h('button', { class: 'btn ghost', type: 'button', onclick: async () => { await post('/auth/logout').catch(() => {}); state.user = null; state.passes = []; state.waiting = []; flag(false); onboarding('welcome'); } }, 'Sign out'))), { title: 'Me' });
 }

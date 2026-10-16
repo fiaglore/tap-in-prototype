@@ -12,11 +12,12 @@ import * as publicSale from './routes/public.js';
 import * as wallet from './routes/wallet.js';
 import * as vendors from './routes/vendors.js';
 import * as till from './routes/till.js';
+import { PAYMENT_API, PAYMENT_PAGES, paymentsOff } from './lib/money.js';
 import * as photo from './routes/photo.js';
 
 // [method, path, auth, handler]. auth "user" needs a signed-in session; gate routes check their own key.
 const ROUTES = [
-  ['GET', '/api/config', 'none', ({ env }) => json({ otp_mode: otpMode(env), configured: isConfigured(env), ...(otpMode(env) === 'firebase' && !env.FIREBASE_API_KEY ? { delivery_problem: 'FIREBASE_API_KEY is not set' } : {}), ...(isConfigured(env) ? {} : { problem: !env.SECRET_PEPPER ? 'SECRET_PEPPER is not set on the running Worker' : 'SECRET_PEPPER is set but shorter than 32 characters (length ' + String(env.SECRET_PEPPER).length + ')' }) })],
+  ['GET', '/api/config', 'none', ({ env }) => json({ otp_mode: otpMode(env), payments: !paymentsOff(env), configured: isConfigured(env), ...(otpMode(env) === 'firebase' && !env.FIREBASE_API_KEY ? { delivery_problem: 'FIREBASE_API_KEY is not set' } : {}), ...(isConfigured(env) ? {} : { problem: !env.SECRET_PEPPER ? 'SECRET_PEPPER is not set on the running Worker' : 'SECRET_PEPPER is set but shorter than 32 characters (length ' + String(env.SECRET_PEPPER).length + ')' }) })],
   ['POST', '/api/auth/otp/request', 'none', auth.otpRequest],
   ['POST', '/api/auth/otp/verify', 'none', auth.otpVerify],
   ['POST', '/api/auth/email-link/complete', 'none', auth.emailLinkComplete],
@@ -101,6 +102,7 @@ async function handleApi(request, env) {
     }
   }
   if (!found) throw pathExists ? new HttpError(405, 'method_not_allowed', 'Method not allowed.') : new HttpError(404, 'not_found', 'Not found.');
+  if (paymentsOff(env) && PAYMENT_API.test(path)) throw new HttpError(404, 'payments_unavailable', 'Payments are not available yet.');
 
   checkOrigin(request);
   if (path !== '/api/config' && !isConfigured(env)) {
@@ -139,7 +141,11 @@ export async function purge(env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!url.pathname.startsWith('/api/') && url.pathname !== '/api') return env.ASSETS.fetch(request);
+    if (!url.pathname.startsWith('/api/') && url.pathname !== '/api') {
+      // With payments off the vendor and till pages answer like any missing page.
+      if (paymentsOff(env) && PAYMENT_PAGES.test(url.pathname)) return env.ASSETS.fetch(new Request(new URL('/__payments_off__', url), request));
+      return env.ASSETS.fetch(request);
+    }
     try {
       return await handleApi(request, env);
     } catch (err) {

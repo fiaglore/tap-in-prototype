@@ -1,11 +1,17 @@
-// Shared money helpers. PAYMENTS_MODE in wrangler.jsonc is "demo" (play money, nothing real moves) or
-// "live" (needs a payment provider that this project does not have yet, so it refuses).
+// Shared money helpers. PAYMENTS_MODE in wrangler.jsonc is "demo" (play money, nothing real moves),
+// "live" (needs a payment provider that this project does not have yet, so it refuses) or
+// "off" (the wallet, vendors and tills are withdrawn from the site and API until a licensed partner is signed).
 
 import { HttpError, nowSec } from './util.js';
 import { MAX_PAY_KOBO } from './codes.js';
 
 export const MAX_TOPUP_KOBO = 100_000_00; // N100,000 a time in the demo
 export const paymentsMode = (env) => (env.PAYMENTS_MODE === 'live' ? 'live' : 'demo');
+export const paymentsOff = (env) => env.PAYMENTS_MODE === 'off';
+
+// Everything that belongs to payments: the API routes and the vendor and till pages.
+export const PAYMENT_API = /^\/api\/(wallet|vendors|till|public\/vendors)(\/|$)/;
+export const PAYMENT_PAGES = /^\/(vendor|till)(\/|$)/;
 
 export function requireDemoMoney(env, what) {
   if (paymentsMode(env) === 'live') {

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2B1B2D">
+<meta name="description" content="Tap In for Business: staff and visitor check-in for offices, with phone passes, access by group, day and hour, and a log of every entry.">
+<title>Tap In for Business · Staff and visitor check-in</title>
+<link rel="icon" href="/logo/tap-in-app-icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/css/tapin.css">
+<link rel="stylesheet" href="/site.css">
+<link rel="stylesheet" href="/css/fx.css">
+<link rel="stylesheet" href="/business/business.css">
+<script src="/js/theme.js"></script>
+<script src="/js/site.js" defer></script>
+<script src="/js/fx.js" defer></script>
+<script src="/js/liquid.js" defer></script>
+</head>
+<body class="fx" data-hue="-40">
+<header class="topbar">
+  <a class="wordmark" href="/" aria-label="Tap In home"><svg class="wm" viewBox="0 0 600 151" role="img" aria-label="Tap In"><polygon points="0,0 76,0 76,151 45,151 45,26 0,26"/><polygon points="80,0 120,0 120,26 93,26"/><polygon points="149,0 181,0 244,151 212,151 201,124 131,124 120,151 88,151"/><polygon points="143,97 189,97 166,42" class="wm-cut"/><polygon points="164,44 193,21 198,27 169,50" class="wm-cut"/><rect x="251" y="0" width="29" height="151"/><path d="M280,0 H320 A53,53 0 0 1 320,106 H301 L285,76 H318 A25,25 0 0 0 318,26 H280 Z"/><g class="wm-n" transform="translate(426,0)"><polygon points="0,0 31,0 31,26 0,38"/><rect x="0" y="44" width="31" height="107"/><polygon points="45,0 77,0 174,139 174,151 142,151 77,58 77,151 45,151"/><polygon points="142,0 174,0 174,113 142,90"/></g></svg><span class="biz-tag">for Business</span></a>
+  <nav class="row" aria-label="Main">
+    <a class="btn ghost small" href="/">Tap In for events</a>
+    <a class="btn primary small" href="/offices/">Business sign in</a>
+    <span id="theme-slot"></span>
+  </nav>
+</header>
+<main class="wrap">
+  <section class="biz-hero">
+    <p class="eyebrow">Tap In for Business</p>
+    <h1>Know who is in the building.</h1>
+    <p class="lede">Staff and visitor check-in for offices. Everyone carries a pass on their phone, reception or security scans it at the entrance, and every entry is on record.</p>
+    <div class="row cta">
+      <a class="btn primary" href="/offices/">Set up your office</a>
+      <a class="btn ghost" href="#how">How it works</a>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="grid three">
+      <article class="card"><h3>Groups, days and hours</h3><p class="muted">Staff, contractors, cleaners and visitors each get a group. A group is allowed into certain entrances on certain days, between certain hours.</p></article>
+      <article class="card"><h3>Visitors that expire</h3><p class="muted">Give a visitor a pass for the day or the week. It stops working on its own when the time is up.</p></article>
+      <article class="card"><h3>Add people by email or phone</h3><p class="muted">Type in an email or phone number and the pass appears in that person&rsquo;s Tap In app when they sign in. Nothing to print or send.</p></article>
+      <article class="card"><h3>Remove access at once</h3><p class="muted">When someone leaves, cancel their pass. The next scan at any entrance refuses it.</p></article>
+      <article class="card"><h3>Optional photo check</h3><p class="muted">For sensitive sites, the person scanning sees the holder&rsquo;s photo next to their name, so a borrowed phone is easy to spot.</p></article>
+      <article class="card"><h3>A log of every entry</h3><p class="muted">Every scan is recorded with the time, the entrance and the result, including refusals and the reason for each.</p></article>
+    </div>
+  </section>
+
+  <section class="sec" id="how">
+    <h2 class="big">How it works</h2>
+    <ol class="steps">
+      <li><span class="n">01</span><div><h3>Describe your office</h3><p class="muted">Name your entrances and the groups that use them, with the days and hours each group is allowed in.</p></div></li>
+      <li><span class="n">02</span><div><h3>Add your people</h3><p class="muted">Add staff and visitors by email or phone, or hand out invite codes. Each person adds their pass once in the Tap In app.</p></div></li>
+      <li><span class="n">03</span><div><h3>Scan at the entrance</h3><p class="muted">Reception or security opens the scanner on a phone or uses a USB scanner. They see a clear yes or no, the first name and the group.</p></div></li>
+    </ol>
+  </section>
+
+  <section class="sec">
+    <div class="notice biz-note">
+      <h3>What it does today</h3>
+      <p>Tap In for Business is check-in, not an electronic lock. A person at the entrance scans the pass and acts on the answer. Connecting to door locks, turnstiles and card readers is planned but not available yet.</p>
+    </div>
+  </section>
+
+  <footer class="sitefoot muted">
+    <nav class="row" aria-label="Footer"><a href="/offices/">Business sign in</a><a href="/">Tap In for events</a><a href="/app/">Open the app</a></nav>
+    <p>Tap In for Business is a work in progress. Sign-in codes are shown on screen in demo mode until a text or email provider is connected.</p>
+  </footer>
+</main>
+</body>
+</html>

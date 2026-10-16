@@ -52,7 +52,10 @@ Cookie-authenticated unless noted. JSON in, JSON out. Errors look like `{"error"
 | `POST /api/events/:id/gate-key` | Rotate the gate key |
 | `GET /api/gate/info`, `POST /api/gate/scan` `{token, zone_id}` | Gate, with `Authorization: Bearer <gate key>` |
 
-## Offices (phase 1: access for companies)
+## Tap In for Business (offices)
+
+Offices are sold as a separate product, **Tap In for Business**: the landing page is `/business/` and its console is `/offices/`. The homepage is about event ticketing and entry; it links to Business once, near the bottom.
+
 
 An office is an event with `kind = "workplace"`, so it reuses passes, doors (zones), the gate scanner and the scan log.
 
@@ -91,7 +94,9 @@ Migration `0006_photos.sql` adds `events.require_photo` and the `user_photos` ta
 
 ## Payments (phase 3: customers and vendors)
 
-**Demo money only.** `PAYMENTS_MODE` is `demo` in `wrangler.jsonc`: wallets hold play money, top-ups and payouts are only recorded, and nothing real moves. In `live` mode the server refuses top-ups and payouts (`501 payments_not_connected`) until a payment provider is wired in. Holding or moving real customer money in Nigeria also has regulatory requirements (licensing, KYC, settlement through a licensed partner), so take advice before going live.
+**Withdrawn for now.** `PAYMENTS_MODE` is `off` in `wrangler.jsonc` until a licensed payment partner is signed: the wallet tab is hidden in the app, `/vendor/` and `/till/` answer with the not-found page, and every wallet, vendor and till API route returns `404 payments_unavailable`. Ticketing is unaffected. Set it back to `demo` to bring the demo back.
+
+**Demo money only.** In `demo` mode wallets hold play money, top-ups and payouts are only recorded, and nothing real moves. In `live` mode the server refuses top-ups and payouts (`501 payments_not_connected`) until a payment provider is wired in. Holding or moving real customer money in Nigeria also has regulatory requirements (licensing, KYC, settlement through a licensed partner), so take advice before going live.
 
 - **Customer** (`/app/`, Wallet tab): a balance, demo top-ups, and "Pay a vendor". The customer enters an amount and shows a pay code (QR). The amount is inside the signed code, so the vendor can only charge exactly that, the code works once, and it expires after about 5 minutes.
 - **Vendor** (`/vendor/`): create a business and get a till key (shown once, stored only as a hash). See sales, refund a payment (once, out of the business balance), record a payout, make a new till key, and choose whether to appear in the public "Tap In enabled" list.

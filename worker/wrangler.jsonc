@@ -7,7 +7,7 @@
     "directory": "./public",
     "binding": "ASSETS",
     "not_found_handling": "404-page",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*", "/vendor*", "/till*"]
   },
   "d1_databases": [
     {
@@ -24,7 +24,8 @@
     "OTP_MODE": "demo",
     // "demo": wallets hold play money, top-ups and payouts are recorded but nothing real moves.
     // "live": refuses top-ups and payouts until a payment provider is wired in (see README, Payments).
-    "PAYMENTS_MODE": "demo",
+    // "off": the wallet, vendor console and till are withdrawn (pages 404, API 404) until a licensed partner is signed.
+    "PAYMENTS_MODE": "off",
     // Firebase "Web API key" (Project settings > General). It is public by design, not a secret.
     // "FIREBASE_API_KEY": "",
     // Comma-separated phone numbers or emails allowed to create events. Empty = anyone who signs in.

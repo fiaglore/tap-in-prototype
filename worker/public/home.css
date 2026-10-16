@@ -13,10 +13,7 @@ body.home .topbar::after{content:"";position:absolute;left:0;right:0;bottom:-1px
 .tag .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 var(--ok);animation:ping 2s infinite}
 @keyframes ping{70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
 .hero2 h1{font-size:clamp(38px,7.4vw,84px);line-height:.98;margin:18px 0 16px}
-.swap-line{display:block;white-space:nowrap;min-height:1.02em}
-.swap{display:inline-block;transition:opacity .26s ease,transform .26s ease,filter .26s ease;background:linear-gradient(100deg,var(--signal),var(--accent2) 45%,var(--signal));background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:sheen 5s linear infinite;font-family:var(--display)}
 @keyframes sheen{to{background-position:-200% 0}}
-.swap.out{opacity:0;transform:translateY(.12em);filter:blur(6px)}
 .hero2 .lede{font-size:clamp(16px,2vw,19px);max-width:52ch}
 .cta{margin-top:26px}
 .btn.glow{position:relative;box-shadow:0 0 0 1px color-mix(in srgb,var(--signal) 60%,transparent),0 10px 40px -8px var(--glow)}
@@ -135,7 +132,7 @@ body.home .topbar::after{content:"";position:absolute;left:0;right:0;bottom:-1px
   .counts{grid-template-columns:1fr 1fr}
 }
 @media(prefers-reduced-motion:reduce){
-  .orbit,.sat,.phone,.beam,.ticker-in,.swap,.btn.glow::before,.topbar::after,.hours .now,.meter i,.paid,.tag .dot,.live i{animation:none!important}
+  .orbit,.sat,.phone,.beam,.ticker-in,.btn.glow::before,.topbar::after,.hours .now,.meter i,.paid,.tag .dot,.live i{animation:none!important}
   .js .rv{opacity:1;transform:none;transition:none}
   .js .rv.in .card,.js .rv.in .steps li{animation:none}
   .steps li{opacity:1}
@@ -240,7 +237,7 @@ html.intro-lock{overflow:hidden}
 /* the page waits behind the intro: nothing of it shows, and its entrance animations start only when it opens */
 html.intro-lock main,html.intro-lock .topbar,html.intro-lock .progress{opacity:0}
 .topbar{transition:opacity .9s ease .2s}
-html.intro-lock .hero-copy>*,html.intro-lock .stage,html.intro-lock .pane,html.intro-lock .passbtn{animation-play-state:paused!important}
+html.intro-lock .hero-copy>*,html.intro-lock .stage{animation-play-state:paused!important}
 /* a soft dark edge so the logo stays legible; it opens up like an iris when you tap */
 .intro .veil{position:absolute;inset:0;background:radial-gradient(90% 75% at 50% 48%,transparent 30%,color-mix(in srgb,var(--ink) 62%,transparent) 100%);transition:transform 1.5s cubic-bezier(.6,0,.2,1) .15s,opacity 1.2s ease .3s}
 .intro .spill{position:absolute;left:50%;top:50%;width:0;height:0;border-radius:50%;transform:translate(-50%,-50%);background:radial-gradient(closest-side,#fff,color-mix(in srgb,var(--signal) 65%,transparent) 45%,transparent);opacity:0;pointer-events:none}
@@ -286,92 +283,23 @@ body.entered .hero2{animation:push 1.7s cubic-bezier(.2,.7,.2,1) both}
 .tapbtn:focus-visible .tapdot{box-shadow:0 0 0 4px color-mix(in srgb,var(--signal) 55%,transparent),0 0 60px 8px var(--glow);transform:scale(1.08)}
 .intro-skip:focus-visible{outline:none;border-color:var(--signal);color:var(--fg);box-shadow:0 0 0 3px color-mix(in srgb,var(--signal) 40%,transparent)}
 
-/* ===== First screen: three ways in (WORK / PLAY / PAY) with the PASS button in the middle ===== */
-.split{position:relative;display:flex;min-height:calc(100vh - 67px);min-height:calc(100svh - 67px);overflow:hidden;isolation:isolate}
-.pane{--h:#7a8cff;position:relative;flex:1 1 0;min-width:0;display:flex;flex-direction:column;justify-content:flex-start;gap:clamp(14px,2.6vh,30px);text-align:center;text-decoration:none;color:inherit;padding:clamp(22px,4vh,52px) clamp(18px,3vw,48px);overflow:hidden;transition:flex-grow .7s cubic-bezier(.2,.7,.2,1)}
-.pane.work{--h:#4f7cff}.pane.play{--h:#d25ee6}.pane.pay{--h:#1fd1ae}
-.pane+.pane{border-left:1px solid color-mix(in srgb,var(--line) 75%,transparent)}
-/* each side has its own colour wash, plus a light that follows your cursor */
-.pane::before{content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(90% 55% at 50% 105%,color-mix(in srgb,var(--h) 34%,transparent),transparent 72%),linear-gradient(180deg,color-mix(in srgb,var(--h) 12%,transparent),transparent 55%);transition:opacity .5s}
-.pane::after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;opacity:0;transition:opacity .4s;background:radial-gradient(460px circle at var(--mx,50%) var(--my,50%),color-mix(in srgb,var(--h) 42%,transparent),transparent 62%)}
-.pane:hover::after,.pane:focus-visible::after{opacity:1}
-.pane:focus-visible{outline:none;box-shadow:inset 0 0 0 3px color-mix(in srgb,var(--h) 80%,transparent)}
-/* the side you are over opens up; the others step back */
-.split:hover .pane{flex-grow:.9}
-.split .pane:hover{flex-grow:1.2}
-.split:hover .pane:not(:hover)::before{opacity:.55}
-.pane-top{display:grid;gap:6px;justify-items:center}
-.pane .eyebrow{color:color-mix(in srgb,var(--fg) 78%,var(--h));letter-spacing:.3em}
-.word{font:800 clamp(38px,6.8vw,118px)/.9 var(--display);white-space:nowrap;letter-spacing:-.04em;color:var(--fg);text-shadow:0 0 70px color-mix(in srgb,var(--h) 70%,transparent);transition:letter-spacing .5s cubic-bezier(.2,.7,.2,1),transform .5s cubic-bezier(.2,.7,.2,1)}
-.pane:hover .word{letter-spacing:-.02em;transform:translateY(-4px)}
-/* the three words are sized to the same width (WORK is 5.4 times its font size wide, PLAY 4.0, PAY 3.0), so each fills its side */
-.pane.work .word{font-size:clamp(28px,3.95vw,76px)}
-.pane.play .word{font-size:clamp(34px,5.35vw,102px)}
-.pane.pay .word{font-size:clamp(44px,7.1vw,136px)}
-.pane-bottom{display:grid;gap:12px;justify-items:center;max-width:380px;margin:0 auto}
-.pane-text{color:var(--muted);font-size:clamp(14px,1.25vw,17px);line-height:1.45}
-.pane .viz{width:min(100%,300px);margin-top:2px}
-.pane .more{font:700 14px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb,var(--fg) 85%,var(--h));padding-top:4px;transition:letter-spacing .3s,color .3s}
-.pane:hover .more{letter-spacing:.16em;color:var(--fg)}
-.pane.work .hours .win{background:linear-gradient(90deg,#4f7cff,#8fb4ff)}
-.pane.play .meter i{background:linear-gradient(90deg,#d25ee6,#ff9bd2)}
-.pane.pay .amt{color:var(--fg)}
-
-/* the PASS button: a round orb in the middle of all three */
-.passbtn{--sz:clamp(112px,min(15vw,24vh),200px);position:absolute;left:50%;bottom:clamp(18px,5vh,56px);z-index:5;width:var(--sz);height:var(--sz);display:grid;place-items:center;text-decoration:none;color:#2B1B2D;transform:translate(calc(-50% + var(--px,0px)),var(--py,0px));transition:transform .25s cubic-bezier(.2,.8,.3,1)}
-.passbtn .orb{position:relative;width:100%;height:100%;border-radius:50%;display:grid;place-content:center;justify-items:center;gap:2px;background:radial-gradient(circle at 34% 28%,#fff 0,color-mix(in srgb,var(--signal) 70%,#fff) 38%,var(--primary) 100%);box-shadow:0 0 0 1px color-mix(in srgb,#fff 40%,transparent),0 0 0 8px color-mix(in srgb,var(--signal) 22%,transparent),0 0 90px 10px var(--glow),0 24px 60px -18px rgba(0,0,0,.6);transition:transform .25s,box-shadow .25s}
-.passbtn .orb b{font:800 clamp(28px,3.4vw,44px)/1 var(--display);letter-spacing:-.02em}
-.passbtn .orb small{font:700 clamp(10px,.9vw,12px) var(--mono);letter-spacing:.2em;text-transform:uppercase;opacity:.75}
-.passbtn:hover .orb,.passbtn:focus-visible .orb{transform:scale(1.07);box-shadow:0 0 0 1px #fff,0 0 0 10px color-mix(in srgb,var(--signal) 40%,transparent),0 0 120px 20px var(--glow),0 28px 70px -16px rgba(0,0,0,.6)}
-.passbtn:active .orb{transform:scale(.95)}
-.passbtn:focus-visible{outline:none}
-.passbtn .rings{position:absolute;inset:0;pointer-events:none}
-.passbtn .rings i{position:absolute;inset:0;border-radius:50%;border:2px solid var(--signal);opacity:0;animation:tapring 3.2s ease-out infinite}
-.passbtn .rings i:nth-child(2){animation-delay:1.05s}.passbtn .rings i:nth-child(3){animation-delay:2.1s}
-
-/* arrival: each side slides in from its own direction, then the PASS orb pops */
-.js .pane.work{animation:fromleft .9s cubic-bezier(.2,.7,.2,1) both}
-.js .pane.play{animation:frombottom .9s cubic-bezier(.2,.7,.2,1) .08s both}
-.js .pane.pay{animation:fromright .9s cubic-bezier(.2,.7,.2,1) .16s both}
-.js .passbtn{animation:orbin .9s cubic-bezier(.2,.9,.3,1.25) .55s both}
-@keyframes fromleft{from{opacity:0;transform:translateX(-60px)}}
-@keyframes fromright{from{opacity:0;transform:translateX(60px)}}
-@keyframes frombottom{from{opacity:0;transform:translateY(50px)}}
-@keyframes orbin{from{opacity:0;transform:translate(-50%,40px) scale(.3)}}
-
-@media(max-width:860px){
-  .split{flex-direction:column;min-height:calc(100svh - 62px)}
-  .pane{flex:1 1 0;justify-content:center;align-items:flex-start;text-align:left;padding:14px 22px}
-  .pane+.pane{border-left:0;border-top:1px solid color-mix(in srgb,var(--line) 75%,transparent)}
-  .split:hover .pane,.split .pane:hover{flex-grow:1}
-  /* touch screens cannot hover, so each pane keeps its one-line description; the demo widgets stay desktop-only */
-  .pane-bottom{display:block;margin:0;max-width:none}
-  .pane .viz,.pane .more{display:none}
-  .pane-text{font-size:13.5px;line-height:1.4;margin-top:2px;color:var(--fg);opacity:.82}
-  .pane-top{justify-items:start}
-  /* the orb sits low over the bottom row, so that row's word stays up above it */
-  .pane.pay{justify-content:flex-start;padding-top:20px}
-  .pane.work .word,.pane.play .word,.pane.pay .word{font-size:clamp(40px,13vw,80px)}
-  .passbtn{--sz:clamp(96px,26vw,116px);bottom:16px}
-}
-@media(prefers-reduced-motion:reduce){
-  .js .pane,.js .passbtn,.passbtn .rings i{animation:none!important}
-  .js .passbtn{transform:translate(-50%,0)}
-  .pane,.word,.more{transition:none}
-}
-
-/* the split is the second screen: its arrival waits until you scroll to it */
-.js .split:not(.in) .pane,.js .split:not(.in) .passbtn{animation-play-state:paused}
-.split{margin-top:clamp(8px,2vw,24px)}
-
-@media(min-width:861px) and (max-height:700px){.pane .viz{display:none}}
 
 /* small phones: the floating chips and satellites crowd the mockup and fall off the edge */
 @media(max-width:600px){.frag,.sat{display:none}}
-/* phones: the PASS orb sits bottom-right so it never covers the PAY description */
-@media(max-width:860px){
-  .passbtn{left:auto;right:16px;bottom:16px}
-  .js .passbtn{transform:none;animation-name:orbin-m}
-  .pane.pay .pane-text{max-width:calc(100% - 130px)}
-}
-@keyframes orbin-m{from{opacity:0;transform:translateY(40px) scale(.3)}}
+
+/* ===== Organiser-first homepage ===== */
+.hero2 h1 .hl{background:linear-gradient(100deg,var(--signal),var(--accent2) 45%,var(--signal));background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;white-space:nowrap}
+.pains .card h3{margin-top:6px}
+.pains .card .eyebrow{color:var(--bad,#e5484d);letter-spacing:.12em}
+.grid.two{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.sp-cap{width:82%;margin:6px auto 0}
+.screen.s0 .sp-amt{margin-top:18px}
+.sitefoot{padding:32px 16px 60px;font-size:13px;display:grid;gap:14px}
+.sitefoot nav{gap:18px}
+.sitefoot nav a{color:var(--fg);font-weight:600;text-decoration:none}
+.sitefoot nav a:hover{text-decoration:underline}
+/* the organiser headline is two sentences: a smaller size keeps the buttons on the first screen */
+@media(min-width:861px){.hero2 h1{font-size:clamp(40px,5vw,68px);line-height:1.02}}
+.grid.three.pains{grid-template-columns:repeat(3,1fr)}
+@media(max-width:960px){.grid.three.pains{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.grid.three.pains{grid-template-columns:1fr}}

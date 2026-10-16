@@ -39,11 +39,11 @@ function viewSignIn() {
   // Signing in sits at the very top of the page, with a short reminder of what you get below it.
   const box = h('div', { class: 'card signin-top' });
   const perks = OFFICE
-    ? [['Add people by email', 'Staff, contractors and visitors get their pass in the app. Nothing to send.'], ['Set the hours', 'Each group opens certain doors, only at certain times.'], ['Selfie check', 'Door staff see a face next to every name.']]
+    ? [['Add people by email', 'Staff, contractors and visitors get their pass in the app. Nothing to send.'], ['Set the hours', 'Each group is allowed in at certain entrances, only at certain times.'], ['Selfie check', 'Door staff see a face next to every name.']]
     : [['Sell tickets', 'Limits that cannot oversell, sales windows, and a public page for each event.'], ['Live QR', 'The pass code changes every 30 seconds, so screenshots stop working.'], ['Scan at the gate', 'Staff see a clear admit or refuse, with the face on file.']];
   mount(main, h('div', { class: 'narrow' }, box,
     h('div', { class: 'grid three', style: 'margin-top:18px' }, perks.map(([t, d]) => h('div', { class: 'card' }, h('h3', {}, t), h('p', { class: 'muted', style: 'margin-top:4px;font-size:14px' }, d))))));
-  signInFlow(box, { title: OFFICE ? 'Offices sign in' : 'Organiser sign in', lede: OFFICE ? 'Sign in with the phone number or email you will manage your office from.' : 'Sign in with the phone number or email you will run events from.', onDone: (u) => { user = u; header(); location.hash = '#/'; route(); } });
+  signInFlow(box, { title: OFFICE ? 'Tap In for Business sign in' : 'Organiser sign in', lede: OFFICE ? 'Sign in with the phone number or email you will manage your office from.' : 'Sign in with the phone number or email you will run events from.', onDone: (u) => { user = u; header(); location.hash = '#/'; route(); } });
 }
 
 function route() {

@@ -77,21 +77,6 @@
     }
   }
 
-  // ---- 4. Headline word that decodes into the next one -------------------------------------------
-  var swap = $('#swap');
-  if (swap && !reduce) {
-    var words = ['pass', 'key', 'wallet', 'ticket', 'door'], wi = 0, busy = false;
-    // A clean fade between real words: nothing garbled is ever shown, and the line never changes height.
-    var decode = function (to) {
-      if (busy) return; busy = true;
-      swap.classList.add('out');
-      setTimeout(function () { swap.textContent = to; swap.classList.remove('out'); busy = false; }, 260);
-    };
-    var held = false, heroBox = $('.hero-copy');
-    if (heroBox) { heroBox.addEventListener('pointerenter', function () { held = true; }); heroBox.addEventListener('pointerleave', function () { held = false; }); heroBox.addEventListener('focusin', function () { held = true; }); heroBox.addEventListener('focusout', function () { held = false; }); }
-    setInterval(function () { if (visible && !held) { wi = (wi + 1) % words.length; decode(words[wi]); } }, 3800);
-  }
-
   // ---- 5. Scroll reveal, counters, how-it-works progress -----------------------------------------
   function countUp(el) {
     var end = Number(el.getAttribute('data-count')) || 0;
@@ -206,11 +191,11 @@
     });
   }
 
-  // ---- 10. Pinned story: scroll moves one phone through an office, a concert and a till ------------
+  // ---- 10. Pinned story: scroll moves one phone through on-sale, doors open and the night's numbers --
   var story = $('#story');
   if (story) {
     var sTrack = $('.story-track', story), sPhone = $('#storyPhone'), sSteps = $$('.story-steps li', story), sScreens = $$('.screen', story), sBar = $('.story-prog', story), cur = -1;
-    // a little pseudo-QR on the concert screen, reshuffled while that screen is up
+    // a little pseudo-QR on the doors-open screen, reshuffled while that screen is up
     var sq = $('#storyQr'), sqc = sq && sq.getContext ? sq.getContext('2d') : null, SN = 24, sg = [];
     var sFinder = function (x, y) { return (x < 8 && y < 8) || (x > SN - 9 && y < 8) || (x < 8 && y > SN - 9); };
     var sDraw = function () {
@@ -243,25 +228,4 @@
     else { window.addEventListener('scroll', onStory, { passive: true }); window.addEventListener('resize', onStory); onStory(); }
   }
 
-  // ---- The PASS orb leans toward your cursor ------------------------------------------------------
-  var passBtn = $('#passBtn'), splitEl = $('#split');
-  if (passBtn && splitEl && fine && !reduce) {
-    splitEl.addEventListener('pointermove', function (e) {
-      var r = passBtn.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      var dx = e.clientX - cx, dy = e.clientY - cy, d = Math.sqrt(dx * dx + dy * dy), reach = 360;
-      var k = d < reach ? (1 - d / reach) : 0;
-      passBtn.style.setProperty('--px', clamp(dx * .14 * k, -16, 16).toFixed(1) + 'px');
-      passBtn.style.setProperty('--py', clamp(dy * .14 * k, -16, 16).toFixed(1) + 'px');
-    });
-    splitEl.addEventListener('pointerleave', function () { passBtn.style.setProperty('--px', '0px'); passBtn.style.setProperty('--py', '0px'); });
-  }
-
-  // ---- The WORK / PLAY / PAY split arrives when you scroll to it ---------------------------------
-  var splitSec = $('#split');
-  if (splitSec) {
-    if ('IntersectionObserver' in window && !reduce) {
-      var sio = new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.isIntersecting) { splitSec.classList.add('in'); sio.disconnect(); } }); }, { threshold: .25 });
-      sio.observe(splitSec);
-    } else splitSec.classList.add('in');
-  }
 })();
