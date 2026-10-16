@@ -27,7 +27,7 @@
     stage.parentNode.addEventListener('pointerleave', function () { phone.style.setProperty('--rx', '0deg'); phone.style.setProperty('--ry', '0deg'); });
   }
   document.addEventListener('pointermove', function (e) {
-    var s = e.target.closest ? e.target.closest('.spot') : null;
+    var s = e.target.closest ? e.target.closest('.spot,.pane') : null;
     if (!s) return;
     var r = s.getBoundingClientRect();
     s.style.setProperty('--mx', (e.clientX - r.left) + 'px');
@@ -241,5 +241,18 @@
     };
     if (reduce) { sScreens.forEach(function (sc, k) { sc.classList.toggle('on', k === 0); }); }
     else { window.addEventListener('scroll', onStory, { passive: true }); window.addEventListener('resize', onStory); onStory(); }
+  }
+
+  // ---- The PASS orb leans toward your cursor ------------------------------------------------------
+  var passBtn = $('#passBtn'), splitEl = $('#split');
+  if (passBtn && splitEl && fine && !reduce) {
+    splitEl.addEventListener('pointermove', function (e) {
+      var r = passBtn.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      var dx = e.clientX - cx, dy = e.clientY - cy, d = Math.sqrt(dx * dx + dy * dy), reach = 360;
+      var k = d < reach ? (1 - d / reach) : 0;
+      passBtn.style.setProperty('--px', clamp(dx * .14 * k, -16, 16).toFixed(1) + 'px');
+      passBtn.style.setProperty('--py', clamp(dy * .14 * k, -16, 16).toFixed(1) + 'px');
+    });
+    splitEl.addEventListener('pointerleave', function () { passBtn.style.setProperty('--px', '0px'); passBtn.style.setProperty('--py', '0px'); });
   }
 })();
