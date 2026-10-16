@@ -64,6 +64,7 @@ const ROUTES = [
   ['POST', '/api/till/charge', 'none', till.tillCharge],
 
   ['GET', '/api/public/vendors', 'none', vendors.publicVendors],
+  ['GET', '/api/public/events', 'none', publicSale.listUpcoming],
   ['GET', '/api/public/events/:id', 'none', publicSale.getEvent],
   ['POST', '/api/public/events/:id/buy', 'user', publicSale.buy]
 ];

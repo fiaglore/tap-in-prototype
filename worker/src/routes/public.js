@@ -85,3 +85,37 @@ export async function buy({ request, env, user, params }) {
 
   return json({ tier: tier.name, extra_codes: codes.slice(1) }, 201);
 }
+
+// GET /api/public/events  -> upcoming events the organiser chose to list (the public "Play" page)
+// An event is upcoming until about 12 hours after it starts; undated ("date to be announced") events stay listed.
+// Only what a visitor needs to choose an event: no codes, keys, counts or organiser details.
+export async function listUpcoming({ env }) {
+  const now = nowSec();
+  const rows = (
+    await env.DB.prepare(
+      `SELECT e.id, e.name, e.venue, e.city, e.starts_at, e.sales_start, e.sales_end,
+        (SELECT MIN(t.price_kobo) FROM tiers t WHERE t.event_id = e.id) AS from_kobo,
+        (SELECT COUNT(*) FROM tiers t WHERE t.event_id = e.id) AS tier_count,
+        (SELECT COUNT(*) FROM tiers t WHERE t.event_id = e.id AND t.capacity IS NOT NULL
+           AND (SELECT COUNT(*) FROM invites i WHERE i.tier_id = t.id AND i.status != 'revoked') >= t.capacity) AS full_tiers
+       FROM events e
+       WHERE e.kind = 'event' AND e.listed = 1 AND (e.starts_at IS NULL OR e.starts_at >= ?1)
+       ORDER BY e.starts_at IS NULL, e.starts_at ASC, e.created_at DESC
+       LIMIT 60`
+    )
+      .bind(now - 12 * 3600)
+      .all()
+  ).results;
+  return json({
+    events: rows.map((e) => ({
+      id: e.id,
+      name: e.name,
+      venue: e.venue,
+      city: e.city,
+      starts_at: e.starts_at,
+      sales: salesState(e, now),
+      sold_out: e.tier_count > 0 && e.full_tiers === e.tier_count,
+      from_kobo: e.from_kobo
+    }))
+  });
+}

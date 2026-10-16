@@ -15,6 +15,7 @@ function header() {
     h('a', { class: 'wordmark', href: '#/' }, h('img', { src: '/logo/tap-in-app-icon.svg', alt: '' }), wordmarkText(), ' ', h('span', { class: 'muted', style: 'font-weight:600;font-size:14px' }, CONSOLE)),
     h('div', { class: 'row' },
       h('a', { class: 'btn ghost small hide-sm', href: '/gate/' }, 'Open scanner'),
+      !user && h('span', { class: 'hint hide-sm' }, 'Sign in below'),
       user && h('button', { class: 'btn ghost small', type: 'button', onclick: async () => { await post('/auth/logout').catch(() => {}); user = null; boot(); } }, 'Sign out'),
       window.TapTheme.button()));
 }
@@ -35,9 +36,14 @@ async function boot() {
 window.addEventListener('hashchange', () => user && route());
 
 function viewSignIn() {
-  const box = h('div', { class: 'narrow card', style: 'margin-top:6vh' });
-  mount(main, box);
-  signInFlow(box, { title: OFFICE ? 'Offices sign-in' : 'Organiser sign-in', lede: OFFICE ? 'Sign in with the phone number or email you will manage your office from.' : 'Sign in with the phone number or email you will run events from.', onDone: (u) => { user = u; header(); location.hash = '#/'; route(); } });
+  // Signing in sits at the very top of the page, with a short reminder of what you get below it.
+  const box = h('div', { class: 'card signin-top' });
+  const perks = OFFICE
+    ? [['Add people by email', 'Staff, contractors and visitors get their pass in the app. Nothing to send.'], ['Set the hours', 'Each group opens certain doors, only at certain times.'], ['Selfie check', 'Door staff see a face next to every name.']]
+    : [['Sell tickets', 'Limits that cannot oversell, sales windows, and a public page for each event.'], ['Live QR', 'The pass code changes every 30 seconds, so screenshots stop working.'], ['Scan at the gate', 'Staff see a clear admit or refuse, with the face on file.']];
+  mount(main, h('div', { class: 'narrow' }, box,
+    h('div', { class: 'grid three', style: 'margin-top:18px' }, perks.map(([t, d]) => h('div', { class: 'card' }, h('h3', {}, t), h('p', { class: 'muted', style: 'margin-top:4px;font-size:14px' }, d))))));
+  signInFlow(box, { title: OFFICE ? 'Offices sign in' : 'Organiser sign in', lede: OFFICE ? 'Sign in with the phone number or email you will manage your office from.' : 'Sign in with the phone number or email you will run events from.', onDone: (u) => { user = u; header(); location.hash = '#/'; route(); } });
 }
 
 function route() {
@@ -92,13 +98,14 @@ function viewNew(err = '', draft, office = false) {
   document.title = T.page + ' · Tap In';
   const d = draft || (office
     ? { name: '', venue: '', city: 'Lagos', starts_at: '', zones: ['Front door'], tiers: [{ name: 'Staff', zones: ['Front door'], days: [0, 1, 2, 3, 4], from: '07:00', to: '19:00' }], reentry: true }
-    : { name: '', venue: '', city: 'Lagos', starts_at: '', zones: ['Main entrance'], tiers: [{ name: 'General', zones: ['Main entrance'], price: '', capacity: '' }], reentry: false, sales_start: '', sales_end: '', secure_qr: false, require_photo: false });
+    : { name: '', venue: '', city: 'Lagos', starts_at: '', zones: ['Main entrance'], tiers: [{ name: 'General', zones: ['Main entrance'], price: '', capacity: '' }], reentry: false, sales_start: '', sales_end: '', secure_qr: false, require_photo: false, listed: true });
   const name = h('input', { class: 'input', id: 'n', value: d.name, maxlength: '80', required: true });
   const venue = h('input', { class: 'input', id: 'v', value: d.venue, maxlength: '80' });
   const city = h('input', { class: 'input', id: 'c', value: d.city, maxlength: '80' });
   const starts = h('input', { class: 'input', id: 's', type: 'datetime-local', value: d.starts_at });
   const reentry = h('input', { type: 'checkbox', id: 'r', checked: d.reentry });
   const secure = h('input', { type: 'checkbox', id: 'q', checked: !!d.secure_qr });
+  const listedBox = h('input', { type: 'checkbox', id: 'ls', checked: d.listed === undefined ? true : !!d.listed });
   const selfie = h('input', { type: 'checkbox', id: 'sf', checked: d.require_photo === undefined ? office : !!d.require_photo });
   const salesStart = h('input', { class: 'input', id: 'ss', type: 'datetime-local', value: d.sales_start || '' });
   const salesEnd = h('input', { class: 'input', id: 'se', type: 'datetime-local', value: d.sales_end || '' });
@@ -153,6 +160,7 @@ function viewNew(err = '', draft, office = false) {
           tiers: tiers.map((t) => ({ name: t.name, zones: zs.filter((z) => t.zones.has(z)),
             ...(office ? { days: [...t.days].sort(), from: t.from || undefined, to: t.to || undefined } : { price_kobo: t.price.trim() ? Math.round(parseFloat(t.price) * 100) : 0, capacity: String(t.capacity).trim() || undefined }) })),
           require_photo: selfie.checked,
+          listed: office ? undefined : listedBox.checked,
           secure_qr: !office && secure.checked,
           sales_start: !office && salesStart.value ? new Date(salesStart.value).toISOString() : undefined,
           sales_end: !office && salesEnd.value ? new Date(salesEnd.value).toISOString() : undefined
@@ -161,7 +169,7 @@ function viewNew(err = '', draft, office = false) {
           const r = await post('/events', body);
           showGateKey(r.event, r.gate_key, () => { location.hash = '#/e/' + r.event.id + (office ? '/people' : '/invites'); });
         } catch (ex) {
-          viewNew(ex.message, { office, name: name.value, venue: venue.value, city: city.value, starts_at: starts.value, zones: zs, tiers: tiers.map((t) => ({ name: t.name, zones: [...t.zones], price: t.price, capacity: t.capacity, days: [...t.days], from: t.from, to: t.to })), reentry: reentry.checked, secure_qr: secure.checked, require_photo: selfie.checked, sales_start: salesStart.value, sales_end: salesEnd.value });
+          viewNew(ex.message, { office, name: name.value, venue: venue.value, city: city.value, starts_at: starts.value, zones: zs, tiers: tiers.map((t) => ({ name: t.name, zones: [...t.zones], price: t.price, capacity: t.capacity, days: [...t.days], from: t.from, to: t.to })), reentry: reentry.checked, secure_qr: secure.checked, require_photo: selfie.checked, listed: listedBox.checked, sales_start: salesStart.value, sales_end: salesEnd.value });
         }
       }
     },
@@ -178,6 +186,7 @@ function viewNew(err = '', draft, office = false) {
       !office && h('div', { class: 'checks', style: 'margin-top:20px' },
         h('label', {}, reentry, 'Allow re-entry (a pass can be scanned in again at the same area)'),
         h('label', {}, secure, 'Live QR: the pass code changes every 30 seconds so screenshots stop working (phones need a connection)')),
+      !office && h('div', { class: 'checks', style: 'margin-top:14px' }, h('label', {}, listedBox, 'Show this event on the public Play page so people can find it and open its ticket page (untick for a private, invite-only event)')),
       h('div', { class: 'checks', style: 'margin-top:14px' }, h('label', {}, selfie, 'Ask for a selfie when someone adds their pass, and show it to door staff when it is scanned (so they can match the face to the person)')),
       err && h('div', { role: 'alert', class: err ? 'error' : '' }, err),
       h('div', { style: 'margin-top:20px' }, btn))));
@@ -417,6 +426,9 @@ function tabGate(body, data) {
   const reentry = h('input', { type: 'checkbox', checked: data.event.allow_reentry, onchange: async (e) => {
     try { await patch('/events/' + id, { allow_reentry: e.target.checked }); toast('Saved'); } catch (ex) { e.target.checked = !e.target.checked; toast(ex.message); }
   } });
+  const listedOn = h('input', { type: 'checkbox', checked: data.event.listed, onchange: async (e) => {
+    try { await patch('/events/' + id, { listed: e.target.checked }); toast('Saved'); } catch (ex) { e.target.checked = !e.target.checked; toast(ex.message); }
+  } });
   const selfieOn = h('input', { type: 'checkbox', checked: data.event.require_photo, onchange: async (e) => {
     try { await patch('/events/' + id, { require_photo: e.target.checked }); toast('Saved'); } catch (ex) { e.target.checked = !e.target.checked; toast(ex.message); }
   } });
@@ -431,7 +443,7 @@ function tabGate(body, data) {
     h('div', { class: 'card' }, h('h3', {}, data.event.kind === 'workplace' ? 'Hours' : 'Rules'),
       data.event.kind === 'workplace'
         ? h('div', { style: 'margin-top:10px' }, data.tiers.map((t) => h('p', { style: 'margin-bottom:6px' }, h('strong', {}, t.name), ' \u00b7 ', schedText(t.schedule))), h('p', { class: 'hint', style: 'margin-top:8px' }, 'Staff can come and go as often as they like inside these hours (Lagos time).'))
-        : h('div', {}, h('div', { class: 'checks', style: 'margin-top:10px' }, h('label', {}, reentry, 'Allow re-entry at the same area')),
+        : h('div', {}, h('div', { class: 'checks', style: 'margin-top:10px' }, h('label', {}, reentry, 'Allow re-entry at the same area'), h('label', {}, listedOn, 'Show on the public Play page')),
       h('p', { class: 'hint', style: 'margin-top:8px' }, 'Off means each pass gets in once per area. Applies to scans from now on.')),
       h('a', { class: 'btn primary', style: 'margin-top:14px', href: '/gate/' }, 'Open gate scanner')),
     h('div', { class: 'card' }, h('h3', {}, 'Selfie check'),

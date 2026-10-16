@@ -72,6 +72,10 @@ Migration `0003_workplaces.sql` adds the columns. Apply it with `npm run db:migr
 
 Migration `0005_event_sales.sql` adds the columns.
 
+## The Play page (public events)
+
+`/play/` lists upcoming events, and each card opens that event's own ticket page (`/e/?id=...`). `GET /api/public/events` returns only events with `listed = 1` that are upcoming (until about 12 hours after they start; undated events stay), soonest first, up to 60, with just a name, venue, city, date, sales state, a sold-out flag and the cheapest price. No codes, keys or counts. New events are listed by default and the organiser can untick "Show on the public Play page" for a private event (in the create form, or later in the event's Gate key & rules tab). Offices are never listed, and events that existed before migration `0007_listed_events.sql` stay unlisted until their organiser turns it on. The organiser console shows its sign-in at the top of the page.
+
 ## Selfie on the pass
 
 A pass is only as good as the check at the door, and a name alone cannot be matched to a face. With **Selfie check** on (a setting per event or office; offices default to on), a person adds a selfie when they claim a pass, and door staff see it next to their name on every scan.

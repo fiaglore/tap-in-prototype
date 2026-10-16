@@ -33,7 +33,7 @@ function assertOrganiser(env, user) {
 
 async function ownedEvent(env, user, id) {
   const ev = await env.DB.prepare(
-    `SELECT id, name, prefix, kind, venue, city, starts_at, allow_reentry, secure_qr, require_photo, sales_start, sales_end, gate_key_hint, created_at
+    `SELECT id, name, prefix, kind, venue, city, starts_at, allow_reentry, secure_qr, require_photo, listed, sales_start, sales_end, gate_key_hint, created_at
      FROM events WHERE id = ?1 AND owner_id = ?2`
   )
     .bind(String(id).slice(0, 40), user.id)
@@ -53,6 +53,7 @@ const publicEvent = (e) => ({
   allow_reentry: !!e.allow_reentry,
   secure_qr: !!e.secure_qr,
   require_photo: !!e.require_photo,
+  listed: !!e.listed,
   sales_start: e.sales_start,
   sales_end: e.sales_end,
   gate_key_hint: e.gate_key_hint,
@@ -158,8 +159,8 @@ export async function createEvent({ request, env, user }) {
 
   await env.DB.batch([
     env.DB.prepare(
-      `INSERT INTO events (id, owner_id, name, prefix, venue, city, starts_at, allow_reentry, gate_key_hash, gate_key_hint, created_at, kind, secure_qr, sales_start, sales_end, require_photo)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)`
+      `INSERT INTO events (id, owner_id, name, prefix, venue, city, starts_at, allow_reentry, gate_key_hash, gate_key_hint, created_at, kind, secure_qr, sales_start, sales_end, require_photo, listed)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)`
     ).bind(
       id,
       user.id,
@@ -176,7 +177,8 @@ export async function createEvent({ request, env, user }) {
       b.secure_qr ? 1 : 0,
       salesStart,
       salesEnd,
-      (b.require_photo === undefined ? workplace : !!b.require_photo) ? 1 : 0 // offices ask for a selfie by default
+      (b.require_photo === undefined ? workplace : !!b.require_photo) ? 1 : 0, // offices ask for a selfie by default
+      !workplace && (b.listed === undefined ? true : !!b.listed) ? 1 : 0 // events are listed on the Play page unless the organiser opts out; offices never are
     ),
     env.DB.prepare(
       `INSERT INTO zones (id, event_id, name, sort)
@@ -287,6 +289,9 @@ export async function patchEvent({ request, env, user, params }) {
   const b = await readJson(request);
   if (typeof b.allow_reentry === 'boolean') {
     await env.DB.prepare('UPDATE events SET allow_reentry = ?1 WHERE id = ?2').bind(b.allow_reentry ? 1 : 0, ev.id).run();
+  }
+  if (typeof b.listed === 'boolean' && ev.kind === 'event') {
+    await env.DB.prepare('UPDATE events SET listed = ?1 WHERE id = ?2').bind(b.listed ? 1 : 0, ev.id).run();
   }
   if (typeof b.require_photo === 'boolean') {
     await env.DB.prepare('UPDATE events SET require_photo = ?1 WHERE id = ?2').bind(b.require_photo ? 1 : 0, ev.id).run();
