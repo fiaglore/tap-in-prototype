@@ -230,46 +230,44 @@ body.home .fx-aurora{filter:hue-rotate(var(--hue,0deg));transition:filter 1.2s}
 #liquid{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
 body.liquid .fx-aurora{display:none}
 
-/* ===== Intro: tap to enter, then a TAP | IN door splits open ===== */
+/* ===== Intro: the logo, then tap to enter. The liquid background shows through the whole time. ===== */
 .intro{display:none;position:fixed;inset:0;z-index:100;overflow:hidden}
 html.intro-lock .intro,.intro.go{display:block}
 html.intro-lock{overflow:hidden}
-/* the page waits behind the door; its entrance animations start only when it opens */
+/* the page waits behind the intro: nothing of it shows, and its entrance animations start only when it opens */
+html.intro-lock main,html.intro-lock .topbar,html.intro-lock .progress{opacity:0}
+.topbar{transition:opacity .9s ease .2s}
 html.intro-lock .hero-copy>*,html.intro-lock .stage{animation-play-state:paused!important}
-.intro .panel{position:absolute;top:0;bottom:0;width:50.2%;background:
-  radial-gradient(120% 70% at 50% 0%,color-mix(in srgb,var(--signal) 14%,transparent),transparent 60%),
-  color-mix(in srgb,var(--ink) 62%,transparent);
-  backdrop-filter:blur(26px) saturate(1.2);-webkit-backdrop-filter:blur(26px) saturate(1.2);
-  display:grid;align-items:center;overflow:hidden;transition:transform 1.5s cubic-bezier(.75,0,.2,1) .3s}
-.intro .panel.l{left:0;justify-items:end;border-right:1px solid color-mix(in srgb,var(--signal) 55%,transparent)}
-.intro .panel.r{right:0;justify-items:start;border-left:1px solid color-mix(in srgb,var(--signal) 55%,transparent)}
-.intro .panel b{font:800 clamp(64px,15vw,250px)/1 var(--display);letter-spacing:-.03em;color:transparent;-webkit-text-stroke:1.5px color-mix(in srgb,var(--signal) 70%,transparent);opacity:.55;pointer-events:none}
-.intro .panel.l b{margin-right:-.02em}.intro .panel.r b{margin-left:-.02em}
-.intro .seam{position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;background:linear-gradient(transparent,var(--signal),var(--ok),var(--signal),transparent);box-shadow:0 0 26px 2px var(--signal);opacity:.9;transition:opacity .4s}
-.intro .spill{position:absolute;left:50%;top:0;bottom:0;width:0;transform:translateX(-50%);background:radial-gradient(closest-side,#fff,color-mix(in srgb,var(--signal) 70%,transparent) 40%,transparent);opacity:0;pointer-events:none}
-.intro-center{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;text-align:center;gap:14px;padding:24px;z-index:2;transition:opacity .5s,transform .6s,filter .6s}
-.intro-mark{width:64px;height:64px;border-radius:18px;box-shadow:0 0 50px -6px var(--glow)}
-.intro-center h2{font:800 clamp(30px,6vw,64px)/1.02 var(--display);letter-spacing:-.02em;max-width:14ch}
-.tapbtn{position:relative;margin-top:14px;display:grid;justify-items:center;gap:16px;background:none;border:0;color:var(--fg);cursor:pointer;padding:10px}
-.tapbtn .tapdot{position:relative;width:78px;height:78px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,var(--signal) 55%,var(--primary));box-shadow:0 0 0 1px color-mix(in srgb,var(--signal) 60%,transparent),0 0 46px 4px var(--glow);transition:transform .2s}
-.tapbtn:hover .tapdot,.tapbtn:focus-visible .tapdot{transform:scale(1.08)}
+/* a soft dark edge so the logo stays legible; it opens up like an iris when you tap */
+.intro .veil{position:absolute;inset:0;background:radial-gradient(90% 75% at 50% 48%,transparent 30%,color-mix(in srgb,var(--ink) 62%,transparent) 100%);transition:transform 1.5s cubic-bezier(.6,0,.2,1) .15s,opacity 1.2s ease .3s}
+.intro .spill{position:absolute;left:50%;top:50%;width:0;height:0;border-radius:50%;transform:translate(-50%,-50%);background:radial-gradient(closest-side,#fff,color-mix(in srgb,var(--signal) 65%,transparent) 45%,transparent);opacity:0;pointer-events:none}
+.intro-center{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;text-align:center;gap:clamp(14px,3vh,28px);padding:24px;z-index:2;transition:opacity .9s ease .1s,transform 1.2s cubic-bezier(.5,0,.2,1),filter 1s ease}
+.intro-logo{margin:0;width:min(88vw,900px);line-height:0;font-size:0;color:#fff;filter:drop-shadow(0 0 34px color-mix(in srgb,var(--signal) 55%,transparent)) drop-shadow(0 6px 30px rgba(0,0,0,.35))}
+.intro-logo .logo-big{width:100%;height:auto;display:block;overflow:visible}
+.intro-logo .in{color:var(--signal)}
+:root[data-mode="light"] .intro-logo{color:#2B1B2D;filter:drop-shadow(0 0 30px color-mix(in srgb,var(--signal) 40%,transparent))}
+:root[data-mode="light"] .intro-logo .in{color:var(--primary)}
+.intro-tag{font:600 12px var(--mono);letter-spacing:.34em;text-transform:uppercase;color:var(--muted);margin-top:-6px}
+.tapbtn{position:relative;margin-top:clamp(4px,2vh,18px);display:grid;justify-items:center;gap:20px;background:none;border:0;color:var(--fg);cursor:pointer;padding:10px 16px}
+.tapbtn .tapdot{position:relative;width:84px;height:84px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,var(--signal) 55%,var(--primary));box-shadow:0 0 0 1px color-mix(in srgb,var(--signal) 60%,transparent),0 0 50px 6px var(--glow);transition:transform .2s}
+.tapbtn:hover .tapdot{transform:scale(1.08)}
 .tapbtn:active .tapdot{transform:scale(.94)}
-.tapbtn .rings{position:absolute;left:50%;top:10px;width:78px;height:78px;margin-left:-39px;pointer-events:none}
+.tapbtn .rings{position:absolute;left:50%;top:10px;width:84px;height:84px;margin-left:-42px;pointer-events:none}
 .tapbtn .rings i{position:absolute;inset:0;border-radius:50%;border:2px solid var(--signal);opacity:0;animation:tapring 2.8s ease-out infinite}
 .tapbtn .rings i:nth-child(2){animation-delay:.9s}.tapbtn .rings i:nth-child(3){animation-delay:1.8s}
 @keyframes tapring{0%{transform:scale(1);opacity:.7}100%{transform:scale(3.4);opacity:0}}
-.tapbtn .lbl{font:700 13px var(--mono);letter-spacing:.28em;text-transform:uppercase;color:var(--muted)}
+/* "TAP TO ENTER" is drawn in the logo's own lettering */
+.tapbtn .lbl{display:block;width:clamp(210px,34vw,300px);color:var(--fg);line-height:0}
+.tapbtn .lbl .lw{width:100%;height:auto;display:block;overflow:visible}
 .intro-skip{position:absolute;right:max(18px,env(safe-area-inset-right));bottom:max(18px,env(safe-area-inset-bottom));z-index:3;background:none;border:1px solid var(--line);color:var(--muted);border-radius:99px;padding:8px 16px;font:600 12px var(--mono);letter-spacing:.14em;text-transform:uppercase;cursor:pointer;transition:color .2s,border-color .2s}
 .intro-skip:hover{color:var(--fg);border-color:var(--signal)}
 
-/* opening: the centre dissolves, the door splits on a flash of light, the page pushes in */
-.intro.go .intro-center{opacity:0;transform:scale(1.18);filter:blur(10px);pointer-events:none}
+/* opening: the logo flies through you, the edge opens like an iris, light spills, the page pushes in */
+.intro.go .intro-center{opacity:0;transform:scale(2.4);filter:blur(14px);pointer-events:none}
 .intro.go .intro-skip{opacity:0;pointer-events:none}
-.intro.go .panel.l{transform:translateX(-102%)}
-.intro.go .panel.r{transform:translateX(102%)}
-.intro.go .seam{opacity:0}
-.intro.go .spill{animation:spill 1.5s ease-out .3s both}
-@keyframes spill{0%{width:0;opacity:0}18%{opacity:1}100%{width:150%;opacity:0}}
+.intro.go .veil{transform:scale(2.6);opacity:0}
+.intro.go .spill{animation:spill 1.4s ease-out .25s both}
+@keyframes spill{0%{width:0;height:0;opacity:0}20%{opacity:.95}100%{width:230vmax;height:230vmax;opacity:0}}
 .intro.out{opacity:0;transition:opacity .5s;pointer-events:none}
 body.entered .hero2{animation:push 1.7s cubic-bezier(.2,.7,.2,1) both}
 @keyframes push{from{transform:scale(1.12);filter:blur(7px)}}
@@ -279,6 +277,7 @@ body.entered .hero2{animation:push 1.7s cubic-bezier(.2,.7,.2,1) both}
 @keyframes grain{0%{transform:translate(0,0)}20%{transform:translate(-4%,3%)}40%{transform:translate(3%,-5%)}60%{transform:translate(-5%,-2%)}80%{transform:translate(4%,4%)}100%{transform:translate(0,0)}}
 :root[data-mode="light"] .grain{opacity:.1}
 @media(prefers-reduced-motion:reduce){.intro{display:none!important}.grain{animation:none}.tapbtn .rings i{animation:none}body.entered .hero2{animation:none}}
+
 /* keyboard focus on the Tap button: a glow around the round button, not a rectangle */
 .tapbtn:focus{outline:none}
 .tapbtn:focus-visible .tapdot{box-shadow:0 0 0 4px color-mix(in srgb,var(--signal) 55%,transparent),0 0 60px 8px var(--glow);transform:scale(1.08)}
