@@ -255,4 +255,13 @@
     });
     splitEl.addEventListener('pointerleave', function () { passBtn.style.setProperty('--px', '0px'); passBtn.style.setProperty('--py', '0px'); });
   }
+
+  // ---- The WORK / PLAY / PAY split arrives when you scroll to it ---------------------------------
+  var splitSec = $('#split');
+  if (splitSec) {
+    if ('IntersectionObserver' in window && !reduce) {
+      var sio = new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.isIntersecting) { splitSec.classList.add('in'); sio.disconnect(); } }); }, { threshold: .25 });
+      sio.observe(splitSec);
+    } else splitSec.classList.add('in');
+  }
 })();
