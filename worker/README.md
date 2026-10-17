@@ -106,6 +106,15 @@ Migration `0006_photos.sql` adds `events.require_photo` and the `user_photos` ta
 
 Migration `0004_payments.sql` creates `wallets`, `vendors` and `ledger`.
 
+## Link previews, privacy and terms
+
+- Every public page has Open Graph tags and the share image `public/og.png` (1200x630). Static pages point at
+  `https://tap-in.ololadeopemipofalobi.workers.dev`; change those URLs when the custom domain is attached.
+- Ticket sales pages (`/e/?id=…`) get the event's name, place and date written into their title and preview tags by
+  the Worker (`salePageHtml` in `src/routes/public.js`), using the host the link was opened on.
+- `/privacy/` and `/terms/` are plain pages linked from the footers, every sign-in form and the app's Me tab.
+  They describe what the code actually stores; update them whenever that changes. Contact: hello@tap-in.world.
+
 ## Deploy
 
 The database `tap-in-db` already exists and has the schema applied (migration `0001_init.sql`). To put the Worker and site live:

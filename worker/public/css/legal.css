@@ -1,0 +1,16 @@
+/* Privacy policy and terms */
+.legal{max-width:720px;margin:0 auto;padding:clamp(24px,5vw,56px) 16px 40px}
+.legal h1{font-size:clamp(34px,6vw,56px);line-height:1.02;margin:10px 0 8px}
+.legal .updated{color:var(--muted);font-size:14px}
+.legal .summary{margin-top:22px;padding:18px 20px}
+.legal h2{font-family:var(--display);font-size:clamp(20px,3vw,26px);margin:36px 0 8px;scroll-margin-top:20px}
+.legal h3{font-size:16px;margin:18px 0 4px}
+.legal p,.legal li{font-size:15.5px;line-height:1.6}
+.legal p+p{margin-top:10px}
+.legal ul{padding-left:20px;margin:8px 0 0;display:grid;gap:6px}
+.legal a{color:var(--fg)}
+.legal table{margin-top:10px;font-size:14.5px}
+.legal td,.legal th{padding:9px 8px}
+.legalfoot{max-width:720px;margin:0 auto;padding:10px 16px 60px;font-size:13px;display:grid;gap:12px}
+.legalfoot nav{gap:18px}
+.legalfoot nav a{color:var(--fg);font-weight:600;text-decoration:none}

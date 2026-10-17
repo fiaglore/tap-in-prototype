@@ -26,7 +26,7 @@ export function selfieModal({ title = 'Add your photo', note = '' } = {}) {
     const msg = h('p', { class: 'hint', style: 'text-align:center;min-height:1.4em', role: 'status' });
     const picker = h('input', { type: 'file', accept: 'image/*', capture: 'user', hidden: true });
     const snap = h('button', { class: 'btn primary block', type: 'button' }, 'Take photo');
-    const use = h('button', { class: 'btn primary block', type: 'button', hidden: true }, 'Use this photo');
+    const use = h('button', { class: 'btn primary block', type: 'button', hidden: true }, 'Agree and use this photo');
     const retake = h('button', { class: 'btn ghost block', type: 'button', hidden: true }, 'Retake');
     const choose = h('button', { class: 'btn ghost block', type: 'button' }, 'Choose or take a photo instead');
 
@@ -61,7 +61,10 @@ export function selfieModal({ title = 'Add your photo', note = '' } = {}) {
       note && h('p', { class: 'muted', style: 'text-align:center;max-width:340px;margin-top:6px' }, note),
       stage, msg,
       h('div', { class: 'stack', style: 'width:100%;max-width:340px;margin-top:10px' }, snap, use, retake, choose, picker),
-      h('p', { class: 'hint', style: 'text-align:center;max-width:340px;margin-top:14px' }, 'Door staff at events that ask for this will see your photo next to your name when your pass is scanned. Nobody else sees it, and you can delete it any time under Me.'));
+      // Consent: what the photo is for, who sees it, how long it is kept, and how to take it back.
+      h('p', { class: 'hint', style: 'text-align:center;max-width:340px;margin-top:14px' },
+        'Your photo is used only so door staff at events and offices that ask for it can match your face to your pass. Nobody else sees it, and it is never used for automatic face recognition. It is deleted 30 days after you last set it unless a pass still needs it, and you can delete it any time under Me. ',
+        h('a', { href: '/privacy/#photos', target: '_blank', rel: 'noopener' }, 'Privacy policy')));
     document.body.style.overflow = 'hidden';
     document.body.append(overlay);
     overlay.addEventListener('keydown', (e) => e.key === 'Escape' && close(null));

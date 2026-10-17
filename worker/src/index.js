@@ -144,6 +144,7 @@ export default {
     if (!url.pathname.startsWith('/api/') && url.pathname !== '/api') {
       // With payments off the vendor and till pages answer like any missing page.
       if (paymentsOff(env) && PAYMENT_PAGES.test(url.pathname)) return env.ASSETS.fetch(new Request(new URL('/__payments_off__', url), request));
+      if (url.pathname === '/e/' || url.pathname === '/e/index.html') return publicSale.salePageHtml(request, env);
       return env.ASSETS.fetch(request);
     }
     try {

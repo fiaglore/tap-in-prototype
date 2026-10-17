@@ -504,6 +504,8 @@ function viewMe() {
       h('a', { class: 'btn ghost', href: '/organiser/' }, 'Organiser console'),
       h('a', { class: 'btn ghost', href: '/business/' }, 'Tap In for Business'),
       h('button', { class: 'btn ghost', type: 'button', onclick: () => { flag(false); onboarding('ctx'); } }, 'Replay intro'),
+      h('a', { class: 'btn ghost', href: '/privacy/' }, 'Privacy'),
+      h('a', { class: 'btn ghost', href: '/terms/' }, 'Terms'),
       h('button', { class: 'btn ghost', type: 'button', onclick: async () => { await post('/auth/logout').catch(() => {}); state.user = null; state.passes = []; state.waiting = []; flag(false); onboarding('welcome'); } }, 'Sign out'))), { title: 'Me' });
 }
 

@@ -27,17 +27,26 @@ function confirmed(tierName, extraCodes) {
       h('div', { class: 'stack', style: 'margin-top:10px' }, extraCodes.map((c) => h('div', { class: 'input code', style: 'user-select:all' }, c)))));
 }
 
-function buyFlow(ev, tier, qty) {
-  mount(root, h('p', { class: 'muted' }, 'Setting up your ticket…'));
+// A failed purchase never leaves the page: the tickets are reloaded (stock may have moved) and the
+// reason is shown under the ticket type that was being bought.
+async function backToTickets(ev, tierId, message, qty) {
+  let fresh = ev;
+  try { fresh = await get(`/public/events/${ev.event.id}`); } catch { /* keep what we had */ }
+  tierPage(fresh, { tierId, message, qty });
+}
+
+function buyFlow(ev, tier, qty, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Getting your ticket…'; }
   const run = async () => {
     try {
-      const r = await post(`/public/events/${ev.id}/buy`, { tier_id: tier.id, qty });
+      const r = await post(`/public/events/${ev.event.id}/buy`, { tier_id: tier.id, qty });
       confirmed(tier.name, r.extra_codes || []);
     } catch (ex) {
       if (ex.code === 'photo_required') {
         // This event checks passes against a photo of the holder.
         const shot = await selfieModal({ title: 'Add your photo', note: 'This event checks tickets against a photo of you at the door.' });
         if (shot) { try { await put('/me/photo', { image: shot }); return run(); } catch (e2) { ex = e2; } }
+        else return backToTickets(ev, tier.id, 'This event needs a photo of you before you can get a ticket.', qty);
       }
       if (ex.status === 401) {
         signInFlow(root, {
@@ -46,15 +55,18 @@ function buyFlow(ev, tier, qty) {
           onDone: run
         });
       } else {
-        mount(root, h('div', { class: 'error', role: 'alert' }, ex.message),
-          h('button', { class: 'btn primary block', style: 'margin-top:16px', type: 'button', onclick: () => tierPage(ev) }, 'Back to tickets'));
+        backToTickets(ev, tier.id, ex.message, qty);
       }
     }
   };
   run();
 }
 
-function tierPage(ev) {
+// The quantity menu never offers more than are left (when the server says how many that is).
+const MAX_QTY = 8;
+const maxQty = (t) => Math.max(1, Math.min(MAX_QTY, t.left === null || t.left === undefined ? MAX_QTY : t.left));
+
+function tierPage(ev, notice = null) {
   document.title = ev.event.name + ' · Tap In';
   const when_ = [ev.event.venue, ev.event.city, ev.event.starts_at && when(ev.event.starts_at)].filter(Boolean).join(' · ');
   mount(root,
@@ -64,15 +76,20 @@ function tierPage(ev) {
     ev.event.sales === 'upcoming' && h('div', { class: 'notice warn', style: 'margin-top:14px' }, 'Tickets are not on sale yet' + (ev.event.sales_start ? '. Sales open ' + when(ev.event.sales_start) + '.' : '.')),
     ev.event.sales === 'closed' && h('div', { class: 'notice warn', style: 'margin-top:14px' }, 'Ticket sales for this event have closed.'),
     h('div', { class: 'stack', style: 'margin-top:20px' }, ev.tiers.map((t) => {
-      const qty = h('select', { class: 'input', style: 'width:84px', 'aria-label': `Quantity for ${t.name}` },
-        [1, 2, 3, 4, 5, 6, 7, 8].map((n) => h('option', { value: n }, String(n))));
+      const top = maxQty(t);
+      const want = notice && notice.tierId === t.id && notice.qty ? Math.min(notice.qty, top) : 1;
+      const qty = h('select', { class: 'input qty', 'aria-label': `Quantity for ${t.name}` },
+        Array.from({ length: top }, (_, k) => k + 1).map((n) => h('option', { value: n, selected: n === want }, String(n))));
       const canBuy = ev.event.sales === 'open' && !t.sold_out;
-      return h('div', { class: 'card row', style: 'justify-content:space-between' },
-        h('div', {}, h('div', { style: 'font-weight:700' }, t.name),
-          h('div', { class: 'muted' }, naira(t.price_kobo)),
-          t.sold_out ? h('div', { class: 'chip bad', style: 'margin-top:6px' }, 'Sold out') : t.left !== null && t.left > 0 && h('div', { class: 'chip', style: 'margin-top:6px' }, 'Only ' + t.left + ' left')),
-        canBuy && h('div', { class: 'row' }, qty,
-          h('button', { class: 'btn primary small', type: 'button', onclick: () => buyFlow(ev.event, t, Number.parseInt(qty.value, 10)) }, 'Get ticket')));
+      const err = notice && notice.tierId === t.id && notice.message;
+      return h('div', { class: 'card' },
+        h('div', { class: 'row', style: 'justify-content:space-between' },
+          h('div', {}, h('div', { style: 'font-weight:700' }, t.name),
+            h('div', { class: 'muted' }, naira(t.price_kobo)),
+            t.sold_out ? h('div', { class: 'chip bad', style: 'margin-top:6px' }, 'Sold out') : t.left !== null && t.left > 0 && h('div', { class: 'chip', style: 'margin-top:6px' }, 'Only ' + t.left + ' left')),
+          canBuy && h('div', { class: 'row buyrow' }, qty,
+            h('button', { class: 'btn primary', type: 'button', onclick: (e) => buyFlow(ev, t, Number.parseInt(qty.value, 10), e.currentTarget) }, 'Get ticket'))),
+        err && h('div', { class: 'error', role: 'alert' }, err));
     })),
     ev.tiers.length === 0 && h('p', { class: 'muted', style: 'margin-top:12px' }, 'Tickets for this event are not on sale yet.'));
 }

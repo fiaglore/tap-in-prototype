@@ -119,3 +119,33 @@ export async function listUpcoming({ env }) {
     }))
   });
 }
+
+// GET /e/?id=…  The sales page itself is static, but link previews (WhatsApp, X, iMessage) only read the
+// HTML, so the Worker writes the event's name, place and date into the title and Open Graph tags on the way out.
+const lagosDate = (sec) =>
+  new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Lagos', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    .format(new Date(sec * 1000));
+
+export async function salePageHtml(request, env) {
+  const res = await env.ASSETS.fetch(request);
+  const id = new URL(request.url).searchParams.get('id');
+  if (!id || !res.ok || typeof HTMLRewriter === 'undefined' || !(res.headers.get('content-type') || '').includes('text/html')) return res;
+  let ev = null;
+  try {
+    ev = await env.DB.prepare('SELECT name, venue, city, starts_at, kind FROM events WHERE id = ?1').bind(String(id).slice(0, 40)).first();
+  } catch {
+    return res;
+  }
+  if (!ev || ev.kind === 'workplace') return res;
+  const title = ev.name + ' · Tickets on Tap In';
+  const desc = [ev.venue, ev.city, ev.starts_at && lagosDate(ev.starts_at)].filter(Boolean).join(' · ') || 'Tickets for this event, sold on Tap In.';
+  const content = (v) => ({ element(el) { el.setAttribute('content', v); } });
+  return new HTMLRewriter()
+    .on('title', { element(el) { el.setInnerContent(title); } })
+    .on('meta[name="description"]', content(desc))
+    .on('meta[property="og:title"]', content(title))
+    .on('meta[property="og:description"]', content(desc))
+    .on('meta[property="og:url"]', content(new URL('/e/?id=' + encodeURIComponent(id), request.url).href))
+    .on('meta[property="og:image"]', content(new URL('/og.png', request.url).href))
+    .transform(res);
+}

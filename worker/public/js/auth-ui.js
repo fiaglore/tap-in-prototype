@@ -30,7 +30,8 @@ export function signInFlow(root, { title, lede, onDone }) {
       h('div', { class: 'field' }, h('label', { for: 'ident' }, emailOnly() ? 'Email address' : 'Phone number or email'), input,
         h('p', { class: 'hint', id: 'ident-hint' }, emailOnly() ? 'We email you a link that signs you in. We only use your email to sign you in and match invites sent to you.' : 'Nigerian numbers work with or without the 0. We only use this to sign you in and match invites sent to you.')),
       err && h('div', { class: 'error', role: 'alert' }, err),
-      h('div', { style: 'margin-top:16px' }, btn));
+      h('div', { style: 'margin-top:16px' }, btn),
+      h('p', { class: 'hint', style: 'margin-top:12px' }, 'By continuing you agree to the ', h('a', { href: '/terms/', target: '_blank', rel: 'noopener' }, 'terms'), ' and the ', h('a', { href: '/privacy/', target: '_blank', rel: 'noopener' }, 'privacy policy'), '.'));
     mount(root, h('h2', {}, title), lede && h('p', { class: 'muted', style: 'margin-top:6px' }, lede), form);
     input.focus();
   }
@@ -59,7 +60,9 @@ export function signInFlow(root, { title, lede, onDone }) {
       h('div', { style: 'margin-top:16px' }, btn),
       h('p', { class: 'hint', style: 'margin-top:10px;text-align:center' }, 'Wrong ' + (identifier.includes('@') ? 'email' : 'number') + '? ',
         h('a', { href: '#', onclick: (e) => { e.preventDefault(); stepIdentifier(); } }, 'Change it')));
-    mount(root, h('h2', {}, 'Check your ' + (sent.channel === 'email' ? 'email' : 'messages')), h('p', { class: 'muted', style: 'margin-top:6px' }, 'We sent a code to ' + identifier + '. It works for 10 minutes.'), form);
+    mount(root, sent.dev_code
+      ? [h('h2', {}, 'Enter your code'), h('p', { class: 'muted', style: 'margin-top:6px' }, 'Your code for ' + identifier + ' is below. It works for 10 minutes.')]
+      : [h('h2', {}, 'Check your ' + (sent.channel === 'email' ? 'email' : 'messages')), h('p', { class: 'muted', style: 'margin-top:6px' }, 'We sent a code to ' + identifier + '. It works for 10 minutes.')], form);
     input.focus();
   }
 
