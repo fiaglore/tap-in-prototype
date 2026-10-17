@@ -91,8 +91,12 @@ async function viewEvents() {
 }
 
 // ---- Create event -------------------------------------------------------------------------------------
+// A wedding, party or launch: one entrance, a free "Guest" ticket, not on the public Play page; then the guest list.
+const PRIVATE_DRAFT = { private: true, name: '', venue: '', city: 'Lagos', starts_at: '', zones: ['Entrance'], tiers: [{ name: 'Guest', zones: ['Entrance'], price: '', capacity: '' }], reentry: true, sales_start: '', sales_end: '', secure_qr: false, require_photo: false, listed: false };
+
 function viewNew(err = '', draft, office = false) {
   if (draft && draft.office !== undefined) office = draft.office;
+  const isPrivate = !office && !!(draft && draft.private);
   const T = office
     ? { page: 'New office', title: 'Name of the company or office', area: 'Doors', areaOne: 'door', group: 'Access groups', groupOne: 'access group', create: 'Create office', lede: 'Doors are the entrances you scan at. Access groups decide which doors people can open, and when.' }
     : { page: 'New event', title: 'Event name', area: 'Areas', areaOne: 'area', group: 'Ticket types', groupOne: 'ticket type', create: 'Create event', lede: 'Areas are the doors or zones you scan at. Ticket types decide which areas a pass can enter.' };
@@ -168,13 +172,16 @@ function viewNew(err = '', draft, office = false) {
         };
         try {
           const r = await post('/events', body);
-          showGateKey(r.event, r.gate_key, () => { location.hash = '#/e/' + r.event.id + (office ? '/people' : '/invites'); });
+          showGateKey(r.event, r.gate_key, () => { location.hash = '#/e/' + r.event.id + (office ? '/people' : isPrivate ? '/guests' : '/invites'); });
         } catch (ex) {
-          viewNew(ex.message, { office, name: name.value, venue: venue.value, city: city.value, starts_at: starts.value, zones: zs, tiers: tiers.map((t) => ({ name: t.name, zones: [...t.zones], price: t.price, capacity: t.capacity, days: [...t.days], from: t.from, to: t.to })), reentry: reentry.checked, secure_qr: secure.checked, require_photo: selfie.checked, listed: listedBox.checked, sales_start: salesStart.value, sales_end: salesEnd.value });
+          viewNew(ex.message, { office, private: isPrivate, name: name.value, venue: venue.value, city: city.value, starts_at: starts.value, zones: zs, tiers: tiers.map((t) => ({ name: t.name, zones: [...t.zones], price: t.price, capacity: t.capacity, days: [...t.days], from: t.from, to: t.to })), reentry: reentry.checked, secure_qr: secure.checked, require_photo: selfie.checked, listed: listedBox.checked, sales_start: salesStart.value, sales_end: salesEnd.value });
         }
       }
     },
-      h('div', { class: 'field' }, h('label', { for: 'n' }, T.title), name),
+      !office && h('div', { class: 'notice', style: 'margin-bottom:6px' }, isPrivate
+        ? ['Private event: guests get an invitation link, answer the RSVP and show their code at the door. ', h('button', { class: 'linkbtn', type: 'button', onclick: () => viewNew('', null, false) }, 'Switch to a ticketed event')]
+        : ['Planning a wedding, party or launch? ', h('button', { class: 'linkbtn', type: 'button', onclick: () => viewNew('', PRIVATE_DRAFT, false) }, 'Start from the private-event setup'), ' (invitations with RSVP and plus-ones, no tickets to sell).']),
+      h('div', { class: 'field' }, h('label', { for: 'n' }, isPrivate ? 'Name of the occasion (e.g. Tolu & Ada\u2019s wedding)' : T.title), name),
       h('div', { class: 'grid two' }, h('div', { class: 'field' }, h('label', { for: 'v' }, office ? 'Address or building' : 'Venue'), venue), h('div', { class: 'field' }, h('label', { for: 'c' }, 'City'), city)),
       !office && h('div', { class: 'field' }, h('label', { for: 's' }, 'Starts'), starts),
       h('h3', { style: 'margin-top:22px' }, T.area), zoneBox,
@@ -212,7 +219,7 @@ async function viewEvent(id, tab) {
     if (office !== OFFICE) { location.replace((office ? '/offices/' : '/organiser/') + '#/e/' + id); return; }
     const tabs = office
       ? [['overview', 'Overview'], ['people', 'Add people'], ['attendees', 'Who has access'], ['team', 'Door staff'], ['report', 'Report'], ['gate', 'Doors & key']]
-      : [['overview', 'Overview'], ['tickets', 'Tickets'], ['invites', 'Invite codes'], ['attendees', 'Attendees'], ['team', 'Gate team'], ['report', 'Report'], ['gate', 'Gate key & rules']];
+      : [['overview', 'Overview'], ['tickets', 'Tickets'], ['guests', 'Guest list'], ['invites', 'Invite codes'], ['attendees', 'Attendees'], ['team', 'Gate team'], ['report', 'Report'], ['gate', 'Gate key & rules']];
     const items = [{ href: '#/', text: OFFICE ? '\u2190 All offices' : '\u2190 All events' }, { label: data.event.name }]
       .concat(tabs.map(([k, label]) => ({ href: `#/e/${id}/${k}`, text: label, on: tab === k })))
       .concat([{ href: '/gate/', text: 'Open scanner' }]);
@@ -220,9 +227,10 @@ async function viewEvent(id, tab) {
     mount(main, layout(items, h('div', {},
       h('div', { class: 'spread' },
         h('div', {}, h('h1', { style: 'font-size:34px' }, data.event.name), h('p', { class: 'muted' }, [data.event.venue, data.event.city, data.event.starts_at && when(data.event.starts_at)].filter(Boolean).join(' \u00b7 '))),
-        !office && h('button', { class: 'btn ghost small', type: 'button', onclick: () => copy(location.origin + '/e/?id=' + id, 'Sales page link copied') }, 'Copy sales page link')),
+        // A private event with only free tickets has no sales page worth sharing: guests come in by invitation.
+        !office && (data.event.listed || data.tiers.some((t) => t.price_kobo > 0)) && h('button', { class: 'btn ghost small', type: 'button', onclick: () => copy(location.origin + '/e/?id=' + id, 'Sales page link copied') }, 'Copy sales page link')),
       body)));
-    ({ overview: tabOverview, tickets: tabTickets, invites: tabInvites, people: tabPeople, attendees: tabAttendees, team: tabTeam, report: tabReport, gate: tabGate }[tab] || tabOverview)(body, data);
+    ({ overview: tabOverview, tickets: tabTickets, invites: tabInvites, people: tabPeople, attendees: tabAttendees, team: tabTeam, report: tabReport, guests: tabGuests, gate: tabGate }[tab] || tabOverview)(body, data);
   } catch (ex) { fail(ex); }
 }
 
@@ -586,10 +594,184 @@ async function tabReport(body, data) {
         h('table', {}, h('thead', {}, h('tr', {}, [office ? 'Group' : 'Ticket', office ? 'People' : 'Issued', office ? 'Seen' : 'Came', '%'].map((c) => h('th', {}, c)))),
           h('tbody', {}, r.tiers.map((x) => h('tr', {}, h('td', {}, x.name), h('td', { class: 'mono' }, String(x.issued)), h('td', { class: 'mono' }, String(x.came)), h('td', { class: 'mono' }, x.pct + '%'))))))),
 
+    r.guest_list && h('div', { class: 'card', style: 'margin-top:14px' }, h('h3', {}, 'Guest list'),
+      h('p', { class: 'muted', style: 'margin-top:6px' }, `${r.guest_list.invitations} invitation${r.guest_list.invitations === 1 ? '' : 's'} (${r.guest_list.rsvp_yes} said yes) and ${r.guest_list.imported} imported ticket${r.guest_list.imported === 1 ? '' : 's'}; ${r.guest_list.arrived} arrived. They are included in the numbers above.`)),
     h('p', { class: 'hint', style: 'margin-top:14px' },
       office ? '' : 'Value protected is an estimate: refused fake, reused and screenshot attempts multiplied by the average paid ticket price. ',
       `No-shows: ${t.no_shows}. Cancelled ${office ? 'passes' : 'tickets'}: ${t.cancelled}.`,
       r.truncated ? ' This event has more scans than the report reads at once; the CSV has them all up to the same limit.' : '')));
+}
+
+// ---- Guest list: invitations (no account, RSVP, plus-ones) and tickets imported from another platform ----
+// A small CSV reader: quoted fields, commas, semicolons or tabs.
+function parseCsv(text) {
+  const firstLine = text.split(/\r?\n/, 1)[0] || '';
+  const sep = (firstLine.match(/\t/g) || []).length > (firstLine.match(/,/g) || []).length ? '\t' : (firstLine.match(/;/g) || []).length > (firstLine.match(/,/g) || []).length ? ';' : ',';
+  const rows = [];
+  let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') q = false; else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === sep) { row.push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+    else cell += c;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows.map((r) => r.map((x) => x.trim())).filter((r) => r.some(Boolean));
+}
+// Find the code, name and ticket-type columns from a header row; without one, assume code, name, type.
+function importRows(text) {
+  const rows = parseCsv(text);
+  if (!rows.length) return [];
+  const head = rows[0].map((x) => x.toLowerCase());
+  const find = (words) => head.findIndex((x) => words.some((w) => x.includes(w)));
+  let code = find(['code', 'barcode', 'ticket id', 'ticket number', 'ticket no', 'reference', 'ref']);
+  const hasHeader = code >= 0 || find(['name']) >= 0;
+  if (!hasHeader) return rows.map((r) => ({ code: r[0], name: r[1], tier: r[2] }));
+  const name = find(['full name', 'attendee', 'name', 'buyer', 'guest']);
+  const first = head.indexOf('first name'), last = head.indexOf('last name');
+  const tier = find(['ticket type', 'ticket class', 'tier', 'category', 'type']);
+  if (code < 0) code = 0;
+  return rows.slice(1).map((r) => ({
+    code: r[code],
+    name: first >= 0 ? [r[first], r[last]].filter(Boolean).join(' ') : name >= 0 ? r[name] : '',
+    tier: tier >= 0 && tier !== code ? r[tier] : ''
+  }));
+}
+const waNumber = (contact) => (contact && contact.startsWith('+') ? contact.slice(1) : '');
+
+async function tabGuests(body, data) {
+  const id = data.event.id;
+  const tierSelect = (sel) => h('select', { class: 'input' }, data.tiers.map((t) => h('option', { value: t.id, selected: t.id === sel }, t.name)));
+  const summary = h('div', {});
+  const listBox = h('div', {});
+  let all = [];
+  let filter = 'all';
+  let search = '';
+  const invMsg = (ev, g) => `You're invited to ${data.event.name}${data.event.starts_at ? ' on ' + when(data.event.starts_at, { dateStyle: 'full' }) : ''}. Open your invitation, let us know if you're coming, and show your code at the door: ${g.link}`;
+
+  async function load() {
+    const r = await get(`/events/${id}/guests`);
+    all = r.guests;
+    const s = r.summary;
+    mount(summary, h('div', { class: 'grid cols' },
+      [['Invitations', `${s.invitations}`, `${s.invited_people} ${s.invited_people === 1 ? 'person' : 'people'}`, true],
+       ['Coming', `${s.yes}`, `${s.yes_people} ${s.yes_people === 1 ? 'person' : 'people'}`],
+       ['Can’t come', `${s.no}`, ''],
+       ['No reply yet', `${s.pending}`, ''],
+       ['Imported tickets', `${s.imported}`, 'from other platforms'],
+       ['Arrived', `${s.arrived}`, 'scanned in']].map(([l, v, sub, dk]) => h('div', { class: 'card stat' + (dk ? ' dk' : '') }, h('b', {}, v), h('span', {}, l), sub && h('small', {}, sub)))));
+    drawList();
+  }
+
+  function drawList() {
+    const q = search.trim().toLowerCase();
+    const rows = all.filter((g) => {
+      if (filter === 'invite' && g.kind !== 'invite') return false;
+      if (filter === 'import' && g.kind !== 'import') return false;
+      if (filter === 'yes' && g.rsvp !== 'yes') return false;
+      if (filter === 'pending' && !(g.kind === 'invite' && g.rsvp === 'pending')) return false;
+      if (filter === 'arrived' && !g.entered_at) return false;
+      return !q || g.name.toLowerCase().includes(q) || (g.table_label || '').toLowerCase().includes(q) || (g.code_hint || '').toLowerCase().includes(q);
+    });
+    const tabs = [['all', 'All'], ['invite', 'Invitations'], ['yes', 'Coming'], ['pending', 'No reply'], ['import', 'Imported'], ['arrived', 'Arrived']];
+    mount(listBox,
+      h('div', { class: 'spread', style: 'margin-top:22px;gap:10px;flex-wrap:wrap' },
+        h('div', { class: 'row' }, tabs.map(([k, l]) => h('button', { class: 'btn small ' + (filter === k ? 'primary' : 'ghost'), type: 'button', onclick: () => { filter = k; drawList(); } }, l))),
+        h('input', { class: 'input', style: 'max-width:240px', type: 'search', placeholder: 'Search name, table or code', value: search, 'aria-label': 'Search guests', oninput: (e) => { search = e.target.value; const pos = e.target.selectionStart; drawList(); const el = listBox.querySelector('input[type=search]'); el.focus(); el.setSelectionRange(pos, pos); } })),
+      rows.length
+        ? h('div', { class: 'scroll-x', style: 'margin-top:10px' }, h('table', {},
+            h('thead', {}, h('tr', {}, ['Guest', 'Party', 'Table', 'Reply', 'Arrived', ''].map((c) => h('th', {}, c)))),
+            h('tbody', {}, rows.slice(0, 1000).map((g) => h('tr', { class: g.status === 'revoked' ? 'muted' : '' },
+              h('td', {}, h('strong', {}, g.name), h('div', { class: 'hint' }, g.kind === 'import' ? `Imported ticket · code ends ${g.code_hint} · ${g.tier}` : `${g.tier}${g.contact ? ' · ' + g.contact : ''}`)),
+              h('td', { class: 'mono' }, g.kind === 'invite' && g.rsvp === 'yes' && g.attending ? `${g.attending} of ${g.party_size}` : String(g.party_size)),
+              h('td', {}, g.table_label || ''),
+              h('td', {}, g.status === 'revoked' ? h('span', { class: 'chip' }, 'Cancelled') : g.kind === 'import' ? '' : g.rsvp === 'yes' ? h('span', { class: 'chip ok' }, 'Coming') : g.rsvp === 'no' ? h('span', { class: 'chip bad' }, 'Not coming') : h('span', { class: 'chip' }, 'No reply')),
+              h('td', {}, g.entered_at ? clock(g.entered_at) : ''),
+              h('td', { class: 'row', style: 'gap:6px;flex-wrap:nowrap' },
+                g.status === 'active' && g.link && h('button', { class: 'btn ghost small', type: 'button', onclick: () => copy(g.link, 'Invitation link copied') }, 'Copy link'),
+                g.status === 'active' && g.link && h('a', { class: 'btn ghost small', target: '_blank', rel: 'noopener', href: `https://wa.me/${waNumber(g.contact)}?text=${encodeURIComponent(invMsg(null, g))}` }, 'WhatsApp'),
+                g.status === 'active' && h('button', { class: 'btn danger small', type: 'button', onclick: async () => {
+                  if (!confirm(`Cancel ${g.name}'s ${g.kind === 'invite' ? 'invitation' : 'ticket'}? Their code stops working at the door.`)) return;
+                  try { await post(`/events/${id}/guests/${g.id}/revoke`, {}); toast('Cancelled'); load(); } catch (ex) { toast(ex.message); }
+                } }, 'Cancel')))))),
+            rows.length > 1000 && h('p', { class: 'hint' }, `Showing the first 1,000 of ${rows.length}. Search to narrow it down.`))
+        : h('p', { class: 'muted', style: 'margin-top:12px' }, all.length ? 'Nobody matches.' : 'No guests yet. Invite people above, or import a list.'),
+      all.some((g) => g.kind === 'invite' && g.status === 'active') && h('button', { class: 'btn ghost small', style: 'margin-top:10px', type: 'button', onclick: () => {
+        const lines = [['Name', 'Phone or email', 'Party size', 'Table', 'Reply', 'Invitation link'].join(',')]
+          .concat(all.filter((g) => g.kind === 'invite' && g.status === 'active').map((g) => [g.name, g.contact, g.party_size, g.table_label, g.rsvp, g.link].map(csvCell).join(',')));
+        download(`${data.event.name.replace(/[^\w]+/g, '-').toLowerCase()}-invitations.csv`, lines.join('\r\n') + '\r\n');
+      } }, 'Download invitation links (CSV)'));
+  }
+
+  // Invite guests
+  const invTier = tierSelect(data.tiers[0] && data.tiers[0].id);
+  const invLines = h('textarea', { class: 'input', rows: '6', id: 'gl', placeholder: 'Adaeze Okafor, 0803 412 7790, 3, Table 4\nBayo Ade, bayo@example.com\nAunty Nkechi, , 2' });
+  const invOut = h('div', {});
+  const invBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Create invitations');
+  // Import a list
+  const impTier = tierSelect(data.tiers[0] && data.tiers[0].id);
+  const impText = h('textarea', { class: 'input', rows: '5', id: 'il', placeholder: 'Ticket code, Name, Ticket type\nTIX-88812-AB, Chidi Nwosu, VIP\nTIX-99001-CD, Ngozi Eze, Regular' });
+  const impFile = h('input', { type: 'file', accept: '.csv,.txt,text/csv', class: 'input', 'aria-label': 'CSV file to import' });
+  impFile.onchange = async () => { const f = impFile.files && impFile.files[0]; if (f) impText.value = await f.text(); };
+  const impOut = h('div', {});
+  const impBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Import list');
+
+  body.append(summary,
+    h('div', { class: 'grid two', style: 'margin-top:14px' },
+      h('form', { class: 'card', onsubmit: async (e) => {
+        e.preventDefault();
+        const guests = invLines.value.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+          const [name, contact, party, table] = l.split(/[,;\t]/).map((x) => x.trim());
+          return { name, contact: contact || undefined, party_size: party || undefined, table: table || undefined };
+        });
+        if (!guests.length) return mount(invOut, h('div', { class: 'error' }, 'Add at least one guest, one per line.'));
+        invBtn.disabled = true;
+        try {
+          const r = await post(`/events/${id}/guests`, { tier_id: invTier.value, guests });
+          mount(invOut, h('div', { class: 'notice', style: 'margin-top:12px' }, `${r.added.length} invitation${r.added.length === 1 ? '' : 's'} created. Send each guest their link from the list below (Copy link or WhatsApp).`,
+            r.skipped.length > 0 && h('div', { style: 'margin-top:6px' }, h('b', {}, `${r.skipped.length} skipped: `), r.skipped.map((x) => `line ${x.line}${x.name ? ' (' + x.name + ')' : ''}: ${x.reason}`).join('; '))));
+          if (r.added.length) invLines.value = '';
+          await load();
+        } catch (ex) { mount(invOut, h('div', { class: 'error', role: 'alert' }, ex.message)); }
+        invBtn.disabled = false;
+      } },
+        h('h3', {}, 'Invite guests'),
+        h('p', { class: 'muted', style: 'margin-top:4px' }, 'For weddings, parties and launches. Each guest gets a link: no app or account. They tell you if they are coming and how many, and show the code on that page at the door. One scan lets their whole party in.'),
+        h('div', { class: 'field' }, h('label', {}, 'Guests get'), invTier),
+        h('div', { class: 'field' }, h('label', { for: 'gl' }, 'One guest per line: name, phone or email (optional), party size (optional), table (optional)'), invLines),
+        h('div', { style: 'margin-top:12px' }, invBtn), invOut),
+      h('form', { class: 'card', onsubmit: async (e) => {
+        e.preventDefault();
+        const rows = importRows(impText.value).filter((r) => r.code);
+        if (!rows.length) return mount(impOut, h('div', { class: 'error' }, 'No ticket codes found. Paste the list or choose a CSV file.'));
+        impBtn.disabled = true;
+        let imported = 0; const skipped = [];
+        try {
+          for (let i = 0; i < rows.length; i += 1000) {
+            mount(impOut, h('p', { class: 'hint', style: 'margin-top:10px' }, `Importing ${Math.min(i + 1000, rows.length)} of ${rows.length}…`));
+            const r = await post(`/events/${id}/guests/import`, { tier_id: impTier.value, rows: rows.slice(i, i + 1000) });
+            imported += r.imported;
+            skipped.push(...r.skipped.map((x) => ({ ...x, line: x.line + i })));
+          }
+          mount(impOut, h('div', { class: 'notice', style: 'margin-top:12px' }, `${imported} ticket${imported === 1 ? '' : 's'} imported. The gate scanner now accepts their codes.`,
+            skipped.length > 0 && h('div', { style: 'margin-top:6px' }, h('b', {}, `${skipped.length} skipped: `), skipped.slice(0, 20).map((x) => `row ${x.line}: ${x.reason}`).join('; '), skipped.length > 20 ? '…' : '')));
+          if (imported) { impText.value = ''; impFile.value = ''; }
+          await load();
+        } catch (ex) { mount(impOut, h('div', { class: 'error', role: 'alert' }, ex.message)); }
+        impBtn.disabled = false;
+      } },
+        h('h3', {}, 'Import tickets sold elsewhere'),
+        h('p', { class: 'muted', style: 'margin-top:4px' }, 'Selling on another platform, Instagram or by bank transfer? Export the buyer list and import it here. The gate scanner then checks those printed codes like Tap In tickets: each works once per area, fakes are refused, and every scan is in your report.'),
+        h('div', { class: 'field' }, h('label', {}, 'Ticket type when the list does not say'), impTier),
+        h('div', { class: 'field' }, h('label', {}, 'CSV file'), impFile),
+        h('div', { class: 'field' }, h('label', { for: 'il' }, 'Or paste the list (a header row with "code", "name" and "ticket type" helps)'), impText),
+        h('p', { class: 'hint' }, 'Codes are stored scrambled. A ticket type in the list that matches one of yours by name is used; otherwise the one chosen above.'),
+        h('div', { style: 'margin-top:12px' }, impBtn), impOut)),
+    listBox);
+  try { await load(); } catch (ex) { mount(summary, h('div', { class: 'error' }, ex.message)); }
 }
 
 boot();

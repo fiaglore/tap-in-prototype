@@ -10,6 +10,7 @@ import * as events from './routes/events.js';
 import * as gate from './routes/gate.js';
 import * as publicSale from './routes/public.js';
 import * as stewards from './routes/stewards.js';
+import * as guests from './routes/guests.js';
 import * as wallet from './routes/wallet.js';
 import * as vendors from './routes/vendors.js';
 import * as till from './routes/till.js';
@@ -44,6 +45,12 @@ const ROUTES = [
   ['POST', '/api/events/:id/stewards', 'user', stewards.createSteward],
   ['POST', '/api/events/:id/stewards/:stewardId/revoke', 'user', stewards.revokeSteward],
   ['GET', '/api/events/:id/report', 'user', stewards.eventReport],
+  ['GET', '/api/events/:id/guests', 'user', guests.listGuests],
+  ['POST', '/api/events/:id/guests', 'user', guests.addInvitations],
+  ['POST', '/api/events/:id/guests/import', 'user', guests.importGuests],
+  ['POST', '/api/events/:id/guests/:guestId/revoke', 'user', guests.revokeGuest],
+  ['POST', '/api/invitation', 'none', guests.openInvitation],
+  ['POST', '/api/invitation/rsvp', 'none', guests.rsvp],
   ['GET', '/api/events/:id/scans.csv', 'user', stewards.scansCsv],
   ['GET', '/api/events/:id/invites', 'user', events.listInvites],
   ['POST', '/api/events/:id/invites', 'user', events.createInvites],

@@ -107,3 +107,6 @@ html{overflow-x:clip}
   .theme-btn{width:44px;height:44px}
   .menu-btn{min-height:44px}
 }
+
+/* a button that looks like a link */
+.linkbtn{background:none;border:0;padding:0;font:inherit;color:inherit;font-weight:700;text-decoration:underline;cursor:pointer}

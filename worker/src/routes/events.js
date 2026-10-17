@@ -205,8 +205,10 @@ export async function listEvents({ env, user, url }) {
   const rows = (
     await env.DB.prepare(
       `SELECT e.id, e.name, e.kind, e.venue, e.city, e.starts_at, e.created_at,
-        (SELECT COUNT(*) FROM passes p WHERE p.event_id = e.id AND p.status = 'active') AS registered,
-        (SELECT COUNT(DISTINCT s.pass_id) FROM scans s WHERE s.event_id = e.id AND s.result = 'granted') AS checked_in,
+        (SELECT COUNT(*) FROM passes p WHERE p.event_id = e.id AND p.status = 'active')
+          + (SELECT COUNT(*) FROM guests g WHERE g.event_id = e.id AND g.status = 'active') AS registered,
+        (SELECT COUNT(DISTINCT s.pass_id) FROM scans s WHERE s.event_id = e.id AND s.result = 'granted')
+          + (SELECT COUNT(DISTINCT s.guest_id) FROM scans s WHERE s.event_id = e.id AND s.result = 'granted') AS checked_in,
         (SELECT COUNT(*) FROM invites i WHERE i.event_id = e.id AND i.status = 'unused') AS invites_open
        FROM events e WHERE e.owner_id = ?1 AND (?2 IS NULL OR e.kind = ?2) ORDER BY e.created_at DESC`
     )
@@ -219,13 +221,14 @@ export async function listEvents({ env, user, url }) {
 async function recentScans(env, eventId, limit) {
   return (
     await env.DB.prepare(
-      `SELECT s.id, s.result, s.reason, s.at, z.name AS zone, u.name AS holder, t.name AS tier, st.name AS steward
+      `SELECT s.id, s.result, s.reason, s.at, z.name AS zone, COALESCE(u.name, g.name) AS holder, t.name AS tier, st.name AS steward
        FROM scans s
        LEFT JOIN zones z ON z.id = s.zone_id
        LEFT JOIN stewards st ON st.id = s.steward_id
        LEFT JOIN passes p ON p.id = s.pass_id
        LEFT JOIN users u ON u.id = p.user_id
-       LEFT JOIN tiers t ON t.id = p.tier_id
+       LEFT JOIN guests g ON g.id = s.guest_id
+       LEFT JOIN tiers t ON t.id = COALESCE(p.tier_id, g.tier_id)
        WHERE s.event_id = ?1 ORDER BY s.at DESC, s.id DESC LIMIT ?2`
     )
       .bind(eventId, limit)
@@ -236,16 +239,19 @@ async function recentScans(env, eventId, limit) {
 async function stats(env, eventId) {
   const q = (sql) => env.DB.prepare(sql).bind(eventId);
   const [reg, chk, den, scn, inv, byTier, byZone, volume] = await Promise.all([
-    q("SELECT COUNT(*) AS n FROM passes WHERE event_id = ?1 AND status = 'active'").first(),
-    q("SELECT COUNT(DISTINCT pass_id) AS n FROM scans WHERE event_id = ?1 AND result = 'granted'").first(),
+    q("SELECT (SELECT COUNT(*) FROM passes WHERE event_id = ?1 AND status = 'active') + (SELECT COUNT(*) FROM guests WHERE event_id = ?1 AND status = 'active') AS n").first(),
+    q("SELECT COUNT(DISTINCT pass_id) + COUNT(DISTINCT guest_id) AS n FROM scans WHERE event_id = ?1 AND result = 'granted'").first(),
     q("SELECT COUNT(*) AS n FROM scans WHERE event_id = ?1 AND result = 'denied'").first(),
     q('SELECT COUNT(*) AS n FROM scans WHERE event_id = ?1').first(),
     q('SELECT status, COUNT(*) AS n FROM invites WHERE event_id = ?1 GROUP BY status').all(),
     q(
       `SELECT t.id, t.name,
-        (SELECT COUNT(*) FROM passes p WHERE p.tier_id = t.id AND p.status = 'active') AS registered,
+        (SELECT COUNT(*) FROM passes p WHERE p.tier_id = t.id AND p.status = 'active')
+          + (SELECT COUNT(*) FROM guests g WHERE g.tier_id = t.id AND g.status = 'active') AS registered,
         (SELECT COUNT(DISTINCT s.pass_id) FROM scans s JOIN passes p ON p.id = s.pass_id
-          WHERE p.tier_id = t.id AND s.result = 'granted') AS checked_in
+          WHERE p.tier_id = t.id AND s.result = 'granted')
+          + (SELECT COUNT(DISTINCT s.guest_id) FROM scans s JOIN guests g ON g.id = s.guest_id
+          WHERE g.tier_id = t.id AND s.result = 'granted') AS checked_in
        FROM tiers t WHERE t.event_id = ?1 ORDER BY t.sort, t.name`
     ).all(),
     q(

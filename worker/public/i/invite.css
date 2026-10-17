@@ -1,0 +1,16 @@
+/* A guest's invitation: who it is for, the RSVP, and the code for the door */
+.inv-head{text-align:center;padding:12px 0 4px}
+.inv-head h1{font-size:clamp(30px,8vw,46px);line-height:1.05;margin:8px 0 6px}
+.inv-head .when{color:var(--muted)}
+.inv-card{margin-top:18px;text-align:center}
+.inv-card .dear{font-size:18px}
+.inv-card .party{margin-top:6px;color:var(--muted)}
+.rsvp-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.rsvp-row .btn[aria-pressed="true"]{outline:3px solid var(--signal);outline-offset:2px}
+.howmany{display:flex;gap:10px;align-items:center;justify-content:center;margin-top:12px;flex-wrap:wrap}
+.howmany select{width:auto;min-width:90px}
+.entry{margin-top:18px;text-align:center}
+.entry .qr{background:#fff;border-radius:18px;padding:10px;width:min(78vw,300px);margin:12px auto 0}
+.entry .qr svg{display:block;width:100%;height:auto}
+.entry .code{font-family:var(--mono);letter-spacing:.06em;margin-top:10px;font-size:15px;user-select:all}
+.status-chip{display:inline-block;margin-top:10px}

@@ -62,6 +62,36 @@ export function parsePassToken(raw) {
   return m ? { id: m[1].slice(0, 10), mac: m[1].slice(10) } : null;
 }
 
+// ---------- 3a. guest codes and invitation links (no Tap In account) ----------
+// Gate code = "TG" + guest id (10) + mac (10), mac = HMAC(pepper, "guest|" + id): shown as a QR on the invitation page.
+// Invitation link token = guest id (10) + mac (12), mac = HMAC(pepper, "glink|" + id): opens that page.
+// Both are derived, so the database holds nothing that works as a code or a link.
+// Codes imported from another ticketer are stored as HMAC(pepper, "guestcode|" + event + "|" + code), so the same
+// printed code at two different events never collides and a leak reveals no usable code.
+
+export async function guestMac(pepper, id) {
+  return base32(await hmacBytes(pepper, 'guest|' + id)).slice(0, 10);
+}
+export async function guestToken(pepper, id) {
+  const s = id + (await guestMac(pepper, id));
+  return `TG-${s.slice(0, 5)}-${s.slice(5, 10)}-${s.slice(10, 15)}-${s.slice(15, 20)}`;
+}
+export function parseGuestToken(raw) {
+  const m = /^TG([0-9A-Z]{20})$/.exec(normaliseCode(raw));
+  return m ? { id: m[1].slice(0, 10), mac: m[1].slice(10) } : null;
+}
+export async function inviteLinkMac(pepper, id) {
+  return base32(await hmacBytes(pepper, 'glink|' + id)).slice(0, 12);
+}
+export async function inviteLinkToken(pepper, id) {
+  return id + (await inviteLinkMac(pepper, id));
+}
+export function parseInviteLinkToken(raw) {
+  const m = /^([0-9A-Z]{10})([0-9A-Z]{12})$/.exec(String(raw ?? '').trim().toUpperCase());
+  return m ? { id: m[1], mac: m[2] } : null;
+}
+export const hashGuestCode = (pepper, eventId, code) => hmacHex(pepper, `guestcode|${eventId}|${normaliseCode(code)}`);
+
 // ---------- 3b. live (rotating) pass tokens ----------
 // token = "TQ" + id (10) + window (6, base32 of the 30-second window number) + mac (10).
 // mac = HMAC(pepper, "live|" + id + "|" + window). Only a phone that asked the server in the last

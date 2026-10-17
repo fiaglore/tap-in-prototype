@@ -100,14 +100,16 @@ function rates(times) {
 
 const pct = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : 0);
 
-export function buildReport(ev, { scans, passes, tiers, zones, stewards }) {
+export function buildReport(ev, { scans, passes, tiers, zones, stewards, guests = [] }) {
   const tierById = new Map(tiers.map((t) => [t.id, t]));
-  const zoneName = new Map(zones.map((z) => [z.id, z.name]));
+  // A ticket is a Tap In pass or a guest (invitation or imported ticket); both are counted the same way.
+  const holderKey = (s) => s.pass_id || (s.guest_id ? 'g:' + s.guest_id : null);
+  passes = passes.concat(guests.map((g) => ({ id: 'g:' + g.id, tier_id: g.tier_id, status: g.status })));
   const activePasses = passes.filter((p) => p.status === 'active');
   const granted = scans.filter((s) => s.result === 'granted');
   const denied = scans.filter((s) => s.result === 'denied');
-  const inPasses = new Set(granted.map((s) => s.pass_id));
-  const firstEntries = new Set(granted.map((s) => s.pass_id + '|' + s.zone_id));
+  const inPasses = new Set(granted.map(holderKey));
+  const firstEntries = new Set(granted.map((s) => holderKey(s) + '|' + s.zone_id));
 
   // Refusals, by reason and by group.
   const byReason = {};
@@ -157,7 +159,7 @@ export function buildReport(ev, { scans, passes, tiers, zones, stewards }) {
     }
   }
   const reusedPerPass = new Map();
-  for (const s of denied) if (s.reason === 'already_used' && s.pass_id) reusedPerPass.set(s.pass_id, (reusedPerPass.get(s.pass_id) || 0) + 1);
+  for (const s of denied) if (s.reason === 'already_used' && holderKey(s)) reusedPerPass.set(holderKey(s), (reusedPerPass.get(holderKey(s)) || 0) + 1);
   const heavy = [...reusedPerPass.values()].filter((n) => n >= 3).length;
   if (heavy) flags.push({ level: 'warn', text: `${heavy} ticket${heavy === 1 ? ' was' : 's were'} shown again 3 or more times after first entry. That usually means a shared screenshot or a ticket passed back out.` });
   // Bursts: 5 or more fake codes at one area within two minutes.
@@ -198,6 +200,12 @@ export function buildReport(ev, { scans, passes, tiers, zones, stewards }) {
       avg_ticket_kobo: avgPrice,
       est_value_kobo: avgPrice === null ? null : valueAttempts * avgPrice
     },
+    guest_list: guests.length ? {
+      invitations: guests.filter((g) => g.kind === 'invite' && g.status === 'active').length,
+      imported: guests.filter((g) => g.kind === 'import' && g.status === 'active').length,
+      rsvp_yes: guests.filter((g) => g.kind === 'invite' && g.status === 'active' && g.rsvp === 'yes').length,
+      arrived: guests.filter((g) => g.status === 'active' && inPasses.has('g:' + g.id)).length
+    } : null,
     zones: zonesOut,
     tiers: tiersOut,
     stewards: stewardsOut,
@@ -209,14 +217,15 @@ export function buildReport(ev, { scans, passes, tiers, zones, stewards }) {
 
 async function reportData(env, eventId) {
   const q = (sql) => env.DB.prepare(sql).bind(eventId);
-  const [scans, passes, tiers, zones, stewards] = await Promise.all([
-    q(`SELECT id, pass_id, zone_id, steward_id, result, reason, at FROM scans WHERE event_id = ?1 ORDER BY at, id LIMIT ${MAX_REPORT_SCANS}`).all(),
+  const [scans, passes, tiers, zones, stewards, guests] = await Promise.all([
+    q(`SELECT id, pass_id, guest_id, zone_id, steward_id, result, reason, at FROM scans WHERE event_id = ?1 ORDER BY at, id LIMIT ${MAX_REPORT_SCANS}`).all(),
     q('SELECT id, tier_id, status FROM passes WHERE event_id = ?1').all(),
     q('SELECT id, name, price_kobo FROM tiers WHERE event_id = ?1 ORDER BY sort, name').all(),
     q('SELECT id, name FROM zones WHERE event_id = ?1 ORDER BY sort, name').all(),
-    q('SELECT id, name, revoked_at FROM stewards WHERE event_id = ?1 ORDER BY created_at').all()
+    q('SELECT id, name, revoked_at FROM stewards WHERE event_id = ?1 ORDER BY created_at').all(),
+    q('SELECT id, tier_id, kind, status, rsvp FROM guests WHERE event_id = ?1').all()
   ]);
-  return { scans: scans.results, passes: passes.results, tiers: tiers.results, zones: zones.results, stewards: stewards.results };
+  return { scans: scans.results, passes: passes.results, tiers: tiers.results, zones: zones.results, stewards: stewards.results, guests: guests.results };
 }
 
 // GET /api/events/:id/report
@@ -245,11 +254,12 @@ export async function scansCsv({ env, user, params }) {
   const ev = await ownedEvent(env, user, params.id);
   const rows = (
     await env.DB.prepare(
-      `SELECT s.at, s.result, s.reason, z.name AS zone, t.name AS tier, u.name AS holder, st.name AS steward
+      `SELECT s.at, s.result, s.reason, z.name AS zone, t.name AS tier, COALESCE(u.name, g.name) AS holder, st.name AS steward
        FROM scans s
        LEFT JOIN zones z ON z.id = s.zone_id
        LEFT JOIN passes p ON p.id = s.pass_id
-       LEFT JOIN tiers t ON t.id = p.tier_id
+       LEFT JOIN guests g ON g.id = s.guest_id
+       LEFT JOIN tiers t ON t.id = COALESCE(p.tier_id, g.tier_id)
        LEFT JOIN users u ON u.id = p.user_id
        LEFT JOIN stewards st ON st.id = s.steward_id
        WHERE s.event_id = ?1 ORDER BY s.at, s.id LIMIT ${MAX_REPORT_SCANS}`

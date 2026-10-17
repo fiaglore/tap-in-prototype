@@ -119,6 +119,24 @@ Migration `0004_payments.sql` creates `wallets`, `vendors` and `ledger`.
   tickets shown again 3+ times, bursts of fake codes). Printable, and `/api/events/:id/scans.csv` exports every scan
   (no phone numbers or emails; formula-safe cells).
 
+## Guest lists: invitations and imported tickets
+
+Both live in the `guests` table (migration 0009) and need no Tap In account. Console tab: **Guest list**.
+
+- **Invitations** (weddings, parties, launches). The host adds guests, one per line: name, phone or email, party
+  size (1 to 20), table. Each guest gets a link (`/i/#<token>`, sent by copy, WhatsApp, or the CSV of links). The
+  invitation page shows the event, their party and table, takes the RSVP (yes with how many, or no), and shows the
+  entry QR (`TG-…`). One scan lets the whole party in (the RSVP number if they answered, otherwise the party size).
+  Link and code are derived from the guest id with HMAC, so nothing secret is stored; cancelling the guest stops both.
+  New event form: "Start from the private-event setup" pre-fills one entrance, a free Guest ticket, unlisted.
+- **Imported tickets** (sold on another platform, Instagram, bank transfer). Paste or upload a CSV; columns are found by
+  header (code / barcode / reference, name, ticket type) or assumed in that order. Codes are stored as
+  HMAC(pepper, event + code), normalised for case, spaces and dashes, and are only valid at that event. A ticket type
+  named in the list is matched to the event's; otherwise the chosen default is used. Repeats are skipped.
+- At the gate, the scanner accepts Tap In passes, invitation codes and imported codes, with the same rules (area,
+  re-entry, single use, cancelled). The camera also reads common barcodes (Code 128, EAN-13, PDF417 and others) where
+  the phone supports them. Guests are counted in the overview, report and CSV.
+
 ## Link previews, privacy and terms
 
 - Every public page has Open Graph tags and the share image `public/og.png` (1200x630). Static pages point at

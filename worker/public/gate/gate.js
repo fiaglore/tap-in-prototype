@@ -112,7 +112,11 @@ function paintResult(box, r) {
     r.photo_missing && h('div', { class: 'notice warn', style: 'margin:10px auto;max-width:340px' }, 'No photo on file for this pass. Check ID.'),
     r.photo_new && h('div', { class: 'notice warn', style: 'margin:10px auto;max-width:340px' }, 'This photo was added or changed in the last 24 hours. Look closely.'),
     r.holder && h('p', { style: 'font-size:22px;font-weight:700;margin-top:8px' }, r.holder),
-    r.tier && h('p', { class: 'muted' }, r.tier + (r.zone ? ' · ' + r.zone : '')),
+    // Guests: one code can bring a party in. Say how many, and where they sit.
+    ok && r.party > 1 && h('p', { class: 'party' }, `Party of ${r.party}: let ${r.party} people in`),
+    r.table && h('p', { style: 'font-weight:700' }, r.table),
+    r.tier && h('p', { class: 'muted' }, r.tier + (r.zone ? ' · ' + r.zone : '') + (r.guest === 'import' ? ' · imported ticket' : r.guest === 'invite' ? ' · guest list' : '')),
+    ok && r.rsvp === 'no' && h('div', { class: 'notice warn', style: 'margin:10px auto;max-width:340px' }, 'They told the host they could not come. Check with the host if unsure.'),
     h('p', { style: 'margin-top:8px' }, r.message),
     r.previous_at && h('p', { class: 'hint' }, 'First used at ' + when(r.previous_at, { timeStyle: 'short' }))));
 }
@@ -143,7 +147,11 @@ async function startCamera(video, btn, submit) {
   video.hidden = false;
   await video.play().catch(() => {});
   btn.textContent = 'Stop camera';
-  const det = new BarcodeDetector({ formats: ['qr_code'] });
+  // QR for Tap In codes, plus the barcodes other ticketers print, where this phone can read them.
+  const wanted = ['qr_code', 'code_128', 'code_39', 'ean_13', 'pdf417', 'aztec', 'data_matrix'];
+  let formats = ['qr_code'];
+  try { const ok = await BarcodeDetector.getSupportedFormats(); formats = wanted.filter((f) => ok.includes(f)); if (!formats.length) formats = ['qr_code']; } catch {}
+  const det = new BarcodeDetector({ formats });
   looping = true;
   let last = '';
   let lastAt = 0;
