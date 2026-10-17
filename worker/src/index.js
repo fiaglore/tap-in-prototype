@@ -9,6 +9,7 @@ import * as me from './routes/me.js';
 import * as events from './routes/events.js';
 import * as gate from './routes/gate.js';
 import * as publicSale from './routes/public.js';
+import * as stewards from './routes/stewards.js';
 import * as wallet from './routes/wallet.js';
 import * as vendors from './routes/vendors.js';
 import * as till from './routes/till.js';
@@ -39,6 +40,11 @@ const ROUTES = [
   ['PATCH', '/api/events/:id/tiers/:tierId', 'user', events.patchTier],
   ['GET', '/api/events/:id/scans', 'user', events.listScans],
   ['POST', '/api/events/:id/gate-key', 'user', events.rotateGateKey],
+  ['GET', '/api/events/:id/stewards', 'user', stewards.listStewards],
+  ['POST', '/api/events/:id/stewards', 'user', stewards.createSteward],
+  ['POST', '/api/events/:id/stewards/:stewardId/revoke', 'user', stewards.revokeSteward],
+  ['GET', '/api/events/:id/report', 'user', stewards.eventReport],
+  ['GET', '/api/events/:id/scans.csv', 'user', stewards.scansCsv],
   ['GET', '/api/events/:id/invites', 'user', events.listInvites],
   ['POST', '/api/events/:id/invites', 'user', events.createInvites],
   ['POST', '/api/events/:id/invites/:inviteId/revoke', 'user', events.revokeInvite],

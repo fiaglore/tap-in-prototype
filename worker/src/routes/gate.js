@@ -1,9 +1,10 @@
-// Gate routes. A scanner at a door authenticates with the event's gate key (Authorization: Bearer ...),
-// asks "may this pass enter this zone?", and every answer is written to the scan log.
+// Gate routes. A scanner at a door authenticates with a steward's own key, or the event's shared gate key
+// (Authorization: Bearer ...), asks "may this pass enter this zone?", and every answer is written to the scan
+// log together with the steward who scanned it.
 
 import { HttpError, newId, normaliseCode, nowSec, safeEqual } from '../lib/util.js';
 import { clientIp, json, readJson } from '../lib/http.js';
-import { hashGateKey, liveMacFor, liveWindowFresh, parseLiveToken, parsePassToken, passMac } from '../lib/codes.js';
+import { hashGateKey, hashStewardKey, isStewardKey, liveMacFor, liveWindowFresh, parseLiveToken, parsePassToken, passMac } from '../lib/codes.js';
 import { isFull, record } from '../lib/limits.js';
 import { withinSchedule } from '../lib/schedule.js';
 import { NEW_PHOTO_SECS, photoDataUrl } from '../lib/photo.js';
@@ -26,14 +27,28 @@ async function gateEvent(request, env) {
   if (await isFull(env.DB, bucket, 20, 600)) throw new HttpError(429, 'rate_limited', 'Too many failed attempts. Wait a few minutes.');
   const m = /^Bearer\s+(.{1,100})$/i.exec(request.headers.get('authorization') || '');
   const key = m ? normaliseCode(m[1]) : '';
-  const ev = key
-    ? await env.DB.prepare('SELECT id, name, kind, venue, city, allow_reentry, secure_qr, require_photo, tz_offset_min FROM events WHERE gate_key_hash = ?1')
-        .bind(await hashGateKey(env.SECRET_PEPPER, key))
-        .first()
-    : null;
+  const cols = 'e.id, e.name, e.kind, e.venue, e.city, e.allow_reentry, e.secure_qr, e.require_photo, e.tz_offset_min';
+  let ev = null;
+  if (key && isStewardKey(key)) {
+    // A steward's own key. A removed steward is refused straight away.
+    ev = await env.DB.prepare(
+      `SELECT ${cols}, s.id AS steward_id, s.name AS steward_name, s.last_seen_at FROM stewards s JOIN events e ON e.id = s.event_id
+       WHERE s.key_hash = ?1 AND s.revoked_at IS NULL`
+    )
+      .bind(await hashStewardKey(env.SECRET_PEPPER, key))
+      .first();
+  } else if (key) {
+    ev = await env.DB.prepare(`SELECT ${cols}, NULL AS steward_id, NULL AS steward_name FROM events e WHERE e.gate_key_hash = ?1`)
+      .bind(await hashGateKey(env.SECRET_PEPPER, key))
+      .first();
+  }
   if (!ev) {
     await record(env.DB, bucket);
-    throw new HttpError(401, 'bad_gate_key', 'That gate key is not valid.');
+    throw new HttpError(401, 'bad_gate_key', 'That scanner key is not valid. Ask the organiser for a new one.');
+  }
+  const now = nowSec();
+  if (ev.steward_id && (!ev.last_seen_at || now - ev.last_seen_at > 60)) {
+    await env.DB.prepare('UPDATE stewards SET last_seen_at = ?1 WHERE id = ?2').bind(now, ev.steward_id).run();
   }
   return ev;
 }
@@ -42,7 +57,7 @@ async function gateEvent(request, env) {
 export async function gateInfo({ request, env }) {
   const ev = await gateEvent(request, env);
   const zones = (await env.DB.prepare('SELECT id, name FROM zones WHERE event_id = ?1 ORDER BY sort, name').bind(ev.id).all()).results;
-  return json({ event: { id: ev.id, name: ev.name, kind: ev.kind, venue: ev.venue, city: ev.city, allow_reentry: !!ev.allow_reentry }, zones });
+  return json({ event: { id: ev.id, name: ev.name, kind: ev.kind, venue: ev.venue, city: ev.city, allow_reentry: !!ev.allow_reentry }, zones, steward: ev.steward_id ? { name: ev.steward_name } : null });
 }
 
 const displayName = (name) => {
@@ -100,9 +115,9 @@ export async function gateScan({ request, env }) {
   if (!reason) {
     try {
       await env.DB.prepare(
-        `INSERT INTO scans (id, event_id, pass_id, zone_id, result, reason, once, at) VALUES (?1, ?2, ?3, ?4, 'granted', NULL, ?5, ?6)`
+        `INSERT INTO scans (id, event_id, pass_id, zone_id, result, reason, once, at, steward_id) VALUES (?1, ?2, ?3, ?4, 'granted', NULL, ?5, ?6, ?7)`
       )
-        .bind(newId(14), ev.id, pass.id, zone.id, ev.allow_reentry ? 0 : 1, now)
+        .bind(newId(14), ev.id, pass.id, zone.id, ev.allow_reentry ? 0 : 1, now, ev.steward_id)
         .run();
     } catch (err) {
       // The unique index says this pass already entered this zone (and re-entry is off).
@@ -120,9 +135,9 @@ export async function gateScan({ request, env }) {
   if (reason) {
     // Record the attempt. Only link it to a pass when that pass belongs to this event.
     await env.DB.prepare(
-      `INSERT INTO scans (id, event_id, pass_id, zone_id, result, reason, once, at) VALUES (?1, ?2, ?3, ?4, 'denied', ?5, 0, ?6)`
+      `INSERT INTO scans (id, event_id, pass_id, zone_id, result, reason, once, at, steward_id) VALUES (?1, ?2, ?3, ?4, 'denied', ?5, 0, ?6, ?7)`
     )
-      .bind(newId(14), ev.id, pass && pass.event_id === ev.id ? pass.id : null, zone.id, reason, now)
+      .bind(newId(14), ev.id, pass && pass.event_id === ev.id ? pass.id : null, zone.id, reason, now, ev.steward_id)
       .run();
     if (reason === 'invalid_token') await record(env.DB, junkBucket);
   }

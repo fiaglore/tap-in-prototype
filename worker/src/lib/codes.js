@@ -111,6 +111,14 @@ export function makeGateKey() {
 }
 export const hashGateKey = (pepper, key) => hmacHex(pepper, 'gate|' + normaliseCode(key));
 
+// A steward key is one person's scanner login for one event: "ST-" + 120 random bits.
+export function makeStewardKey() {
+  const r = randomBase32(24);
+  return 'ST-' + r.match(/.{4}/g).join('-');
+}
+export const isStewardKey = (key) => normaliseCode(key).startsWith('ST');
+export const hashStewardKey = (pepper, key) => hmacHex(pepper, 'steward|' + normaliseCode(key));
+
 // ---------- pay codes and till keys ----------
 // A pay code is what a customer shows a vendor: "TPAY" + user id (12) + amount in kobo (6, base32)
 // + minute window (6) + nonce (4) + mac (10). The amount is inside the signed code, so a vendor

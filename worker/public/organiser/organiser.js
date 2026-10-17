@@ -1,6 +1,7 @@
 import { h, wordmarkText, mount, toast, copy, when, ago, download } from '/js/dom.js';
 import { get, post, patch } from '/js/api.js';
 import { signInFlow } from '/js/auth-ui.js';
+import { qrSvg } from '/js/qr.js';
 
 const OFFICE = document.body.dataset.console === 'office';
 const CONSOLE = OFFICE ? 'Offices' : 'Organiser';
@@ -210,8 +211,8 @@ async function viewEvent(id, tab) {
     const office = data.event.kind === 'workplace';
     if (office !== OFFICE) { location.replace((office ? '/offices/' : '/organiser/') + '#/e/' + id); return; }
     const tabs = office
-      ? [['overview', 'Overview'], ['people', 'Add people'], ['attendees', 'Who has access'], ['gate', 'Doors & key']]
-      : [['overview', 'Overview'], ['tickets', 'Tickets'], ['invites', 'Invite codes'], ['attendees', 'Attendees'], ['gate', 'Gate key & rules']];
+      ? [['overview', 'Overview'], ['people', 'Add people'], ['attendees', 'Who has access'], ['team', 'Door staff'], ['report', 'Report'], ['gate', 'Doors & key']]
+      : [['overview', 'Overview'], ['tickets', 'Tickets'], ['invites', 'Invite codes'], ['attendees', 'Attendees'], ['team', 'Gate team'], ['report', 'Report'], ['gate', 'Gate key & rules']];
     const items = [{ href: '#/', text: OFFICE ? '\u2190 All offices' : '\u2190 All events' }, { label: data.event.name }]
       .concat(tabs.map(([k, label]) => ({ href: `#/e/${id}/${k}`, text: label, on: tab === k })))
       .concat([{ href: '/gate/', text: 'Open scanner' }]);
@@ -221,7 +222,7 @@ async function viewEvent(id, tab) {
         h('div', {}, h('h1', { style: 'font-size:34px' }, data.event.name), h('p', { class: 'muted' }, [data.event.venue, data.event.city, data.event.starts_at && when(data.event.starts_at)].filter(Boolean).join(' \u00b7 '))),
         !office && h('button', { class: 'btn ghost small', type: 'button', onclick: () => copy(location.origin + '/e/?id=' + id, 'Sales page link copied') }, 'Copy sales page link')),
       body)));
-    ({ overview: tabOverview, tickets: tabTickets, invites: tabInvites, people: tabPeople, attendees: tabAttendees, gate: tabGate }[tab] || tabOverview)(body, data);
+    ({ overview: tabOverview, tickets: tabTickets, invites: tabInvites, people: tabPeople, attendees: tabAttendees, team: tabTeam, report: tabReport, gate: tabGate }[tab] || tabOverview)(body, data);
   } catch (ex) { fail(ex); }
 }
 
@@ -249,10 +250,10 @@ function tabOverview(body, data) {
           ? h('div', { class: 'bars', role: 'img', 'aria-label': 'Entries per hour' }, st.entry_volume.map((v) => h('i', { title: `${when(v.hour, { hour: 'numeric', weekday: 'short' })}: ${v.n}`, style: `height:${Math.round((v.n / vmax) * 100)}%` })))
           : h('p', { class: 'muted', style: 'margin-top:8px' }, 'No entries yet.')),
       h('p', { class: 'hint', style: 'margin-top:10px' }, `Invites: ${st.invites.unused} unused, ${st.invites.claimed} claimed, ${st.invites.revoked} cancelled.`));
-    mount(feed, h('table', {}, h('thead', {}, h('tr', {}, ['When', 'Who', 'Area', 'Result'].map((c) => h('th', {}, c)))),
+    mount(feed, h('table', {}, h('thead', {}, h('tr', {}, ['When', 'Who', 'Area', 'Result', 'Scanned by'].map((c) => h('th', {}, c)))),
       h('tbody', {}, d.recent.length ? d.recent.map((r) => h('tr', { class: r.result === 'denied' ? 'denied-row' : '' },
         h('td', {}, ago(r.at)), h('td', {}, r.holder || '—', r.tier && h('div', { class: 'hint' }, r.tier)), h('td', {}, r.zone || ''),
-        h('td', {}, r.result === 'granted' ? 'Entered' : (reasons[r.reason] || 'Declined')))) : h('tr', {}, h('td', { colspan: '4', class: 'muted' }, 'Nothing scanned yet.')))));
+        h('td', {}, r.result === 'granted' ? 'Entered' : (reasons[r.reason] || 'Declined')), h('td', { class: 'hint' }, r.steward || 'Shared key'))) : h('tr', {}, h('td', { colspan: '5', class: 'muted' }, 'Nothing scanned yet.')))));
   }
   draw(data);
   body.append(stats, h('h3', { style: 'margin:22px 0 4px' }, 'Live activity ', h('span', { class: 'hint' }, '(updates every 8 seconds)')), feed);
@@ -433,8 +434,8 @@ function tabGate(body, data) {
     try { await patch('/events/' + id, { require_photo: e.target.checked }); toast('Saved'); } catch (ex) { e.target.checked = !e.target.checked; toast(ex.message); }
   } });
   body.append(h('div', { class: 'grid two' },
-    h('div', { class: 'card' }, h('h3', {}, 'Gate key'),
-      h('p', { class: 'muted', style: 'margin-top:6px' }, 'Gate staff enter this key once on the scanner page. We only keep a scrambled copy, so a lost key is replaced, not recovered. Current key ends in ', h('strong', { class: 'mono' }, data.event.gate_key_hint || '????'), '.'),
+    h('div', { class: 'card' }, h('h3', {}, 'Shared gate key (backup)'),
+      h('p', { class: 'muted', style: 'margin-top:6px' }, 'Anyone with this key can scan, and their scans are not linked to a name. Give each person their own scanner link under ', h('a', { href: `#/e/${id}/team` }, data.event.kind === 'workplace' ? 'Door staff' : 'Gate team'), ' instead, and keep this for emergencies. We only keep a scrambled copy, so a lost key is replaced, not recovered. Current key ends in ', h('strong', { class: 'mono' }, data.event.gate_key_hint || '????'), '.'),
       keyBox,
       h('button', { class: 'btn danger', style: 'margin-top:12px', type: 'button', onclick: async () => {
         if (!confirm('Create a new gate key? The old one stops working immediately on every scanner.')) return;
@@ -450,6 +451,145 @@ function tabGate(body, data) {
       h('p', { class: 'muted', style: 'margin-top:6px' }, 'People add a selfie when they claim a pass. Door staff see it next to their name on every scan, so they match the face to the person, not just a name. Without it, a pass shared by screenshot looks identical to the real one.'),
       h('div', { class: 'checks', style: 'margin-top:10px' }, h('label', {}, selfieOn, 'Require a selfie and show it at the gate')),
       h('p', { class: 'hint', style: 'margin-top:8px' }, 'Turn it on before people claim. Anyone who already has a pass without a photo shows as "No photo on file" so staff can check ID. Photos are only shown to staff scanning for this event, are never listed or downloadable, and people can delete theirs any time.'))));
+}
+
+// ---- Gate team: one scanner link per steward, so every scan is traced to a person ----------------------
+async function tabTeam(body, data) {
+  const id = data.event.id;
+  const office = data.event.kind === 'workplace';
+  const who = office ? 'door staff member' : 'steward';
+  const name = h('input', { class: 'input', id: 'stn', maxlength: '60', autocomplete: 'off', placeholder: office ? 'e.g. Musa, front desk' : 'e.g. Ada, Gate A' });
+  const fresh = h('div', {});
+  const list = h('div', { class: 'scroll-x' });
+  const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Add and get scanner link');
+
+  function drawList(rows) {
+    mount(list, rows.length
+      ? h('table', {}, h('thead', {}, h('tr', {}, ['Name', 'Status', 'Last seen', 'Let in', 'Refused', ''].map((c) => h('th', {}, c)))),
+          h('tbody', {}, rows.map((r) => h('tr', { class: r.revoked_at ? 'muted' : '' },
+            h('td', {}, h('strong', {}, r.name), h('div', { class: 'hint mono' }, 'Key ends ' + r.key_hint)),
+            h('td', {}, r.revoked_at ? h('span', { class: 'chip' }, 'Removed') : h('span', { class: 'chip ok' }, 'Active')),
+            h('td', {}, r.last_seen_at ? ago(r.last_seen_at) : 'Not yet'),
+            h('td', { class: 'mono' }, String(r.admits)), h('td', { class: 'mono' }, String(r.refusals)),
+            h('td', {}, !r.revoked_at && h('button', { class: 'btn danger small', type: 'button', onclick: async () => {
+              if (!confirm(`Remove ${r.name}? Their scanner stops working at the next scan. Their past scans stay in the report.`)) return;
+              try { drawList((await post(`/events/${id}/stewards/${r.id}/revoke`, {})).stewards); toast('Removed'); } catch (ex) { toast(ex.message); }
+            } }, 'Remove'))))))
+      : h('p', { class: 'muted', style: 'margin-top:8px' }, `No ${who}s yet. Add one above.`));
+  }
+
+  function showKey(st, key) {
+    const link = `${location.origin}/gate/#k=${encodeURIComponent(key)}`;
+    const msg = `Your Tap In scanner for ${data.event.name}. Open this on the phone you will scan with: ${link}`;
+    mount(fresh, h('div', { class: 'card stkey' },
+      h('div', { class: 'qrbox' }, qrSvg(link, 'Scanner link for ' + st.name)),
+      h('div', {},
+        h('h3', {}, `Scanner link for ${st.name}`),
+        h('p', { class: 'muted', style: 'margin-top:6px' }, `${st.name} scans this QR code with the phone they will use at the ${office ? 'door' : 'gate'}, or opens the link. The scanner signs in as them and stays signed in on that phone.`),
+        h('div', { class: 'notice warn', style: 'margin-top:10px' }, 'This is shown once. If it is lost, remove them and add them again.'),
+        h('div', { class: 'row', style: 'margin-top:12px' },
+          h('button', { class: 'btn ghost small', type: 'button', onclick: () => copy(link, 'Link copied') }, 'Copy link'),
+          h('a', { class: 'btn ghost small', href: 'https://wa.me/?text=' + encodeURIComponent(msg), target: '_blank', rel: 'noopener' }, 'Send on WhatsApp'),
+          h('button', { class: 'btn ghost small', type: 'button', onclick: () => mount(fresh) }, 'Done')))));
+  }
+
+  body.append(
+    h('form', { class: 'card', onsubmit: async (e) => {
+      e.preventDefault();
+      btn.disabled = true;
+      try {
+        const r = await post(`/events/${id}/stewards`, { name: name.value });
+        name.value = '';
+        showKey(r.steward, r.key);
+        drawList((await get(`/events/${id}/stewards`)).stewards);
+      } catch (ex) { mount(fresh, h('div', { class: 'error', role: 'alert' }, ex.message)); }
+      btn.disabled = false;
+    } },
+      h('h3', {}, office ? 'Door staff' : 'Gate team'),
+      h('p', { class: 'muted', style: 'margin-top:6px' }, `Give each ${who} their own scanner link. Every scan is then recorded with their name, so the report shows who let in whom, and you can switch off one person without changing everyone else's scanner.`),
+      h('div', { class: 'field' }, h('label', { for: 'stn' }, 'Name'), name),
+      h('div', { style: 'margin-top:12px' }, btn)),
+    fresh,
+    h('h3', { style: 'margin:22px 0 4px' }, office ? 'Your door staff' : 'Your gate team'),
+    list);
+  try { drawList((await get(`/events/${id}/stewards`)).stewards); } catch (ex) { mount(list, h('div', { class: 'error' }, ex.message)); }
+}
+
+// ---- Report: entries, speed, refusals, value protected, each steward's lane, and what to look at --------
+const GROUPS = [
+  ['fake', 'Fake or unreadable codes', 'Codes Tap In never issued.'],
+  ['reused', 'Tickets used again', 'A ticket shown after it already got someone in: shared screenshots, tickets passed back out.'],
+  ['screenshot', 'Screenshots and old codes', 'A copy of the code instead of the live pass.'],
+  ['cancelled', 'Cancelled tickets', 'Tickets you cancelled or refunded.'],
+  ['wrong_area', 'Wrong area', 'A real ticket at an area it does not include.'],
+  ['timing', 'Wrong time', 'Outside the allowed hours, or after the pass expired.']
+];
+const naira = (kobo) => '₦' + Math.round(kobo / 100).toLocaleString('en-NG');
+const clock = (t) => when(t, { timeStyle: 'short' });
+
+async function tabReport(body, data) {
+  const id = data.event.id;
+  const office = data.event.kind === 'workplace';
+  mount(body, h('p', { class: 'muted' }, 'Building the report…'));
+  let r;
+  try { r = await get(`/events/${id}/report`); } catch (ex) { return mount(body, h('div', { class: 'error' }, ex.message)); }
+  const t = r.totals;
+  const gmax = Math.max(1, ...GROUPS.map(([k]) => r.refusals.by_group[k] || 0));
+  const smax = Math.max(1, ...r.speed.series.points.map((p) => p.n));
+  const bucket = r.speed.series.bucket_secs >= 3600 ? `${r.speed.series.bucket_secs / 3600} hour` : `${r.speed.series.bucket_secs / 60} minutes`;
+  const lanes = r.stewards.concat(r.shared_key ? [{ name: 'Shared gate key', shared: true, ...r.shared_key }] : []);
+
+  mount(body, h('div', { class: 'report' },
+    h('div', { class: 'spread noprint' },
+      h('p', { class: 'hint' }, 'Generated ' + when(r.generated_at) + (t.first_entry ? ` · entries from ${clock(t.first_entry)} to ${clock(t.last_entry)}` : '')),
+      h('div', { class: 'row' },
+        h('a', { class: 'btn ghost small', href: `/api/events/${id}/scans.csv`, download: '' }, 'Download every scan (CSV)'),
+        h('button', { class: 'btn primary small', type: 'button', onclick: () => window.print() }, 'Print or save as PDF'))),
+    h('h2', { class: 'printonly' }, data.event.name + ' · Report'),
+
+    h('div', { class: 'grid cols', style: 'margin-top:12px' },
+      [[office ? 'People seen' : 'Came in', `${t.came} of ${t.issued}`, `${t.attendance_pct}% ${office ? 'of people with access' : 'of tickets'}`, true],
+       ['Refused attempts', String(r.fraud.attempts), 'fake, reused, screenshot or cancelled'],
+       ...(office ? [] : [['Value protected', r.fraud.est_value_kobo === null ? '—' : naira(r.fraud.est_value_kobo), r.fraud.est_value_kobo === null ? 'no paid tickets to estimate from' : `estimate: ${r.fraud.value_attempts} attempts × ${naira(r.fraud.avg_ticket_kobo)} average ticket`]]),
+       ['Busiest minute', t.admits ? `${r.speed.peak_per_min} / min` : '—', r.speed.peak_at ? 'at ' + clock(r.speed.peak_at) : 'no entries yet']]
+        .map(([l, v, sub, dk]) => h('div', { class: 'card stat' + (dk ? ' dk' : '') }, h('b', {}, v), h('span', {}, l), h('small', {}, sub)))),
+
+    r.flags.length > 0 && h('div', { class: 'card flags', style: 'margin-top:14px' }, h('h3', {}, 'Worth a look'),
+      h('ul', {}, r.flags.map((f) => h('li', { class: f.level }, f.text))),
+      h('p', { class: 'hint', style: 'margin-top:8px' }, 'These are prompts to check, not proof that anyone did anything wrong.')),
+
+    h('div', { class: 'grid two', style: 'margin-top:14px' },
+      h('div', { class: 'card' }, h('h3', {}, `What was refused (${t.refusals})`),
+        GROUPS.map(([k, label, help]) => h('div', { class: 'bar', title: help }, h('span', {}, label), h('div', { class: 'track' }, h('div', { class: 'fill', style: `width:${Math.round(((r.refusals.by_group[k] || 0) / gmax) * 100)}%` })), h('span', { class: 'mono' }, String(r.refusals.by_group[k] || 0)))),
+        h('p', { class: 'hint', style: 'margin-top:8px' }, 'Counts are attempts, not people: one person may try more than once.')),
+      h('div', { class: 'card' }, h('h3', {}, 'Entries over time'),
+        r.speed.series.points.length
+          ? [h('div', { class: 'bars', role: 'img', 'aria-label': 'Entries over time' }, r.speed.series.points.map((p) => h('i', { title: `${clock(p.t)}: ${p.n}`, style: `height:${Math.round((p.n / smax) * 100)}%` }))),
+             h('p', { class: 'hint', style: 'margin-top:6px' }, `Each bar is ${bucket}. ${t.admits} entries${t.reentries ? `, ${t.reentries} of them re-entries` : ''}. Average ${r.speed.avg_per_active_min} a minute while the gate was busy.`)]
+          : h('p', { class: 'muted', style: 'margin-top:8px' }, 'No entries yet.'))),
+
+    h('div', { class: 'card', style: 'margin-top:14px' }, h('h3', {}, office ? 'Door staff' : 'Each lane (steward)'),
+      lanes.length
+        ? h('div', { class: 'scroll-x' }, h('table', {}, h('thead', {}, h('tr', {}, ['Who', 'Let in', 'Refused', 'Refused %', 'Busiest minute', 'Average / busy minute', 'First – last'].map((c) => h('th', {}, c)))),
+            h('tbody', {}, lanes.map((l) => h('tr', {},
+              h('td', {}, h('strong', {}, l.name), l.removed && h('span', { class: 'hint' }, ' (removed)'), l.shared && h('div', { class: 'hint' }, 'not linked to a person')),
+              h('td', { class: 'mono' }, String(l.admits)), h('td', { class: 'mono' }, String(l.refusals)), h('td', { class: 'mono' }, l.refusal_rate + '%'),
+              h('td', { class: 'mono' }, l.admits ? l.peak_per_min + ' / min' : '—'), h('td', { class: 'mono' }, l.admits ? String(l.avg_per_active_min) : '—'),
+              h('td', { class: 'hint' }, l.first_at ? `${clock(l.first_at)} – ${clock(l.last_at)}` : '—'))))))
+        : h('p', { class: 'muted', style: 'margin-top:8px' }, 'No scans yet. Add your gate team so each lane shows up here.')),
+
+    h('div', { class: 'grid two', style: 'margin-top:14px' },
+      h('div', { class: 'card' }, h('h3', {}, office ? 'By door' : 'By area'),
+        h('table', {}, h('thead', {}, h('tr', {}, ['Area', 'Let in', 'Refused', 'Busiest minute'].map((c) => h('th', {}, c)))),
+          h('tbody', {}, r.zones.map((z) => h('tr', {}, h('td', {}, z.name), h('td', { class: 'mono' }, String(z.admits)), h('td', { class: 'mono' }, String(z.refusals)), h('td', { class: 'mono' }, z.admits ? z.peak_per_min + ' / min' : '—')))))),
+      h('div', { class: 'card' }, h('h3', {}, office ? 'By access group' : 'By ticket type'),
+        h('table', {}, h('thead', {}, h('tr', {}, [office ? 'Group' : 'Ticket', office ? 'People' : 'Issued', office ? 'Seen' : 'Came', '%'].map((c) => h('th', {}, c)))),
+          h('tbody', {}, r.tiers.map((x) => h('tr', {}, h('td', {}, x.name), h('td', { class: 'mono' }, String(x.issued)), h('td', { class: 'mono' }, String(x.came)), h('td', { class: 'mono' }, x.pct + '%'))))))),
+
+    h('p', { class: 'hint', style: 'margin-top:14px' },
+      office ? '' : 'Value protected is an estimate: refused fake, reused and screenshot attempts multiplied by the average paid ticket price. ',
+      `No-shows: ${t.no_shows}. Cancelled ${office ? 'passes' : 'tickets'}: ${t.cancelled}.`,
+      r.truncated ? ' This event has more scans than the report reads at once; the CSV has them all up to the same limit.' : '')));
 }
 
 boot();

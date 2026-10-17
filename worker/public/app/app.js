@@ -4,6 +4,7 @@ import { selfieModal } from '/js/selfie.js';
 import { signInFlow } from '/js/auth-ui.js';
 import { cardEl, cardNumber, loadCard, saveCard, sanitise, PRESETS, SWATCHES, FINISHES, PATTERNS, TYPES } from '/js/card.js';
 import { orbitSvg, nextIndex, daysTo } from '/app/orbit.js';
+import { qrSvg } from '/js/qr.js';
 
 const root = document.getElementById('app');
 const state = { user: null, passes: [], waiting: [], history: [], wallet: null, tab: 'around', config: {}, sel: null, ctx: [] };
@@ -28,31 +29,6 @@ const icon = (name) => {
   s.append(p);
   return s;
 };
-
-// ---- QR code as inline SVG (one path, no innerHTML) --------------------------------------------
-function qrSvg(text, label = 'Your Tap In pass QR code') {
-  const qr = qrcode(0, 'M');
-  qr.addData(text);
-  qr.make();
-  const n = qr.getModuleCount();
-  const quiet = 2;
-  let d = '';
-  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) d += `M${c + quiet} ${r + quiet}h1v1h-1z`;
-  const svg = document.createElementNS(NS, 'svg');
-  svg.setAttribute('viewBox', `0 0 ${n + quiet * 2} ${n + quiet * 2}`);
-  svg.setAttribute('role', 'img');
-  svg.setAttribute('aria-label', label);
-  svg.setAttribute('shape-rendering', 'crispEdges');
-  const bg = document.createElementNS(NS, 'rect');
-  bg.setAttribute('width', n + quiet * 2);
-  bg.setAttribute('height', n + quiet * 2);
-  bg.setAttribute('fill', '#fff');
-  const path = document.createElementNS(NS, 'path');
-  path.setAttribute('d', d);
-  path.setAttribute('fill', '#2B1B2D');
-  svg.append(bg, path);
-  return svg;
-}
 
 // ---- Data ----------------------------------------------------------------------------------------
 async function refresh() {

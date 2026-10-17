@@ -59,3 +59,28 @@
 @media (max-width:860px){.hide-sm{display:none}}
 
 .signin-top{margin-top:2vh}
+
+/* Gate team: the one-time scanner link with its QR code */
+.stkey{display:grid;grid-template-columns:180px 1fr;gap:18px;align-items:start;margin-top:14px;border-color:var(--signal)}
+.stkey .qrbox{background:#fff;border-radius:14px;padding:8px}
+.stkey .qrbox svg{display:block;width:100%;height:auto}
+@media(max-width:560px){.stkey{grid-template-columns:1fr}.stkey .qrbox{max-width:220px}}
+
+/* Report */
+.report .stat small{display:block;margin-top:4px;font-size:12px;color:var(--muted);line-height:1.35}
+.report .stat.dk small{color:#fff;opacity:.85}
+.report .bar{grid-template-columns:170px 1fr 50px}
+.flags ul{margin:8px 0 0;padding-left:18px;display:grid;gap:6px}
+.flags li{font-size:14px;line-height:1.45}
+.flags li.warn::marker{color:var(--warn)}
+.printonly{display:none}
+@media print{
+  body.fx canvas,.fx-aurora,.topbar,.side,.noprint,.toast{display:none!important}
+  body,.card{background:#fff!important;color:#000!important;box-shadow:none!important}
+  .org{display:block}
+  .printonly{display:block;margin-bottom:10px}
+  .report .card{break-inside:avoid;border-color:#ccc}
+  .stat.dk{background:#fff!important;border:2px solid #000!important}
+  .stat.dk b,.stat.dk span,.report .stat.dk small{color:#000!important}
+  .bars i,.bar .fill{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}

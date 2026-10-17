@@ -106,6 +106,19 @@ Migration `0006_photos.sql` adds `events.require_photo` and the `user_photos` ta
 
 Migration `0004_payments.sql` creates `wallets`, `vendors` and `ledger`.
 
+## Gate team and the event report
+
+- **Gate team** (console tab; "Door staff" for offices): the organiser adds each steward by name and gets a one-time
+  scanner link and QR code (`/gate/#k=ST-…`). Opening it signs that phone's scanner in as the steward and keeps it
+  signed in. Only a scrambled copy of the key is stored, and removing a steward stops their scanner at the next scan.
+  Every scan records `steward_id`; the shared gate key still works as a backup and its scans show as "Shared gate key".
+- **Report** (console tab): tickets issued and used, no-shows, refusals grouped as fake / reused / screenshot /
+  cancelled / wrong area / wrong time, an estimated "value protected" (fake + reused + screenshot attempts × average
+  paid ticket price), the busiest minute, entries over time, each steward's lane (admits, refusals, busiest minute,
+  average per busy minute), and "worth a look" prompts (shared-key scans, a steward who never refuses while others do,
+  tickets shown again 3+ times, bursts of fake codes). Printable, and `/api/events/:id/scans.csv` exports every scan
+  (no phone numbers or emails; formula-safe cells).
+
 ## Link previews, privacy and terms
 
 - Every public page has Open Graph tags and the share image `public/og.png` (1200x630). Static pages point at

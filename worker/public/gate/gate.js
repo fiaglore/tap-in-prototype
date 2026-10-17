@@ -10,24 +10,30 @@ let recent = [];
 let stream = null;
 let looping = false;
 
-function load() { try { return JSON.parse(sessionStorage.getItem(KEY)) || {}; } catch { return {}; } }
-function save() { try { sessionStorage.setItem(KEY, JSON.stringify(cfg)); } catch {} }
+// The scanner stays signed in on this phone (a steward's own key can be switched off by the organiser at any time).
+function load() { try { return JSON.parse(localStorage.getItem(KEY) || sessionStorage.getItem(KEY)) || {}; } catch { return {}; } }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(cfg)); sessionStorage.removeItem(KEY); } catch {} }
+function signOut(msg = '') { cfg = {}; info = null; recent = []; save(); viewKey(msg); }
+// Who is scanning, with a way to hand the phone over.
+const whoBar = () => h('p', { class: 'hint', style: 'margin-top:12px' },
+  info && info.steward ? ['Signed in as ', h('strong', {}, info.steward.name), ' \u00b7 '] : ['Using the shared gate key \u00b7 '],
+  h('button', { class: 'linkbtn', type: 'button', onclick: () => { if (confirm('Sign out of this scanner?')) signOut(); } }, 'Sign out'));
 const auth = () => ({ Authorization: 'Bearer ' + cfg.key });
 
 mount(top, h('a', { class: 'wordmark', href: '/' }, wordmarkText(), ' ', h('span', { class: 'muted', style: 'font-weight:600;font-size:14px' }, 'Gate')), window.TapTheme.button());
 
 function viewKey(err = '') {
   stopCamera();
-  const input = h('input', { class: 'input code', id: 'gk', autocomplete: 'off', spellcheck: 'false', placeholder: 'GK-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX' });
+  const input = h('input', { class: 'input code', id: 'gk', autocomplete: 'off', spellcheck: 'false', placeholder: 'ST-XXXX-XXXX-\u2026 or GK-XXXX-XXXX-\u2026' });
   mount(main, h('div', { class: 'narrow card', style: 'margin-top:4vh' },
     h('h2', {}, 'Gate scanner'),
-    h('p', { class: 'muted', style: 'margin-top:6px' }, 'Enter the gate key from the organiser console. It stays on this device only until you close this tab.'),
+    h('p', { class: 'muted', style: 'margin-top:6px' }, 'Open the scanner link or QR code your organiser sent you and you are signed in. Or type your scanner key here. This phone stays signed in until you sign out.'),
     h('form', { onsubmit: async (e) => {
       e.preventDefault();
       cfg = { key: input.value.trim() };
       try { info = await get('/gate/info', auth()); save(); viewZone(); } catch (ex) { viewKey(ex.message); }
     } },
-      h('div', { class: 'field' }, h('label', { for: 'gk' }, 'Gate key'), input),
+      h('div', { class: 'field' }, h('label', { for: 'gk' }, 'Scanner key'), input),
       err && h('div', { class: 'error', role: 'alert' }, err),
       h('button', { class: 'btn primary block', style: 'margin-top:16px', type: 'submit' }, 'Continue'))));
   input.focus();
@@ -43,7 +49,7 @@ function viewZone() {
     h('p', { class: 'eyebrow' }, info.event.name),
     h('h2', { style: 'margin:4px 0 8px' }, 'Which area is this scanner for?'),
     h('div', { class: 'stack' }, info.zones.map((z) => h('button', { class: 'btn ghost block', type: 'button', onclick: () => { cfg.zoneId = z.id; save(); viewScan(); } }, z.name))),
-    h('button', { class: 'btn ghost small', style: 'margin-top:16px', type: 'button', onclick: () => { cfg = {}; info = null; save(); viewKey(); } }, 'Use a different key')));
+    whoBar()));
 }
 
 function viewScan(result) {
@@ -69,7 +75,7 @@ function viewScan(result) {
       paintRecent();
       beep(r.result === 'granted');
     } catch (ex) {
-      if (ex.status === 401) { cfg = {}; info = null; save(); return viewKey('The gate key is no longer valid. Ask the organiser for the current one.'); }
+      if (ex.status === 401) return signOut('This scanner is no longer signed in. Ask the organiser for a new scanner link.');
       paintResult(resBox, { result: 'error', message: ex.message });
     }
     input.value = '';
@@ -88,7 +94,7 @@ function viewScan(result) {
     h('form', { style: 'margin-top:14px', onsubmit: (e) => { e.preventDefault(); submit(input.value); } }, input,
       h('div', { class: 'row', style: 'margin-top:10px' }, h('button', { class: 'btn primary', type: 'submit' }, 'Check pass'), camBtn)),
     video, resBox,
-    h('h3', { style: 'margin-top:18px' }, 'Recent'), recentBox));
+    h('h3', { style: 'margin-top:18px' }, 'Recent'), recentBox, whoBar()));
   paintRecent();
   input.focus();
   // USB / bluetooth scanners type the code and press Enter; keep focus on the box.
@@ -161,6 +167,14 @@ function stopCamera(video, btn) {
 }
 
 (async function start() {
+  // A scanner link carries the key after the # (never sent to the server). Take it, then drop it from the address bar.
+  const m = /^#k=([^&]+)/.exec(location.hash);
+  if (m) {
+    cfg = { key: decodeURIComponent(m[1]) };
+    info = null;
+    save();
+    history.replaceState(null, '', location.pathname);
+  }
   if (!cfg.key) return viewKey();
-  try { await ensureInfo(); cfg.zoneId ? viewScan() : viewZone(); } catch { cfg = {}; save(); viewKey('That key no longer works.'); }
+  try { await ensureInfo(); cfg.zoneId ? viewScan() : viewZone(); } catch { signOut('That scanner link or key no longer works. Ask the organiser for a new one.'); }
 })();

@@ -31,7 +31,7 @@ function assertOrganiser(env, user) {
   }
 }
 
-async function ownedEvent(env, user, id) {
+export async function ownedEvent(env, user, id) {
   const ev = await env.DB.prepare(
     `SELECT id, name, prefix, kind, venue, city, starts_at, allow_reentry, secure_qr, require_photo, listed, sales_start, sales_end, gate_key_hint, created_at
      FROM events WHERE id = ?1 AND owner_id = ?2`
@@ -219,9 +219,10 @@ export async function listEvents({ env, user, url }) {
 async function recentScans(env, eventId, limit) {
   return (
     await env.DB.prepare(
-      `SELECT s.id, s.result, s.reason, s.at, z.name AS zone, u.name AS holder, t.name AS tier
+      `SELECT s.id, s.result, s.reason, s.at, z.name AS zone, u.name AS holder, t.name AS tier, st.name AS steward
        FROM scans s
        LEFT JOIN zones z ON z.id = s.zone_id
+       LEFT JOIN stewards st ON st.id = s.steward_id
        LEFT JOIN passes p ON p.id = s.pass_id
        LEFT JOIN users u ON u.id = p.user_id
        LEFT JOIN tiers t ON t.id = p.tier_id
