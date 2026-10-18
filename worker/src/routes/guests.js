@@ -42,7 +42,7 @@ export async function listGuests({ env, user, params, url }) {
       `SELECT g.id, g.kind, g.name, g.contact, g.party_size, g.table_label, g.code_hint, g.rsvp, g.attending, g.rsvp_at, g.status, g.created_at,
         t.name AS tier,
         (SELECT MIN(s.at) FROM scans s WHERE s.guest_id = g.id AND s.result = 'granted') AS entered_at
-       FROM guests g JOIN tiers t ON t.id = g.tier_id WHERE g.event_id = ?1 ORDER BY g.created_at, g.name LIMIT ${MAX_GUESTS_PER_EVENT}`
+       FROM guests g JOIN tiers t ON t.id = g.tier_id WHERE g.event_id = ?1 AND g.kind IN ('invite', 'import') ORDER BY g.created_at, g.name LIMIT ${MAX_GUESTS_PER_EVENT}`
     )
       .bind(ev.id)
       .all()
@@ -159,16 +159,16 @@ export async function revokeGuest({ env, user, params }) {
 
 // ---- The guest's side: open the invitation, RSVP. No account; the link is the key. ----------------------
 
-async function invitationFor(request, env, token) {
+export async function invitationFor(request, env, token) {
   const bucket = 'invite:ip:' + clientIp(request);
   if (await isFull(env.DB, bucket, 30, 600)) throw new HttpError(429, 'rate_limited', 'Too many attempts. Wait a few minutes.');
   const t = parseInviteLinkToken(token);
   const ok = t && safeEqual(await inviteLinkMac(env.SECRET_PEPPER, t.id), t.mac);
   const g = ok
     ? await env.DB.prepare(
-        `SELECT g.id, g.name, g.party_size, g.table_label, g.rsvp, g.attending, g.status, g.kind,
-          e.name AS event_name, e.venue, e.city, e.starts_at, e.allow_reentry, t.name AS tier
-         FROM guests g JOIN events e ON e.id = g.event_id JOIN tiers t ON t.id = g.tier_id WHERE g.id = ?1 AND g.kind = 'invite'`
+        `SELECT g.id, g.name, g.party_size, g.table_label, g.rsvp, g.attending, g.status, g.kind, g.host, g.purpose, g.valid_from, g.valid_until,
+          e.name AS event_name, e.venue, e.city, e.starts_at, e.allow_reentry, e.kind AS event_kind, t.name AS tier
+         FROM guests g JOIN events e ON e.id = g.event_id JOIN tiers t ON t.id = g.tier_id WHERE g.id = ?1 AND g.kind IN ('invite', 'visitor')`
       ).bind(t.id).first()
     : null;
   if (!g) {
@@ -180,8 +180,9 @@ async function invitationFor(request, env, token) {
 }
 
 const invitationOut = async (env, g) => ({
-  event: { name: g.event_name, venue: g.venue, city: g.city, starts_at: g.starts_at, reentry: !!g.allow_reentry },
-  guest: { name: g.name, party_size: g.party_size, table: g.table_label, tier: g.tier, rsvp: g.rsvp, attending: g.attending },
+  kind: g.kind,
+  event: { name: g.event_name, venue: g.venue, city: g.city, starts_at: g.starts_at, reentry: !!g.allow_reentry, kind: g.event_kind },
+  guest: { name: g.name, party_size: g.party_size, table: g.table_label, tier: g.tier, rsvp: g.rsvp, attending: g.attending, host: g.host, purpose: g.purpose, valid_from: g.valid_from, valid_until: g.valid_until },
   code: await guestToken(env.SECRET_PEPPER, g.id)
 });
 
@@ -195,6 +196,7 @@ export async function openInvitation({ request, env }) {
 export async function rsvp({ request, env }) {
   const b = await readJson(request);
   const g = await invitationFor(request, env, b.token);
+  if (g.kind !== 'invite') throw new HttpError(400, 'not_an_invitation', 'Visitor passes do not need a reply.');
   if (b.response !== 'yes' && b.response !== 'no') throw new HttpError(400, 'invalid_response', 'Choose whether you are coming.');
   let attending = null;
   if (b.response === 'yes') {
@@ -205,4 +207,73 @@ export async function rsvp({ request, env }) {
   }
   await env.DB.prepare('UPDATE guests SET rsvp = ?1, attending = ?2, rsvp_at = ?3 WHERE id = ?4').bind(b.response, attending, nowSec(), g.id).run();
   return json(await invitationOut(env, { ...g, rsvp: b.response, attending }));
+}
+
+// ---- Tap In for Business: visitors ----------------------------------------------------------------------
+// A visitor is invited ahead (the office sends a one-tap link: no app, no account) or checked in at the door as a
+// walk-in. Their pass works only inside its window, by default the rest of the day in the office's time zone.
+
+const MAX_VISIT_DAYS = 30;
+// End of the local day (the office's time zone) that `at` falls in.
+export const endOfDay = (at, tzOffsetMin = 60) => (Math.floor((at + tzOffsetMin * 60) / 86400) + 1) * 86400 - tzOffsetMin * 60;
+const startOfDay = (at, tzOffsetMin = 60) => endOfDay(at, tzOffsetMin) - 86400;
+
+function visitorFields(b) {
+  const name = cleanText(b.name, 'name', { max: 80 });
+  let contact = null;
+  if (b.contact) {
+    const c = parseIdentifier(b.contact);
+    if (!c) throw new HttpError(400, 'invalid_contact', 'That phone number or email was not recognised.');
+    contact = c.value;
+  }
+  const host = cleanText(b.host, 'host', { max: 80, optional: true });
+  const purpose = cleanText(b.purpose, 'purpose', { max: 120, optional: true });
+  return { name, contact, host, purpose };
+}
+async function workplace(env, ev) {
+  if (ev.kind !== 'workplace') throw new HttpError(400, 'not_an_office', 'Visitors are for Tap In for Business offices.');
+  return (await env.DB.prepare('SELECT tz_offset_min FROM events WHERE id = ?1').bind(ev.id).first()).tz_offset_min;
+}
+const visitorOut = async (env, origin, g) => ({ ...g, link: `${origin}/i/#${await inviteLinkToken(env.SECRET_PEPPER, g.id)}` });
+
+// POST /api/events/:id/visitors { tier_id, name, contact?, host?, purpose?, valid_from?, valid_until? }
+export async function addVisitor({ request, env, user, params, url }) {
+  const ev = await ownedEvent(env, user, params.id);
+  const tz = await workplace(env, ev);
+  const b = await readJson(request);
+  const tier = pickTier(await eventTiers(env, ev.id), b.tier_id);
+  const f = visitorFields(b);
+  const now = nowSec();
+  const parse = (v, label) => {
+    if (v === undefined || v === null || v === '') return null;
+    const t = Date.parse(v);
+    if (!Number.isFinite(t)) throw new HttpError(400, 'invalid_window', `Enter a valid ${label}.`);
+    return Math.floor(t / 1000);
+  };
+  const from = parse(b.valid_from, 'start time') ?? startOfDay(now, tz);
+  const until = parse(b.valid_until, 'end time') ?? endOfDay(from, tz);
+  if (until <= from) throw new HttpError(400, 'invalid_window', 'The visit must end after it starts.');
+  if (until <= now) throw new HttpError(400, 'invalid_window', 'That visit has already ended. Choose a time that has not passed.');
+  if (until - from > MAX_VISIT_DAYS * 86400) throw new HttpError(400, 'invalid_window', `A visitor pass can last up to ${MAX_VISIT_DAYS} days. Add longer-term people under "Add people".`);
+  await roomFor(env, ev.id, 1);
+  const id = newId(10);
+  await env.DB.prepare(
+    `INSERT INTO guests (id, event_id, tier_id, kind, name, contact, host, purpose, valid_from, valid_until, created_at) VALUES (?1, ?2, ?3, 'visitor', ?4, ?5, ?6, ?7, ?8, ?9, ?10)`
+  ).bind(id, ev.id, tier.id, f.name, f.contact, f.host, f.purpose, from, until, now).run();
+  return json({ visitor: await visitorOut(env, url.origin, { id, name: f.name, contact: f.contact, host: f.host, purpose: f.purpose, tier: tier.name, valid_from: from, valid_until: until, walk_in: 0, status: 'active', entered_at: null }) }, 201);
+}
+
+// GET /api/events/:id/visitors -> visits from the last 30 days and upcoming ones, newest first
+export async function listVisitors({ env, user, params, url }) {
+  const ev = await ownedEvent(env, user, params.id);
+  await workplace(env, ev);
+  const rows = (
+    await env.DB.prepare(
+      `SELECT g.id, g.name, g.contact, g.host, g.purpose, g.valid_from, g.valid_until, g.walk_in, g.status, g.created_at, t.name AS tier,
+        (SELECT MIN(s.at) FROM scans s WHERE s.guest_id = g.id AND s.result = 'granted') AS entered_at
+       FROM guests g JOIN tiers t ON t.id = g.tier_id
+       WHERE g.event_id = ?1 AND g.kind = 'visitor' AND g.valid_until > ?2 ORDER BY g.valid_from DESC, g.created_at DESC LIMIT 2000`
+    ).bind(ev.id, nowSec() - 30 * 86400).all()
+  ).results;
+  return json({ visitors: await Promise.all(rows.map((g) => visitorOut(env, url.origin, g))) });
 }

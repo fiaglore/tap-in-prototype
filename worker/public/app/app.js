@@ -350,6 +350,21 @@ async function postClaim(body) {
 }
 const needsPhoto = (p) => p.event.require_photo && state.user && !state.user.has_photo;
 
+// "Add to Apple Wallet" / "Save to Google Wallet", once those are set up. Live passes stay in the app, because a
+// wallet pass cannot change its code every 30 seconds.
+function walletButtons(p) {
+  const w = state.config.wallet || {};
+  if (!w.apple && !w.google) return null;
+  if (p.live) return h('p', { class: 'hint', style: 'margin-top:10px;text-align:center;max-width:320px' }, 'This event uses a live code, so the pass stays here in the app rather than in a wallet.');
+  const google = async (e) => {
+    e.currentTarget.disabled = true;
+    try { location.href = (await get('/me/passes/' + p.id + '/wallet/google')).url; } catch (ex) { toast(ex.message); e.currentTarget.disabled = false; }
+  };
+  return h('div', { class: 'row wallets', style: 'margin-top:14px;justify-content:center' },
+    w.apple && h('a', { class: 'btn ghost small', href: '/api/me/passes/' + p.id + '/wallet/apple' }, 'Add to Apple Wallet'),
+    w.google && h('button', { class: 'btn ghost small', type: 'button', onclick: google }, 'Save to Google Wallet'));
+}
+
 function showPass(p) {
   const prev = document.body.style.overflow;
   let timer = null;
@@ -406,7 +421,7 @@ function showPass(p) {
       h('button', { class: 'btn small primary', style: 'margin-top:8px', type: 'button', onclick: async () => { try { if (await ensurePhoto()) { toast('Photo saved'); close(); render(); } } catch (ex) { toast(ex.message); } } }, 'Add my photo')),
     qrBox, countdown, tokenEl,
     h('div', { class: 'zones', style: 'margin-top:12px;justify-content:center' }, p.zones.map((z) => h('span', { class: 'chip' }, z))),
-    note, copyBtn);
+    note, copyBtn, walletButtons(p));
   document.body.style.overflow = 'hidden';
   document.body.append(overlay);
   overlay.querySelector('button').focus();

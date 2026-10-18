@@ -19,3 +19,6 @@
 .netstatus .dot{width:9px;height:9px;border-radius:50%;flex:none}
 .netstatus .dot.on{background:var(--ok)}
 .netstatus .dot.off{background:var(--warn);box-shadow:0 0 0 3px color-mix(in srgb,var(--warn) 30%,transparent)}
+
+/* walk-in visitor form */
+.overlay{position:fixed;inset:0;z-index:40;display:grid;place-items:center;padding:16px;overflow:auto;background:color-mix(in srgb,var(--ink) 92%,transparent)}

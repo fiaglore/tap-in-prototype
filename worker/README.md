@@ -117,6 +117,42 @@ Console tab **Edit details** (events and offices):
   (`PATCH /api/events/:id/tiers/:tierId`); add new ones with price and limit (`POST /api/events/:id/tiers`); remove one
   only while nothing has been issued for it (`DELETE …/tiers/:tierId`). Area and hour changes apply at the next scan.
 
+## Visitors (Tap In for Business)
+
+Visitors are guests of kind `visitor` (migration 0010 adds `host`, `purpose`, `valid_from`, `valid_until`, `walk_in`).
+- **One-tap visitor link** (console tab **Visitors**): name, phone or email, who they are visiting, reason, the visit
+  window (default: the rest of today, office time) and the group (which doors). The visitor opens `/i/#<token>` (no app,
+  no account) and shows the QR. The gate refuses it before the window (`outside_hours`) and after it (`expired`).
+- **Walk-in check-in** (door scanner, offices only): name, who they are visiting, phone (optional), reason, group.
+  `POST /api/gate/walkin` records the visitor, lets them in at that door against the signed-in steward, and returns a
+  link valid to the end of the day (with a "Send their pass on WhatsApp" button). Walk-ins need a connection.
+- The Visitors tab lists today, upcoming and the past 30 days, with who they visited, how they came (invited or walk-in)
+  and when they arrived. Host notifications need an SMS or email provider, which is not connected yet.
+
+## Apple Wallet and Google Wallet
+
+"Add to Apple Wallet" and "Save to Google Wallet" appear on Tap In passes, invitations and visitor passes once the
+credentials below are set as Worker secrets (`npx wrangler secret put NAME`); until then they are hidden and the
+endpoints answer `404 wallet_not_set_up`. The wallet pass carries the same code as the Tap In pass, so the gate needs
+no changes. Live-QR events are not offered (a wallet pass cannot change its code every 30 seconds).
+
+**Apple** (needs an Apple Developer account):
+1. Certificates, Identifiers & Profiles: create a Pass Type ID (e.g. `pass.world.tap-in`), then a Pass Type ID
+   certificate for it, and download Apple's WWDR intermediate certificate (G4).
+2. Export the certificate and key as PEM: `openssl pkcs12 -in pass.p12 -clcerts -nokeys -out pass-cert.pem` and
+   `openssl pkcs12 -in pass.p12 -nocerts -nodes -out pass-key.pem`; `openssl x509 -inform DER -in AppleWWDRCAG4.cer -out wwdr.pem`.
+3. Secrets: `APPLE_PASS_TYPE_ID`, `APPLE_TEAM_ID`, `APPLE_PASS_CERT` (pass-cert.pem), `APPLE_PASS_KEY` (pass-key.pem,
+   PKCS #8 or PKCS #1), `APPLE_WWDR_CERT` (wwdr.pem).
+
+The `.pkpass` (`src/lib/wallet.js`, `zip.js`, `cms.js`) is a stored ZIP with a SHA-1 manifest and a detached CMS
+signature made with WebCrypto; `test/wallet.mjs` verifies it with openssl using a throwaway certificate.
+
+**Google** (needs a Google Wallet issuer account, approved by Google for public use):
+1. In the Google Pay & Wallet Console, note the Issuer ID. In Google Cloud, create a service account, enable the
+   Google Wallet API, add the service account as a user of the issuer, and download its JSON key.
+2. Secrets: `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_SERVICE_ACCOUNT` (the whole JSON key).
+The link is a signed "save to wallet" JWT that carries a generic class and object; no other API call is needed.
+
 ## Gate team and the event report
 
 - **Gate team** (console tab; "Door staff" for offices): the organiser adds each steward by name and gets a one-time

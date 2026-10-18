@@ -75,6 +75,8 @@ async function decideOffline(token, zone) {
   else if (code.kind === 'pass' && ev.secure_qr && !code.rolling) reason = 'static_pass';
   else if (code.stale) reason = 'stale_code';
   else if (h0.expires_at && h0.expires_at <= now) reason = 'expired';
+  else if (h0.valid_until && h0.valid_until <= now) reason = 'expired';
+  else if (h0.valid_from && now < h0.valid_from) reason = 'outside_hours';
   else {
     const tier = idx.tiers.get(h0.tier_id);
     if (!tier || !withinSchedule(tier, now, ev.tz_offset_min)) reason = 'outside_hours';
@@ -91,7 +93,7 @@ async function decideOffline(token, zone) {
   return {
     offline: true, result: granted ? 'granted' : 'denied', reason, message: granted ? 'Welcome in.' : MESSAGES[reason],
     holder: h0 ? h0.holder : null, tier: tier ? tier.name : null, zone: zone.name, previous_at: previous,
-    ...(h0 && code.kind !== 'pass' ? { guest: kind || h0.kind, party: h0.party, table: h0.table, rsvp: h0.rsvp } : {}),
+    ...(h0 && code.kind !== 'pass' ? { guest: kind || h0.kind, party: h0.party, table: h0.table, rsvp: h0.rsvp, host: h0.host } : {}),
     ...(ev.require_photo && h0 ? { photo: null, photo_missing: true } : {})
   };
 }
@@ -216,7 +218,8 @@ function viewScan(result) {
   paintStatus = () => {
     const waiting = queue().length;
     const age = pack ? Math.round((Date.now() - pack.fetched_at) / 60000) : null;
-    const listTxt = pack ? `${pack.data.passes.length + pack.data.guests.length} tickets saved ${age < 1 ? 'just now' : age + ' min ago'}` : 'Ticket list not saved yet';
+    const nSaved = pack ? pack.data.passes.length + pack.data.guests.length : 0;
+    const listTxt = pack ? `${nSaved} ${nSaved === 1 ? 'ticket' : 'tickets'} saved ${age < 1 ? 'just now' : age + ' min ago'}` : 'Ticket list not saved yet';
     mount(statusBox, h('span', { class: 'dot ' + (offline ? 'off' : 'on') }), h('strong', {}, offline ? 'No signal: checking against the saved list' : 'Online'),
       h('span', { class: 'hint' }, ` \u00b7 ${listTxt}${waiting ? ` \u00b7 ${waiting} scan${waiting === 1 ? '' : 's'} waiting to send` : ''}`),
       !offline && waiting > 0 && h('button', { class: 'linkbtn', style: 'margin-left:6px', type: 'button', onclick: syncNow }, 'Send now'));
@@ -228,13 +231,52 @@ function viewScan(result) {
     h('div', { class: 'spread' }, h('div', {}, h('p', { class: 'eyebrow' }, info.event.name), h('h2', {}, zone.name)),
       h('button', { class: 'btn ghost small', type: 'button', onclick: viewZone }, 'Change area')),
     h('form', { style: 'margin-top:14px', onsubmit: (e) => { e.preventDefault(); submit(input.value); } }, input,
-      h('div', { class: 'row', style: 'margin-top:10px' }, h('button', { class: 'btn primary', type: 'submit' }, 'Check pass'), camBtn)),
+      h('div', { class: 'row', style: 'margin-top:10px' }, h('button', { class: 'btn primary', type: 'submit' }, 'Check pass'), camBtn,
+        info.event.kind === 'workplace' && h('button', { class: 'btn ghost', type: 'button', onclick: () => walkIn(zone, resBox, paintRecent) }, 'Walk-in visitor'))),
     video, resBox,
     h('h3', { style: 'margin-top:18px' }, 'Recent'), recentBox, whoBar()));
   paintRecent();
   input.focus();
   // USB / bluetooth scanners type the code and press Enter; keep focus on the box.
   main.addEventListener('click', (e) => { if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A') input.focus(); });
+}
+
+// Offices: someone arrives without a pass. Record them, let them in, and (if they gave a phone) send them a pass
+// that works until the end of the day.
+function walkIn(zone, resBox, paintRecent) {
+  const tiers = info.tiers || [];
+  const guess = tiers.find((t) => /visit|guest/i.test(t.name)) || tiers[0];
+  const name = h('input', { class: 'input', id: 'wn', autocomplete: 'off', required: true, maxlength: '80' });
+  const contact = h('input', { class: 'input', id: 'wc', autocomplete: 'off', inputmode: 'tel', placeholder: 'Optional' });
+  const host = h('input', { class: 'input', id: 'wh', autocomplete: 'off', maxlength: '80', placeholder: 'Who are they here to see?' });
+  const purpose = h('input', { class: 'input', id: 'wp', autocomplete: 'off', maxlength: '120', placeholder: 'Optional, e.g. delivery, interview' });
+  const group = h('select', { class: 'input', id: 'wg' }, tiers.map((t) => h('option', { value: t.id, selected: guess && t.id === guess.id }, t.name)));
+  const err = h('div', {});
+  const close = () => overlay.remove();
+  const overlay = h('div', { class: 'overlay', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Walk-in visitor' },
+    h('form', { class: 'card', style: 'width:min(92vw,440px)', onsubmit: async (e) => {
+      e.preventDefault();
+      try {
+        const r = await post('/gate/walkin', { name: name.value, contact: contact.value || undefined, host: host.value || undefined, purpose: purpose.value || undefined, tier_id: group.value, zone_id: zone.id }, auth());
+        close();
+        recent.unshift(r); recent = recent.slice(0, 8);
+        paintResult(resBox, r); paintRecent(); beep(true);
+      } catch (ex) {
+        mount(err, h('div', { class: 'error', role: 'alert' }, ex.status === 0 ? 'Walk-ins need a connection. Note their details and add them when the signal is back.' : ex.message));
+      }
+    } },
+      h('h2', {}, 'Walk-in visitor'),
+      h('p', { class: 'muted', style: 'margin-top:4px' }, 'They are let in now and their visit is on record. A phone number lets you send them a pass for the rest of the day.'),
+      h('div', { class: 'field' }, h('label', { for: 'wn' }, 'Name'), name),
+      h('div', { class: 'field' }, h('label', { for: 'wh' }, 'Visiting'), host),
+      h('div', { class: 'field' }, h('label', { for: 'wc' }, 'Phone or email'), contact),
+      h('div', { class: 'field' }, h('label', { for: 'wp' }, 'Reason'), purpose),
+      h('div', { class: 'field' }, h('label', { for: 'wg' }, 'Group'), group),
+      err,
+      h('div', { class: 'row', style: 'margin-top:14px' }, h('button', { class: 'btn primary', type: 'submit' }, 'Check in'), h('button', { class: 'btn ghost', type: 'button', onclick: close }, 'Cancel'))));
+  overlay.addEventListener('keydown', (e) => e.key === 'Escape' && close());
+  document.body.append(overlay);
+  name.focus();
 }
 
 function paintResult(box, r) {
@@ -251,7 +293,10 @@ function paintResult(box, r) {
     // Guests: one code can bring a party in. Say how many, and where they sit.
     ok && r.party > 1 && h('p', { class: 'party' }, `Party of ${r.party}: let ${r.party} people in`),
     r.table && h('p', { style: 'font-weight:700' }, r.table),
-    r.tier && h('p', { class: 'muted' }, r.tier + (r.zone ? ' · ' + r.zone : '') + (r.guest === 'import' ? ' · imported ticket' : r.guest === 'invite' ? ' · guest list' : '')),
+    r.host && h('p', { style: 'font-weight:700' }, 'Visiting: ' + r.host),
+    r.tier && h('p', { class: 'muted' }, r.tier + (r.zone ? ' · ' + r.zone : '') + (r.guest === 'import' ? ' · imported ticket' : r.guest === 'invite' ? ' · guest list' : r.guest === 'visitor' ? (r.walk_in ? ' · walk-in visitor' : ' · visitor') : '')),
+    r.walk_in && r.link && h('div', { class: 'row', style: 'justify-content:center;margin-top:10px' },
+      h('a', { class: 'btn ghost small', target: '_blank', rel: 'noopener', href: `https://wa.me/${r.contact && r.contact.startsWith('+') ? r.contact.slice(1) : ''}?text=${encodeURIComponent('Your visitor pass for today. Show it at the door if you step out and come back: ' + r.link)}` }, 'Send their pass on WhatsApp')),
     ok && r.rsvp === 'no' && h('div', { class: 'notice warn', style: 'margin:10px auto;max-width:340px' }, 'They told the host they could not come. Check with the host if unsure.'),
     h('p', { style: 'margin-top:8px' }, r.message),
     r.previous_at && h('p', { class: 'hint' }, 'First used at ' + when(r.previous_at, { timeStyle: 'short' })),

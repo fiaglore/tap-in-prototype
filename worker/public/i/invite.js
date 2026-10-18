@@ -1,17 +1,55 @@
 // A guest's invitation, opened from the link the host sent. No account: the link itself is the key.
 // The guest answers the RSVP (and how many of their party are coming) and shows the QR code at the door.
 import { h, mount, when } from '/js/dom.js';
-import { post } from '/js/api.js';
+import { get, post } from '/js/api.js';
 import { qrSvg } from '/js/qr.js';
 
 const root = document.getElementById('root');
 const token = decodeURIComponent(location.hash.slice(1));
+let wallet = {};
+
+// Wallet buttons, once Apple or Google Wallet is set up.
+function walletRow() {
+  if (!wallet.apple && !wallet.google) return null;
+  const q = '?t=' + encodeURIComponent(token);
+  const google = async (e) => {
+    e.currentTarget.disabled = true;
+    try { location.href = (await get('/invitation/wallet/google' + q)).url; } catch (ex) { e.currentTarget.disabled = false; alert(ex.message); }
+  };
+  return h('div', { class: 'row', style: 'margin-top:12px;justify-content:center' },
+    wallet.apple && h('a', { class: 'btn ghost small', href: '/api/invitation/wallet/apple' + q }, 'Add to Apple Wallet'),
+    wallet.google && h('button', { class: 'btn ghost small', type: 'button', onclick: google }, 'Save to Google Wallet'));
+}
 
 function fail(title, message) {
   mount(root, h('div', { class: 'inv-head' }, h('h1', {}, title), h('p', { class: 'muted' }, message)));
 }
 
+// A visitor pass (Tap In for Business): who they are visiting, when the pass works, and the QR. No RSVP.
+function renderVisitor(d) {
+  const e = d.event, g = d.guest;
+  document.title = `${e.name} · Visitor pass`;
+  const place = [e.venue, e.city].filter(Boolean).join(', ');
+  const window_ = g.valid_from && g.valid_until ? `${when(g.valid_from)} to ${when(g.valid_until, { timeStyle: 'short' })}` : '';
+  mount(root,
+    h('div', { class: 'inv-head' },
+      h('p', { class: 'eyebrow' }, 'Visitor pass'),
+      h('h1', {}, e.name),
+      place && h('p', { class: 'when' }, place)),
+    h('div', { class: 'card inv-card' },
+      h('p', { class: 'dear' }, 'For ', h('strong', {}, g.name)),
+      g.host && h('p', { class: 'party' }, 'Visiting ', h('strong', {}, g.host), g.purpose ? ` \u00b7 ${g.purpose}` : ''),
+      window_ && h('p', { class: 'party' }, 'Valid ' + window_)),
+    h('div', { class: 'card entry' },
+      h('h3', {}, 'Show this at the door'),
+      h('div', { class: 'qr' }, qrSvg(d.code, 'Visitor pass for ' + g.name)),
+      h('p', { class: 'code' }, d.code),
+      h('p', { class: 'hint', style: 'margin-top:10px' }, 'Keep this link, or take a screenshot. It only works during your visit, and only for you.'),
+      walletRow()));
+}
+
 function render(d, note = '') {
+  if (d.kind === 'visitor') return renderVisitor(d);
   const e = d.event, g = d.guest;
   document.title = `${e.name} · Your invitation`;
   const place = [e.venue, e.city].filter(Boolean).join(', ');
@@ -50,10 +88,12 @@ function render(d, note = '') {
       h('p', { class: 'muted', style: 'margin-top:4px' }, g.party_size > 1 ? 'Show this at the door. One scan lets your whole party in.' : 'Show this at the door.'),
       h('div', { class: 'qr' }, qrSvg(d.code, 'Entry code for ' + g.name)),
       h('p', { class: 'code' }, d.code),
-      h('p', { class: 'hint', style: 'margin-top:10px' }, 'Keep this link, or take a screenshot of the code. ' + (e.reentry ? 'You can come and go with it.' : 'It works once at each entrance.') + ' Please do not share it: it is only for you and your party.')));
+      h('p', { class: 'hint', style: 'margin-top:10px' }, 'Keep this link, or take a screenshot of the code. ' + (e.reentry ? 'You can come and go with it.' : 'It works once at each entrance.') + ' Please do not share it: it is only for you and your party.'),
+      walletRow()));
 }
 
 (async function start() {
+  try { wallet = (await get('/config')).wallet || {}; } catch {}
   if (!token) return fail('Invitation not found', 'This link is incomplete. Open the full link the host sent you.');
   try { render(await post('/invitation', { token })); }
   catch (ex) {

@@ -219,7 +219,7 @@ async function viewEvent(id, tab) {
     const office = data.event.kind === 'workplace';
     if (office !== OFFICE) { location.replace((office ? '/offices/' : '/organiser/') + '#/e/' + id); return; }
     const tabs = office
-      ? [['overview', 'Overview'], ['edit', 'Edit details'], ['people', 'Add people'], ['attendees', 'Who has access'], ['team', 'Door staff'], ['report', 'Report'], ['gate', 'Doors & key']]
+      ? [['overview', 'Overview'], ['edit', 'Edit details'], ['visitors', 'Visitors'], ['people', 'Add people'], ['attendees', 'Who has access'], ['team', 'Door staff'], ['report', 'Report'], ['gate', 'Doors & key']]
       : [['overview', 'Overview'], ['edit', 'Edit details'], ['tickets', 'Tickets'], ['guests', 'Guest list'], ['invites', 'Invite codes'], ['attendees', 'Attendees'], ['team', 'Gate team'], ['report', 'Report'], ['gate', 'Gate key & rules']];
     const items = [{ href: '#/', text: OFFICE ? '\u2190 All offices' : '\u2190 All events' }, { label: data.event.name }]
       .concat(tabs.map(([k, label]) => ({ href: `#/e/${id}/${k}`, text: label, on: tab === k })))
@@ -231,7 +231,7 @@ async function viewEvent(id, tab) {
         // A private event with only free tickets has no sales page worth sharing: guests come in by invitation.
         !office && (data.event.listed || data.tiers.some((t) => t.price_kobo > 0)) && h('button', { class: 'btn ghost small', type: 'button', onclick: () => copy(location.origin + '/e/?id=' + id, 'Sales page link copied') }, 'Copy sales page link')),
       body)));
-    ({ overview: tabOverview, tickets: tabTickets, invites: tabInvites, people: tabPeople, attendees: tabAttendees, team: tabTeam, report: tabReport, guests: tabGuests, edit: tabEdit, gate: tabGate }[tab] || tabOverview)(body, data);
+    ({ overview: tabOverview, tickets: tabTickets, invites: tabInvites, people: tabPeople, attendees: tabAttendees, team: tabTeam, report: tabReport, guests: tabGuests, edit: tabEdit, visitors: tabVisitors, gate: tabGate }[tab] || tabOverview)(body, data);
   } catch (ex) { fail(ex); }
 }
 
@@ -865,6 +865,75 @@ function tabEdit(body, data) {
     h('div', { style: 'margin-top:12px' }, h('button', { class: 'btn primary', type: 'submit' }, 'Add ' + W.typeOne)));
 
   body.append(basics, h('div', { class: 'grid two', style: 'margin-top:14px' }, zones, add), h('div', { style: 'margin-top:14px' }, types));
+}
+
+// ---- Visitors (Tap In for Business): one-tap visitor links, and everyone who came, invited or walk-in ------
+async function tabVisitors(body, data) {
+  const id = data.event.id;
+  const guess = data.tiers.find((t) => /visit|guest/i.test(t.name)) || data.tiers[0];
+  const group = h('select', { class: 'input', id: 'vg' }, data.tiers.map((t) => h('option', { value: t.id, selected: guess && t.id === guess.id }, t.name)));
+  const name = h('input', { class: 'input', id: 'vn', maxlength: '80', required: true });
+  const contact = h('input', { class: 'input', id: 'vc', inputmode: 'tel', placeholder: 'So you can send the link on WhatsApp' });
+  const host = h('input', { class: 'input', id: 'vh', maxlength: '80', placeholder: 'e.g. Tolu, Finance' });
+  const purpose = h('input', { class: 'input', id: 'vp', maxlength: '120', placeholder: 'Optional' });
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const from = h('input', { class: 'input', id: 'vf', type: 'datetime-local', value: localInput(Date.now() / 1000), min: localInput(today.getTime() / 1000) });
+  const end = new Date(); end.setHours(23, 59, 0, 0);
+  const until = h('input', { class: 'input', id: 'vu', type: 'datetime-local', value: localInput(end.getTime() / 1000) });
+  const out = h('div', {});
+  const list = h('div', {});
+  let show = 'today';
+  const wa = (v) => `https://wa.me/${v.contact && v.contact.startsWith('+') ? v.contact.slice(1) : ''}?text=${encodeURIComponent(`Your visitor pass for ${data.event.name}${v.host ? ' (visiting ' + v.host + ')' : ''}. Show this at the door: ${v.link}`)}`;
+
+  async function load() {
+    const { visitors } = await get(`/events/${id}/visitors`);
+    const now = Date.now() / 1000;
+    const eod = end.getTime() / 1000;
+    const sod = today.getTime() / 1000;
+    // Today: visits that overlap today. Upcoming: start after today. Past: ended before today.
+    const rows = visitors.filter((v) => show === 'today' ? v.valid_from <= eod && v.valid_until > sod : show === 'upcoming' ? v.valid_from > eod : v.valid_until <= sod);
+    const label = (v) => v.status === 'revoked' ? h('span', { class: 'chip' }, 'Cancelled') : v.entered_at ? h('span', { class: 'chip ok' }, 'Arrived ' + clock(v.entered_at)) : v.valid_until <= now ? h('span', { class: 'chip' }, 'Did not come') : h('span', { class: 'chip' }, 'Expected');
+    mount(list,
+      h('div', { class: 'row', style: 'margin:22px 0 8px' }, [['today', 'Today'], ['upcoming', 'Upcoming'], ['past', 'Past 30 days']].map(([k, l]) => h('button', { class: 'btn small ' + (show === k ? 'primary' : 'ghost'), type: 'button', onclick: () => { show = k; load(); } }, l))),
+      rows.length ? h('div', { class: 'scroll-x' }, h('table', {},
+        h('thead', {}, h('tr', {}, ['Visitor', 'Visiting', 'When', 'Status', ''].map((c) => h('th', {}, c)))),
+        h('tbody', {}, rows.map((v) => h('tr', { class: v.status === 'revoked' ? 'muted' : '' },
+          h('td', {}, h('strong', {}, v.name), h('div', { class: 'hint' }, (v.walk_in ? 'Walk-in' : 'Invited') + ' · ' + v.tier + (v.contact ? ' · ' + v.contact : ''))),
+          h('td', {}, v.host || '', v.purpose && h('div', { class: 'hint' }, v.purpose)),
+          h('td', { class: 'hint' }, `${when(v.valid_from, { dateStyle: 'medium', timeStyle: 'short' })} – ${clock(v.valid_until)}`),
+          h('td', {}, label(v)),
+          h('td', { class: 'row', style: 'gap:6px;flex-wrap:nowrap' },
+            v.status === 'active' && v.valid_until > now && h('button', { class: 'btn ghost small', type: 'button', onclick: () => copy(v.link, 'Visitor link copied') }, 'Copy link'),
+            v.status === 'active' && v.valid_until > now && h('a', { class: 'btn ghost small', target: '_blank', rel: 'noopener', href: wa(v) }, 'WhatsApp'),
+            v.status === 'active' && v.valid_until > now && h('button', { class: 'btn danger small', type: 'button', onclick: async () => {
+              if (!confirm(`Cancel ${v.name}'s visitor pass?`)) return;
+              try { await post(`/events/${id}/guests/${v.id}/revoke`, {}); toast('Cancelled'); load(); } catch (ex) { toast(ex.message); }
+            } }, 'Cancel')))))))
+        : h('p', { class: 'muted' }, show === 'today' ? 'No visitors today yet. Invite one above, or check in a walk-in on the door scanner.' : 'None.'));
+  }
+
+  body.append(
+    h('form', { class: 'card', onsubmit: async (e) => {
+      e.preventDefault();
+      try {
+        const r = await post(`/events/${id}/visitors`, { tier_id: group.value, name: name.value, contact: contact.value || undefined, host: host.value || undefined, purpose: purpose.value || undefined,
+          valid_from: from.value ? new Date(from.value).toISOString() : undefined, valid_until: until.value ? new Date(until.value).toISOString() : undefined });
+        const v = r.visitor;
+        mount(out, h('div', { class: 'notice', style: 'margin-top:12px' }, `Visitor pass ready for ${v.name}. Send them the link: they open it on their phone and show the code at the door. No app or account.`,
+          h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'btn ghost small', type: 'button', onclick: () => copy(v.link, 'Visitor link copied') }, 'Copy link'), h('a', { class: 'btn primary small', target: '_blank', rel: 'noopener', href: wa(v) }, 'Send on WhatsApp'))));
+        name.value = ''; contact.value = ''; purpose.value = '';
+        load();
+      } catch (ex) { mount(out, h('div', { class: 'error', role: 'alert' }, ex.message)); }
+    } },
+      h('h3', {}, 'Invite a visitor'),
+      h('p', { class: 'muted', style: 'margin-top:4px' }, 'They get a link with their pass: no app, no account. It works only during the visit, at the doors their group opens. Walk-ins are checked in on the door scanner and appear here too.'),
+      h('div', { class: 'grid two' }, h('div', { class: 'field' }, h('label', { for: 'vn' }, 'Visitor name'), name), h('div', { class: 'field' }, h('label', { for: 'vc' }, 'Phone or email'), contact)),
+      h('div', { class: 'grid two' }, h('div', { class: 'field' }, h('label', { for: 'vh' }, 'Visiting'), host), h('div', { class: 'field' }, h('label', { for: 'vp' }, 'Reason'), purpose)),
+      h('div', { class: 'grid two' }, h('div', { class: 'field' }, h('label', { for: 'vf' }, 'From'), from), h('div', { class: 'field' }, h('label', { for: 'vu' }, 'Until'), until)),
+      h('div', { class: 'field' }, h('label', { for: 'vg' }, 'Group (decides which doors)'), group),
+      h('div', { style: 'margin-top:12px' }, h('button', { class: 'btn primary', type: 'submit' }, 'Create visitor pass')), out),
+    list);
+  try { await load(); } catch (ex) { mount(list, h('div', { class: 'error' }, ex.message)); }
 }
 
 boot();

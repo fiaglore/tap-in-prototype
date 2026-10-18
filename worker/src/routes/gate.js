@@ -2,10 +2,11 @@
 // (Authorization: Bearer ...), asks "may this pass enter this zone?", and every answer is written to the scan
 // log together with the steward who scanned it.
 
-import { HttpError, newId, normaliseCode, nowSec, safeEqual } from '../lib/util.js';
+import { HttpError, cleanText, newId, normaliseCode, nowSec, parseIdentifier, safeEqual } from '../lib/util.js';
 import { clientIp, json, readJson } from '../lib/http.js';
-import { eventOfflineKey, guestMac, hashGateKey, hashGuestCode, hashStewardKey, isStewardKey, liveMacFor, liveWindowFresh, parseGuestToken, parseLiveToken, parsePassToken, parseRollingToken, passMac, passRollingKey, rollingMac } from '../lib/codes.js';
+import { eventOfflineKey, guestMac, hashGateKey, hashGuestCode, hashStewardKey, inviteLinkToken, isStewardKey, liveMacFor, liveWindowFresh, parseGuestToken, parseLiveToken, parsePassToken, parseRollingToken, passMac, passRollingKey, rollingMac } from '../lib/codes.js';
 import { isFull, record } from '../lib/limits.js';
+import { endOfDay } from './guests.js';
 import { withinSchedule } from '../lib/schedule.js';
 import { NEW_PHOTO_SECS, photoDataUrl } from '../lib/photo.js';
 
@@ -57,7 +58,9 @@ async function gateEvent(request, env) {
 export async function gateInfo({ request, env }) {
   const ev = await gateEvent(request, env);
   const zones = (await env.DB.prepare('SELECT id, name FROM zones WHERE event_id = ?1 ORDER BY sort, name').bind(ev.id).all()).results;
-  return json({ event: { id: ev.id, name: ev.name, kind: ev.kind, venue: ev.venue, city: ev.city, allow_reentry: !!ev.allow_reentry }, zones, steward: ev.steward_id ? { name: ev.steward_name } : null });
+  // Offices: the access groups a walk-in visitor can be given.
+  const tiers = ev.kind === 'workplace' ? (await env.DB.prepare('SELECT id, name FROM tiers WHERE event_id = ?1 ORDER BY sort, name').bind(ev.id).all()).results : [];
+  return json({ event: { id: ev.id, name: ev.name, kind: ev.kind, venue: ev.venue, city: ev.city, allow_reentry: !!ev.allow_reentry }, zones, tiers, steward: ev.steward_id ? { name: ev.steward_name } : null });
 }
 
 const displayName = (name) => {
@@ -92,7 +95,7 @@ export async function gateScan({ request, env }) {
   // Guests (invitations and tickets imported from another ticketer) have no Tap In account.
   // An invitation code carries its own check; any other code is looked up in this event's imported list.
   const loadGuest = (where, val) => env.DB.prepare(
-    `SELECT g.id, g.event_id, g.tier_id, g.kind, g.name AS holder, g.party_size, g.attending, g.rsvp, g.table_label, g.status, t.name AS tier, t.days_mask, t.from_min, t.to_min
+    `SELECT g.id, g.event_id, g.tier_id, g.kind, g.name AS holder, g.party_size, g.attending, g.rsvp, g.table_label, g.status, g.host, g.valid_from, g.valid_until, t.name AS tier, t.days_mask, t.from_min, t.to_min
      FROM guests g JOIN tiers t ON t.id = g.tier_id WHERE ${where}`
   ).bind(...val).first();
   if (guestTok && safeEqual(await guestMac(env.SECRET_PEPPER, guestTok.id), guestTok.mac)) {
@@ -123,6 +126,9 @@ export async function gateScan({ request, env }) {
     else if (holder.status !== 'active') reason = 'revoked';
     else if (pass && ev.secure_qr && !live) reason = 'static_pass';
     else if (pass && pass.expires_at && pass.expires_at <= now) reason = 'expired';
+    // Visitors: only inside their visit window.
+    else if (guest && guest.valid_until && guest.valid_until <= now) reason = 'expired';
+    else if (guest && guest.valid_from && now < guest.valid_from) reason = 'outside_hours';
     else if (!withinSchedule(holder, now, ev.tz_offset_min)) reason = 'outside_hours';
     else {
       const allowed = await env.DB.prepare('SELECT 1 AS ok FROM tier_zones WHERE tier_id = ?1 AND zone_id = ?2')
@@ -187,7 +193,8 @@ export async function gateScan({ request, env }) {
       guest: guest.kind,
       party: guest.rsvp === 'yes' && guest.attending ? guest.attending : guest.party_size,
       table: guest.table_label,
-      rsvp: guest.kind === 'invite' ? guest.rsvp : null
+      rsvp: guest.kind === 'invite' ? guest.rsvp : null,
+      host: guest.kind === 'visitor' ? guest.host : null
     } : {}),
     zone: zone.name,
     at: now,
@@ -209,7 +216,7 @@ export async function gateList({ request, env }) {
     q('SELECT id, name, days_mask, from_min, to_min FROM tiers WHERE event_id = ?1').all(),
     q('SELECT tz.tier_id, tz.zone_id FROM tier_zones tz JOIN tiers t ON t.id = tz.tier_id WHERE t.event_id = ?1').all(),
     q('SELECT p.id, p.tier_id, p.status, p.expires_at, u.name FROM passes p JOIN users u ON u.id = p.user_id WHERE p.event_id = ?1').all(),
-    q('SELECT id, kind, tier_id, name, party_size, attending, rsvp, table_label, status, code_hash FROM guests WHERE event_id = ?1').all(),
+    q('SELECT id, kind, tier_id, name, party_size, attending, rsvp, table_label, status, code_hash, host, valid_from, valid_until FROM guests WHERE event_id = ?1').all(),
     q("SELECT pass_id, guest_id, zone_id, MIN(at) AS at FROM scans WHERE event_id = ?1 AND result = 'granted' GROUP BY pass_id, guest_id, zone_id").all()
   ]);
   const zonesOf = {};
@@ -219,7 +226,7 @@ export async function gateList({ request, env }) {
     zones: zones.results,
     tiers: tiers.results.map((t) => ({ ...t, zones: zonesOf[t.id] || [] })),
     passes: passes.results.map((p) => ({ id: p.id, tier_id: p.tier_id, status: p.status, expires_at: p.expires_at, holder: displayName(p.name) })),
-    guests: guests.results.map((g) => ({ id: g.id, kind: g.kind, tier_id: g.tier_id, holder: displayName(g.name), party: g.rsvp === 'yes' && g.attending ? g.attending : g.party_size, table: g.table_label, rsvp: g.kind === 'invite' ? g.rsvp : null, status: g.status, code_hash: g.code_hash })),
+    guests: guests.results.map((g) => ({ id: g.id, kind: g.kind, tier_id: g.tier_id, holder: displayName(g.name), party: g.rsvp === 'yes' && g.attending ? g.attending : g.party_size, table: g.table_label, rsvp: g.kind === 'invite' ? g.rsvp : null, status: g.status, code_hash: g.code_hash, host: g.host, valid_from: g.valid_from, valid_until: g.valid_until })),
     entries: entries.results.map((e) => ({ ref: e.pass_id ? 'p:' + e.pass_id : 'g:' + e.guest_id, zone_id: e.zone_id, at: e.at })),
     key: await eventOfflineKey(env.SECRET_PEPPER, ev.id),
     steward: ev.steward_id ? { name: ev.steward_name } : null,
@@ -287,4 +294,41 @@ export async function gateSync({ request, env }) {
   }
   if (stmts.length) await env.DB.batch(stmts);
   return json({ synced: stmts.length, duplicates, skipped });
+}
+
+// POST /api/gate/walkin { name, contact?, host?, purpose?, tier_id, zone_id } (offices)
+// Someone arrives without a pass: the person at the door records them, they are let in, and the visit is on
+// record. Their pass lasts until the end of the day, so if they leave and come back the same link works.
+export async function gateWalkin({ request, env, url }) {
+  const ev = await gateEvent(request, env);
+  if (ev.kind !== 'workplace') throw new HttpError(400, 'not_an_office', 'Walk-in check-in is for Tap In for Business offices.');
+  const b = await readJson(request);
+  const tier = await env.DB.prepare('SELECT id, name FROM tiers WHERE id = ?1 AND event_id = ?2').bind(String(b.tier_id ?? '').slice(0, 40), ev.id).first();
+  if (!tier) throw new HttpError(400, 'invalid_tier', 'Choose which group the visitor is in.');
+  const zone = await env.DB.prepare('SELECT id, name FROM zones WHERE id = ?1 AND event_id = ?2').bind(String(b.zone_id ?? '').slice(0, 40), ev.id).first();
+  if (!zone) throw new HttpError(400, 'invalid_zone', 'Choose which door this scanner is for.');
+  const name = cleanText(b.name, 'name', { max: 80 });
+  let contact = null;
+  if (b.contact) {
+    const c = parseIdentifier(b.contact);
+    if (!c) throw new HttpError(400, 'invalid_contact', 'That phone number or email was not recognised.');
+    contact = c.value;
+  }
+  const host = cleanText(b.host, 'host', { max: 80, optional: true });
+  const purpose = cleanText(b.purpose, 'purpose', { max: 120, optional: true });
+  const now = nowSec();
+  const id = newId(10);
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO guests (id, event_id, tier_id, kind, name, contact, host, purpose, valid_from, valid_until, walk_in, created_at) VALUES (?1, ?2, ?3, 'visitor', ?4, ?5, ?6, ?7, ?8, ?9, 1, ?8)`
+    ).bind(id, ev.id, tier.id, name, contact, host, purpose, now, endOfDay(now, ev.tz_offset_min)),
+    env.DB.prepare(
+      `INSERT INTO scans (id, event_id, guest_id, zone_id, result, reason, once, at, steward_id) VALUES (?1, ?2, ?3, ?4, 'granted', NULL, ?5, ?6, ?7)`
+    ).bind(newId(14), ev.id, id, zone.id, ev.allow_reentry ? 0 : 1, now, ev.steward_id)
+  ]);
+  return json({
+    result: 'granted', message: 'Checked in. Welcome.', holder: displayName(name), tier: tier.name, zone: zone.name, at: now,
+    guest: 'visitor', host, walk_in: true,
+    contact, link: `${url.origin}/i/#${await inviteLinkToken(env.SECRET_PEPPER, id)}`
+  }, 201);
 }

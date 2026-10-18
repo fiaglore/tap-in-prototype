@@ -11,6 +11,8 @@ import * as gate from './routes/gate.js';
 import * as publicSale from './routes/public.js';
 import * as stewards from './routes/stewards.js';
 import * as guests from './routes/guests.js';
+import * as walletPasses from './routes/wallet-passes.js';
+import { walletConfig } from './lib/wallet.js';
 import * as wallet from './routes/wallet.js';
 import * as vendors from './routes/vendors.js';
 import * as till from './routes/till.js';
@@ -19,7 +21,7 @@ import * as photo from './routes/photo.js';
 
 // [method, path, auth, handler]. auth "user" needs a signed-in session; gate routes check their own key.
 const ROUTES = [
-  ['GET', '/api/config', 'none', ({ env }) => json({ otp_mode: otpMode(env), payments: !paymentsOff(env), configured: isConfigured(env), ...(otpMode(env) === 'firebase' && !env.FIREBASE_API_KEY ? { delivery_problem: 'FIREBASE_API_KEY is not set' } : {}), ...(isConfigured(env) ? {} : { problem: !env.SECRET_PEPPER ? 'SECRET_PEPPER is not set on the running Worker' : 'SECRET_PEPPER is set but shorter than 32 characters (length ' + String(env.SECRET_PEPPER).length + ')' }) })],
+  ['GET', '/api/config', 'none', ({ env }) => json({ otp_mode: otpMode(env), payments: !paymentsOff(env), wallet: walletConfig(env), configured: isConfigured(env), ...(otpMode(env) === 'firebase' && !env.FIREBASE_API_KEY ? { delivery_problem: 'FIREBASE_API_KEY is not set' } : {}), ...(isConfigured(env) ? {} : { problem: !env.SECRET_PEPPER ? 'SECRET_PEPPER is not set on the running Worker' : 'SECRET_PEPPER is set but shorter than 32 characters (length ' + String(env.SECRET_PEPPER).length + ')' }) })],
   ['POST', '/api/auth/otp/request', 'none', auth.otpRequest],
   ['POST', '/api/auth/otp/verify', 'none', auth.otpVerify],
   ['POST', '/api/auth/email-link/complete', 'none', auth.emailLinkComplete],
@@ -56,6 +58,8 @@ const ROUTES = [
   ['POST', '/api/events/:id/guests/:guestId/revoke', 'user', guests.revokeGuest],
   ['POST', '/api/invitation', 'none', guests.openInvitation],
   ['POST', '/api/invitation/rsvp', 'none', guests.rsvp],
+  ['GET', '/api/invitation/wallet/:provider', 'none', walletPasses.invitationWallet],
+  ['GET', '/api/me/passes/:id/wallet/:provider', 'user', walletPasses.passWallet],
   ['GET', '/api/events/:id/scans.csv', 'user', stewards.scansCsv],
   ['GET', '/api/events/:id/invites', 'user', events.listInvites],
   ['POST', '/api/events/:id/invites', 'user', events.createInvites],
@@ -68,6 +72,9 @@ const ROUTES = [
   ['POST', '/api/gate/scan', 'none', gate.gateScan],
   ['GET', '/api/gate/list', 'none', gate.gateList],
   ['POST', '/api/gate/sync', 'none', gate.gateSync],
+  ['POST', '/api/gate/walkin', 'none', gate.gateWalkin],
+  ['GET', '/api/events/:id/visitors', 'user', guests.listVisitors],
+  ['POST', '/api/events/:id/visitors', 'user', guests.addVisitor],
 
   ['GET', '/api/wallet', 'user', wallet.wallet],
   ['POST', '/api/wallet/topup', 'user', wallet.topup],

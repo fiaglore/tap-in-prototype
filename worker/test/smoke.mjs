@@ -34,7 +34,7 @@ group('Sign-in codes');
 await test('config reports demo mode and a configured server', async () => {
   const r = await client(env).get('/api/config');
   assert.equal(r.status, 200);
-  assert.deepEqual(r.body, { otp_mode: 'demo', payments: true, configured: true });
+  assert.deepEqual(r.body, { otp_mode: 'demo', payments: true, wallet: { apple: false, google: false }, configured: true });
 });
 await test('without SECRET_PEPPER every real route fails closed with 503', async () => {
   const bare = makeEnv({ SECRET_PEPPER: '' });
