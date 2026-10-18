@@ -154,7 +154,7 @@ const eventBody = {
   name: 'Palm Grove Festival',
   venue: 'Eko Atlantic Grounds',
   city: 'Lagos',
-  starts_at: '2026-12-12T16:00:00.000Z',
+  starts_at: new Date(Date.now() + 60 * 86400e3).toISOString(),
   zones: ['Main Grounds', 'VIP Lounge', 'Backstage'],
   tiers: [
     { name: 'General Admission', zones: ['Main Grounds'] },

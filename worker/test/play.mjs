@@ -18,6 +18,8 @@ const mk = async (extra = {}, tier = {}) => {
   assert.equal(r.status, 201, JSON.stringify(r.body));
   return r.body;
 };
+// Events cannot be created in the past, so "time passes" by moving the date in the database.
+const past = (made, days) => env.DB.raw.prepare('UPDATE events SET starts_at = ? WHERE id = ?').run(Math.floor(Date.now() / 1000 + days * 86400), made.event.id);
 org = await signIn(env, 'promoter@play.test', '10.60.0.1', 'Pat');
 other = await signIn(env, 'other@play.test', '10.60.0.2', 'Other');
 
@@ -36,7 +38,7 @@ await test('a new event is listed by default; an organiser can opt out; offices 
   assert.deepEqual(names, ['Listed by default']);
 });
 await test('only upcoming events show: past ones drop off, undated ones stay, soonest comes first', async () => {
-  await mk({ name: 'Last week', starts_at: iso(-7) });
+  await past(await mk({ name: 'Last week', starts_at: iso(1) }), -7);
   await mk({ name: 'Tonight', starts_at: iso(0.2) });
   await mk({ name: 'Date to come' });
   await mk({ name: 'Next month', starts_at: iso(30) });
@@ -45,7 +47,7 @@ await test('only upcoming events show: past ones drop off, undated ones stay, so
   assert.deepEqual(names, ['Tonight', 'Listed by default', 'Next month', 'Date to come']);
 });
 await test('an event that started a few hours ago is still listed', async () => {
-  await mk({ name: 'Doors opened an hour ago', starts_at: iso(-1 / 24) });
+  await past(await mk({ name: 'Doors opened an hour ago', starts_at: iso(1) }), -1 / 24);
   assert.ok((await list()).some((e) => e.name === 'Doors opened an hour ago'));
 });
 await test('each entry has just what a visitor needs to choose, and nothing private', async () => {

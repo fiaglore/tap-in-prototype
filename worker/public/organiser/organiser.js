@@ -107,7 +107,8 @@ function viewNew(err = '', draft, office = false) {
   const name = h('input', { class: 'input', id: 'n', value: d.name, maxlength: '80', required: true });
   const venue = h('input', { class: 'input', id: 'v', value: d.venue, maxlength: '80' });
   const city = h('input', { class: 'input', id: 'c', value: d.city, maxlength: '80' });
-  const starts = h('input', { class: 'input', id: 's', type: 'datetime-local', value: d.starts_at });
+  // The date picker will not offer a time that has already passed (the server checks too).
+  const starts = h('input', { class: 'input', id: 's', type: 'datetime-local', value: d.starts_at, min: localInput(Date.now() / 1000) });
   const reentry = h('input', { type: 'checkbox', id: 'r', checked: d.reentry });
   const secure = h('input', { type: 'checkbox', id: 'q', checked: !!d.secure_qr });
   const listedBox = h('input', { type: 'checkbox', id: 'ls', checked: d.listed === undefined ? true : !!d.listed });
@@ -790,7 +791,9 @@ function tabEdit(body, data) {
   const name = h('input', { class: 'input', id: 'en', value: data.event.name, maxlength: '80', required: true });
   const venue = h('input', { class: 'input', id: 'ev', value: data.event.venue || '', maxlength: '80' });
   const city = h('input', { class: 'input', id: 'ec', value: data.event.city || '', maxlength: '60' });
-  const starts = h('input', { class: 'input', id: 'es', type: 'datetime-local', value: localInput(data.event.starts_at) });
+  // No past dates. An event that has already started keeps its date (the picker would otherwise refuse to save it).
+  const started = data.event.starts_at && data.event.starts_at * 1000 < Date.now();
+  const starts = h('input', { class: 'input', id: 'es', type: 'datetime-local', value: localInput(data.event.starts_at), min: started ? null : localInput(Date.now() / 1000) });
   const basics = h('form', { class: 'card', onsubmit: act(() => patch('/events/' + id, {
     name: name.value, venue: venue.value, city: city.value,
     ...(office ? {} : { starts_at: starts.value ? new Date(starts.value).toISOString() : null })
@@ -798,7 +801,7 @@ function tabEdit(body, data) {
     h('h3', {}, office ? 'Office details' : 'Event details'),
     h('div', { class: 'field' }, h('label', { for: 'en' }, office ? 'Name of the company or office' : 'Event name'), name),
     h('div', { class: 'grid two' }, h('div', { class: 'field' }, h('label', { for: 'ev' }, office ? 'Address or building' : 'Venue'), venue), h('div', { class: 'field' }, h('label', { for: 'ec' }, 'City'), city)),
-    !office && h('div', { class: 'field' }, h('label', { for: 'es' }, 'Starts'), starts),
+    !office && h('div', { class: 'field' }, h('label', { for: 'es' }, 'Starts'), starts, started && h('p', { class: 'hint' }, 'This event has started. You can keep this date or move it later, but not earlier than now.')),
     h('p', { class: 'hint', style: 'margin-top:8px' }, 'Changes show straight away on passes, invitations and the sales page. Tickets and codes already issued keep working.'),
     h('div', { style: 'margin-top:12px' }, h('button', { class: 'btn primary', type: 'submit' }, 'Save details')));
 

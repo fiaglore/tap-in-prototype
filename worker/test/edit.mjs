@@ -79,6 +79,22 @@ await test('an area can be removed before anyone is scanned there, but not a typ
   assert.equal(r.status, 409);
   assert.equal(r.body.error.code, 'zone_needed');
 });
+await test('an event cannot be created or moved into the past; an event that has started can still be renamed', async () => {
+  const yesterday = new Date(Date.now() - 86400e3).toISOString();
+  const made = await org.post('/api/events', { name: 'Too Late', starts_at: yesterday, zones: ['G'], tiers: [{ name: 'T', zones: ['G'] }] });
+  assert.equal(made.status, 400);
+  assert.equal(made.body.error.code, 'date_in_past');
+  const moved = await org.patch('/api/events/' + id, { starts_at: yesterday });
+  assert.equal(moved.status, 400);
+  assert.equal(moved.body.error.code, 'date_in_past');
+  // Doors opened an hour ago: the organiser fixes a typo in the name, sending the same date back.
+  const startedAt = Math.floor(Date.now() / 1000) - 3600;
+  env.DB.raw.prepare('UPDATE events SET starts_at = ? WHERE id = ?').run(startedAt, id);
+  const renamed = await org.patch('/api/events/' + id, { name: 'Fest Proper Live', starts_at: new Date(startedAt * 1000).toISOString() });
+  assert.equal(renamed.status, 200, JSON.stringify(renamed.body));
+  assert.equal(renamed.body.event.starts_at, startedAt);
+  assert.equal((await org.patch('/api/events/' + id, { starts_at: null })).status, 200, 'the date can be cleared ("to be announced")');
+});
 await test('offices: a group’s days and hours can be changed', async () => {
   const off = (await org.post('/api/events', { kind: 'workplace', name: 'Acme HQ', require_photo: false, zones: ['Front door'], tiers: [{ name: 'Staff', zones: ['Front door'], days: [0, 1, 2, 3, 4], from: '07:00', to: '19:00' }] })).body;
   const r = await org.patch(`/api/events/${off.event.id}/tiers/${off.tiers[0].id}`, { days: [0, 1, 2, 3, 4, 5], from: '06:00', to: '22:00' });

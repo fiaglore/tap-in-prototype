@@ -82,6 +82,16 @@ async function structure(env, eventId) {
   };
 }
 
+// An event's date cannot be in the past (a minute of slack for clocks). Keeping the date it already has is always
+// allowed, so an event that has started can still be renamed or moved to a new venue.
+function futureDate(v, current = null) {
+  const t = parseWhen(v, 'date');
+  // Same minute counts as unchanged: the console's date box has no seconds.
+  const unchanged = t !== null && current !== null && Math.floor(t / 60) === Math.floor(current / 60);
+  if (t !== null && !unchanged && t < nowSec() - 60) throw new HttpError(400, 'date_in_past', 'Choose a date and time that has not passed yet.');
+  return t;
+}
+
 // A ticket-type limit: blank means no limit, otherwise a whole number from 1 to 1,000,000.
 function parseCapacity(v, name) {
   if (v === undefined || v === null || v === '') return null;
@@ -113,7 +123,7 @@ export async function createEvent({ request, env, user }) {
   const name = cleanText(b.name, 'name', { min: 2, max: 80 });
   const venue = cleanText(b.venue, 'venue', { optional: true, max: 80 });
   const city = cleanText(b.city, 'city', { optional: true, max: 60 });
-  const startsAt = parseWhen(b.starts_at, 'date');
+  const startsAt = futureDate(b.starts_at);
 
   const zoneNames = uniqueNames(b.zones, 'zone', 1, 12, 40);
   if (!Array.isArray(b.tiers)) throw new HttpError(400, 'invalid_tiers', 'Add at least one ticket type.');
@@ -299,7 +309,7 @@ export async function patchEvent({ request, env, user, params }) {
     const name = 'name' in b ? cleanText(b.name, 'name', { min: 2, max: 80 }) : ev.name;
     const venue = 'venue' in b ? cleanText(b.venue, 'venue', { optional: true, max: 80 }) : ev.venue;
     const city = 'city' in b ? cleanText(b.city, 'city', { optional: true, max: 60 }) : ev.city;
-    const startsAt = 'starts_at' in b ? parseWhen(b.starts_at, 'date') : ev.starts_at;
+    const startsAt = 'starts_at' in b ? futureDate(b.starts_at, ev.starts_at) : ev.starts_at;
     await env.DB.prepare('UPDATE events SET name = ?1, venue = ?2, city = ?3, starts_at = ?4 WHERE id = ?5').bind(name, venue, city, startsAt, ev.id).run();
   }
   if (typeof b.allow_reentry === 'boolean') {
