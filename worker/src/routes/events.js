@@ -294,6 +294,14 @@ export async function getEvent({ env, user, params }) {
 export async function patchEvent({ request, env, user, params }) {
   const ev = await ownedEvent(env, user, params.id);
   const b = await readJson(request);
+  // The basics. The code prefix stays as it was, so tickets already issued keep working after a rename.
+  if ('name' in b || 'venue' in b || 'city' in b || 'starts_at' in b) {
+    const name = 'name' in b ? cleanText(b.name, 'name', { min: 2, max: 80 }) : ev.name;
+    const venue = 'venue' in b ? cleanText(b.venue, 'venue', { optional: true, max: 80 }) : ev.venue;
+    const city = 'city' in b ? cleanText(b.city, 'city', { optional: true, max: 60 }) : ev.city;
+    const startsAt = 'starts_at' in b ? parseWhen(b.starts_at, 'date') : ev.starts_at;
+    await env.DB.prepare('UPDATE events SET name = ?1, venue = ?2, city = ?3, starts_at = ?4 WHERE id = ?5').bind(name, venue, city, startsAt, ev.id).run();
+  }
   if (typeof b.allow_reentry === 'boolean') {
     await env.DB.prepare('UPDATE events SET allow_reentry = ?1 WHERE id = ?2').bind(b.allow_reentry ? 1 : 0, ev.id).run();
   }
@@ -315,9 +323,10 @@ export async function patchEvent({ request, env, user, params }) {
   return json({ event: publicEvent(await ownedEvent(env, user, ev.id)) });
 }
 
-// PATCH /api/events/:id/tiers/:tierId  { capacity?, price_kobo? }
-// Raise or lower a ticket limit, or change the price for tickets sold from now on. A limit cannot be set
-// below what has already been issued.
+// PATCH /api/events/:id/tiers/:tierId  { name?, zone_ids?, days?, from?, to?, capacity?, price_kobo? }
+// Rename a ticket type, change which areas it opens (and, for offices, its days and hours), raise or lower its
+// limit, or change the price for tickets sold from now on. A limit cannot be set below what has already been
+// issued. Area and hour changes apply to every pass of that type at its next scan.
 export async function patchTier({ request, env, user, params }) {
   const ev = await ownedEvent(env, user, params.id);
   const { tiers } = await structure(env, ev.id);
@@ -326,6 +335,21 @@ export async function patchTier({ request, env, user, params }) {
   const b = await readJson(request);
   let capacity = tier.capacity;
   let price = tier.price_kobo;
+  const stmts = [];
+  if ('name' in b) {
+    const name = cleanText(b.name, 'ticket type', { max: 40 });
+    if (tiers.some((t) => t.id !== tier.id && t.name.toLowerCase() === name.toLowerCase())) throw new HttpError(400, 'duplicate_ticket type', `Another ticket type is already called "${name}".`);
+    stmts.push(env.DB.prepare('UPDATE tiers SET name = ?1 WHERE id = ?2').bind(name, tier.id));
+  }
+  if ('zone_ids' in b) {
+    const zones = await zoneIdsFor(env, ev.id, b.zone_ids, tier.name);
+    stmts.push(env.DB.prepare('DELETE FROM tier_zones WHERE tier_id = ?1').bind(tier.id));
+    stmts.push(...zones.map((z) => env.DB.prepare('INSERT INTO tier_zones (tier_id, zone_id) VALUES (?1, ?2)').bind(tier.id, z)));
+  }
+  if (ev.kind === 'workplace' && ('days' in b || 'from' in b || 'to' in b)) {
+    const sc = parseSchedule({ days: b.days, from: b.from, to: b.to }, tier.name);
+    stmts.push(env.DB.prepare('UPDATE tiers SET days_mask = ?1, from_min = ?2, to_min = ?3 WHERE id = ?4').bind(sc.days_mask, sc.from_min, sc.to_min, tier.id));
+  }
   if ('capacity' in b) {
     capacity = parseCapacity(b.capacity, tier.name);
     if (capacity !== null && capacity < tier.issued) {
@@ -336,7 +360,103 @@ export async function patchTier({ request, env, user, params }) {
     price = Number.parseInt(b.price_kobo, 10);
     if (!Number.isInteger(price) || price < 0 || price > MAX_PRICE_KOBO) throw new HttpError(400, 'invalid_price', `Enter a valid price for "${tier.name}".`);
   }
-  await env.DB.prepare('UPDATE tiers SET capacity = ?1, price_kobo = ?2 WHERE id = ?3').bind(capacity, price, tier.id).run();
+  stmts.push(env.DB.prepare('UPDATE tiers SET capacity = ?1, price_kobo = ?2 WHERE id = ?3').bind(capacity, price, tier.id));
+  await env.DB.batch(stmts);
+  return json({ ...(await structure(env, ev.id)) });
+}
+
+// The areas a ticket type opens: at least one, all from this event.
+async function zoneIdsFor(env, eventId, ids, tierName) {
+  const own = new Set((await env.DB.prepare('SELECT id FROM zones WHERE event_id = ?1').bind(eventId).all()).results.map((z) => z.id));
+  const wanted = Array.isArray(ids) ? [...new Set(ids.map(String))] : [];
+  if (!wanted.length || wanted.some((z) => !own.has(z))) throw new HttpError(400, 'invalid_tier_zones', `Choose at least one area for "${tierName}".`);
+  return wanted;
+}
+
+// POST /api/events/:id/tiers  { name, zone_ids, price_kobo?, capacity?, days?, from?, to? } -> a new ticket type
+export async function addTier({ request, env, user, params }) {
+  const ev = await ownedEvent(env, user, params.id);
+  const b = await readJson(request);
+  const { tiers } = await structure(env, ev.id);
+  if (tiers.length >= 10) throw new HttpError(400, 'invalid_ticket types', 'An event can have up to 10 ticket types.');
+  const name = cleanText(b.name, 'ticket type', { max: 40 });
+  if (tiers.some((t) => t.name.toLowerCase() === name.toLowerCase())) throw new HttpError(400, 'duplicate_ticket type', `Another ticket type is already called "${name}".`);
+  const zones = await zoneIdsFor(env, ev.id, b.zone_ids, name);
+  const capacity = parseCapacity(b.capacity, name);
+  let price = 0;
+  if (b.price_kobo !== undefined && b.price_kobo !== null && b.price_kobo !== '') {
+    price = Number.parseInt(b.price_kobo, 10);
+    if (!Number.isInteger(price) || price < 0 || price > MAX_PRICE_KOBO) throw new HttpError(400, 'invalid_price', `Enter a valid price for "${name}".`);
+  }
+  const sc = ev.kind === 'workplace' ? parseSchedule(b, name) : parseSchedule({}, name);
+  const id = newId(10);
+  const sort = tiers.length;
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO tiers (id, event_id, name, sort, price_kobo, capacity, days_mask, from_min, to_min) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)')
+      .bind(id, ev.id, name, sort, price, capacity, sc.days_mask, sc.from_min, sc.to_min),
+    ...zones.map((z) => env.DB.prepare('INSERT INTO tier_zones (tier_id, zone_id) VALUES (?1, ?2)').bind(id, z))
+  ]);
+  return json({ ...(await structure(env, ev.id)) }, 201);
+}
+
+// DELETE /api/events/:id/tiers/:tierId -> only while nothing has been issued for it
+export async function deleteTier({ env, user, params }) {
+  const ev = await ownedEvent(env, user, params.id);
+  const { tiers } = await structure(env, ev.id);
+  const tier = tiers.find((t) => t.id === params.tierId);
+  if (!tier) throw new HttpError(404, 'not_found', 'Ticket type not found.');
+  if (tiers.length === 1) throw new HttpError(409, 'last_tier', 'An event needs at least one ticket type.');
+  const used = await env.DB.prepare(
+    'SELECT (SELECT COUNT(*) FROM invites WHERE tier_id = ?1) + (SELECT COUNT(*) FROM passes WHERE tier_id = ?1) + (SELECT COUNT(*) FROM guests WHERE tier_id = ?1) AS n'
+  ).bind(tier.id).first();
+  if (used.n) throw new HttpError(409, 'tier_in_use', `"${tier.name}" already has tickets, codes or guests, so it cannot be removed. Rename it, or set its limit to stop selling it.`);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM tier_zones WHERE tier_id = ?1').bind(tier.id),
+    env.DB.prepare('DELETE FROM tiers WHERE id = ?1').bind(tier.id)
+  ]);
+  return json({ ...(await structure(env, ev.id)) });
+}
+
+// POST /api/events/:id/zones { name } -> a new area (open it to ticket types afterwards)
+export async function addZone({ request, env, user, params }) {
+  const ev = await ownedEvent(env, user, params.id);
+  const b = await readJson(request);
+  const { zones } = await structure(env, ev.id);
+  if (zones.length >= 12) throw new HttpError(400, 'invalid_zones', 'An event can have up to 12 areas.');
+  const name = cleanText(b.name, 'zone', { max: 40 });
+  if (zones.some((z) => z.name.toLowerCase() === name.toLowerCase())) throw new HttpError(400, 'duplicate_zone', `Another area is already called "${name}".`);
+  await env.DB.prepare('INSERT INTO zones (id, event_id, name, sort) VALUES (?1, ?2, ?3, ?4)').bind(newId(10), ev.id, name, zones.length).run();
+  return json({ ...(await structure(env, ev.id)) }, 201);
+}
+
+// PATCH /api/events/:id/zones/:zoneId { name }
+export async function renameZone({ request, env, user, params }) {
+  const ev = await ownedEvent(env, user, params.id);
+  const b = await readJson(request);
+  const { zones } = await structure(env, ev.id);
+  const zone = zones.find((z) => z.id === params.zoneId);
+  if (!zone) throw new HttpError(404, 'not_found', 'Area not found.');
+  const name = cleanText(b.name, 'zone', { max: 40 });
+  if (zones.some((z) => z.id !== zone.id && z.name.toLowerCase() === name.toLowerCase())) throw new HttpError(400, 'duplicate_zone', `Another area is already called "${name}".`);
+  await env.DB.prepare('UPDATE zones SET name = ?1 WHERE id = ?2').bind(name, zone.id).run();
+  return json({ ...(await structure(env, ev.id)) });
+}
+
+// DELETE /api/events/:id/zones/:zoneId -> only before anyone has been scanned there, and never a ticket type's last area
+export async function deleteZone({ env, user, params }) {
+  const ev = await ownedEvent(env, user, params.id);
+  const { zones, tiers } = await structure(env, ev.id);
+  const zone = zones.find((z) => z.id === params.zoneId);
+  if (!zone) throw new HttpError(404, 'not_found', 'Area not found.');
+  if (zones.length === 1) throw new HttpError(409, 'last_zone', 'An event needs at least one area.');
+  const scanned = await env.DB.prepare('SELECT COUNT(*) AS n FROM scans WHERE zone_id = ?1').bind(zone.id).first();
+  if (scanned.n) throw new HttpError(409, 'zone_in_use', `People have already been scanned at "${zone.name}", so it cannot be removed. Rename it instead.`);
+  const orphan = tiers.find((t) => t.zone_ids.length === 1 && t.zone_ids[0] === zone.id);
+  if (orphan) throw new HttpError(409, 'zone_needed', `"${orphan.name}" only opens "${zone.name}". Give it another area first.`);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM tier_zones WHERE zone_id = ?1').bind(zone.id),
+    env.DB.prepare('DELETE FROM zones WHERE id = ?1').bind(zone.id)
+  ]);
   return json({ ...(await structure(env, ev.id)) });
 }
 

@@ -1,5 +1,5 @@
 import { h, wordmarkText, mount, toast, copy, when, ago, download } from '/js/dom.js';
-import { get, post, patch } from '/js/api.js';
+import { get, post, patch, del } from '/js/api.js';
 import { signInFlow } from '/js/auth-ui.js';
 import { qrSvg } from '/js/qr.js';
 
@@ -218,8 +218,8 @@ async function viewEvent(id, tab) {
     const office = data.event.kind === 'workplace';
     if (office !== OFFICE) { location.replace((office ? '/offices/' : '/organiser/') + '#/e/' + id); return; }
     const tabs = office
-      ? [['overview', 'Overview'], ['people', 'Add people'], ['attendees', 'Who has access'], ['team', 'Door staff'], ['report', 'Report'], ['gate', 'Doors & key']]
-      : [['overview', 'Overview'], ['tickets', 'Tickets'], ['guests', 'Guest list'], ['invites', 'Invite codes'], ['attendees', 'Attendees'], ['team', 'Gate team'], ['report', 'Report'], ['gate', 'Gate key & rules']];
+      ? [['overview', 'Overview'], ['edit', 'Edit details'], ['people', 'Add people'], ['attendees', 'Who has access'], ['team', 'Door staff'], ['report', 'Report'], ['gate', 'Doors & key']]
+      : [['overview', 'Overview'], ['edit', 'Edit details'], ['tickets', 'Tickets'], ['guests', 'Guest list'], ['invites', 'Invite codes'], ['attendees', 'Attendees'], ['team', 'Gate team'], ['report', 'Report'], ['gate', 'Gate key & rules']];
     const items = [{ href: '#/', text: OFFICE ? '\u2190 All offices' : '\u2190 All events' }, { label: data.event.name }]
       .concat(tabs.map(([k, label]) => ({ href: `#/e/${id}/${k}`, text: label, on: tab === k })))
       .concat([{ href: '/gate/', text: 'Open scanner' }]);
@@ -230,7 +230,7 @@ async function viewEvent(id, tab) {
         // A private event with only free tickets has no sales page worth sharing: guests come in by invitation.
         !office && (data.event.listed || data.tiers.some((t) => t.price_kobo > 0)) && h('button', { class: 'btn ghost small', type: 'button', onclick: () => copy(location.origin + '/e/?id=' + id, 'Sales page link copied') }, 'Copy sales page link')),
       body)));
-    ({ overview: tabOverview, tickets: tabTickets, invites: tabInvites, people: tabPeople, attendees: tabAttendees, team: tabTeam, report: tabReport, guests: tabGuests, gate: tabGate }[tab] || tabOverview)(body, data);
+    ({ overview: tabOverview, tickets: tabTickets, invites: tabInvites, people: tabPeople, attendees: tabAttendees, team: tabTeam, report: tabReport, guests: tabGuests, edit: tabEdit, gate: tabGate }[tab] || tabOverview)(body, data);
   } catch (ex) { fail(ex); }
 }
 
@@ -772,6 +772,96 @@ async function tabGuests(body, data) {
         h('div', { style: 'margin-top:12px' }, impBtn), impOut)),
     listBox);
   try { await load(); } catch (ex) { mount(summary, h('div', { class: 'error' }, ex.message)); }
+}
+
+// ---- Edit details: name, place and date; areas; ticket types (or access groups and their hours) ----------
+const localInput = (sec) => { if (!sec) return ''; const d = new Date(sec * 1000); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+
+function tabEdit(body, data) {
+  const id = data.event.id;
+  const office = data.event.kind === 'workplace';
+  const W = office
+    ? { area: 'Doors', areaOne: 'door', type: 'Access groups', typeOne: 'access group' }
+    : { area: 'Areas', areaOne: 'area', type: 'Ticket types', typeOne: 'ticket type' };
+  const again = (msg) => { toast(msg || 'Saved'); viewEvent(id, 'edit'); };
+  const act = (fn, msg) => async (e) => { if (e && e.preventDefault) e.preventDefault(); try { await fn(); again(msg); } catch (ex) { toast(ex.message); } };
+
+  // 1. Basics
+  const name = h('input', { class: 'input', id: 'en', value: data.event.name, maxlength: '80', required: true });
+  const venue = h('input', { class: 'input', id: 'ev', value: data.event.venue || '', maxlength: '80' });
+  const city = h('input', { class: 'input', id: 'ec', value: data.event.city || '', maxlength: '60' });
+  const starts = h('input', { class: 'input', id: 'es', type: 'datetime-local', value: localInput(data.event.starts_at) });
+  const basics = h('form', { class: 'card', onsubmit: act(() => patch('/events/' + id, {
+    name: name.value, venue: venue.value, city: city.value,
+    ...(office ? {} : { starts_at: starts.value ? new Date(starts.value).toISOString() : null })
+  })) },
+    h('h3', {}, office ? 'Office details' : 'Event details'),
+    h('div', { class: 'field' }, h('label', { for: 'en' }, office ? 'Name of the company or office' : 'Event name'), name),
+    h('div', { class: 'grid two' }, h('div', { class: 'field' }, h('label', { for: 'ev' }, office ? 'Address or building' : 'Venue'), venue), h('div', { class: 'field' }, h('label', { for: 'ec' }, 'City'), city)),
+    !office && h('div', { class: 'field' }, h('label', { for: 'es' }, 'Starts'), starts),
+    h('p', { class: 'hint', style: 'margin-top:8px' }, 'Changes show straight away on passes, invitations and the sales page. Tickets and codes already issued keep working.'),
+    h('div', { style: 'margin-top:12px' }, h('button', { class: 'btn primary', type: 'submit' }, 'Save details')));
+
+  // 2. Areas / doors
+  const newZone = h('input', { class: 'input', maxlength: '40', placeholder: office ? 'e.g. Server room' : 'e.g. VIP lounge', 'aria-label': 'New ' + W.areaOne });
+  const zones = h('div', { class: 'card' }, h('h3', {}, W.area),
+    h('p', { class: 'muted', style: 'margin-top:4px' }, `The ${W.areaOne}s you scan at. ${office ? 'A door' : 'An area'} can be removed until someone has been scanned there.`),
+    h('div', { class: 'stack', style: 'margin-top:10px' }, data.zones.map((z) => {
+      const inp = h('input', { class: 'input', value: z.name, maxlength: '40', 'aria-label': W.areaOne + ' name' });
+      return h('div', { class: 'row', style: 'flex-wrap:nowrap' }, h('div', { style: 'flex:1' }, inp),
+        h('button', { class: 'btn ghost small', type: 'button', onclick: act(() => patch(`/events/${id}/zones/${z.id}`, { name: inp.value })) }, 'Rename'),
+        data.zones.length > 1 && h('button', { class: 'btn danger small', type: 'button', onclick: act(async () => { if (!confirm(`Remove "${z.name}"?`)) throw new Error('Not removed'); await del(`/events/${id}/zones/${z.id}`); }, 'Removed') }, 'Remove'));
+    })),
+    h('form', { class: 'row', style: 'margin-top:12px;flex-wrap:nowrap', onsubmit: act(() => post(`/events/${id}/zones`, { name: newZone.value }), 'Added') },
+      h('div', { style: 'flex:1' }, newZone), h('button', { class: 'btn primary small', type: 'submit' }, 'Add ' + W.areaOne)));
+
+  // 3. Ticket types / access groups
+  const zoneChecks = (selected) => {
+    const set = new Set(selected);
+    return { set, el: h('div', { class: 'checks' }, data.zones.map((z) => h('label', {}, h('input', { type: 'checkbox', checked: set.has(z.id), onchange: (e) => { e.target.checked ? set.add(z.id) : set.delete(z.id); } }), z.name))) };
+  };
+  const scheduleInputs = (sc) => {
+    const days = new Set(sc ? sc.days : [0, 1, 2, 3, 4]);
+    const from = h('input', { class: 'input', type: 'time', value: sc ? sc.from : '07:00', 'aria-label': 'From' });
+    const to = h('input', { class: 'input', type: 'time', value: sc ? (sc.to === '24:00' ? '23:59' : sc.to) : '19:00', 'aria-label': 'To' });
+    return {
+      value: () => ({ days: [...days].sort(), from: from.value, to: to.value === '23:59' ? '24:00' : to.value }),
+      el: h('div', {}, h('div', { class: 'checks', style: 'margin-top:6px' }, DAY_NAMES.map((n, di) => h('label', {}, h('input', { type: 'checkbox', checked: days.has(di), onchange: (e) => { e.target.checked ? days.add(di) : days.delete(di); } }), n))),
+        h('div', { class: 'row', style: 'margin-top:6px' }, h('span', { class: 'hint' }, 'From'), from, h('span', { class: 'hint' }, 'to'), to))
+    };
+  };
+  const types = h('div', { class: 'card' }, h('h3', {}, W.type),
+    h('p', { class: 'muted', style: 'margin-top:4px' }, `Rename a ${W.typeOne} or change which ${W.areaOne}s it opens${office ? ' and when' : ''}. Changes apply to everyone holding it at their next scan.${office ? '' : ' Prices and limits are on the Tickets tab.'}`),
+    h('div', { class: 'stack', style: 'margin-top:10px' }, data.tiers.map((t) => {
+      const nm = h('input', { class: 'input', value: t.name, maxlength: '40', 'aria-label': W.typeOne + ' name' });
+      const zc = zoneChecks(t.zone_ids);
+      const sc = office && scheduleInputs(t.schedule);
+      return h('div', { class: 'tierrow' }, nm,
+        h('div', {}, h('span', { class: 'hint' }, `Opens these ${W.areaOne}s:`), zc.el),
+        sc && sc.el,
+        h('div', { class: 'row' },
+          h('button', { class: 'btn primary small', type: 'button', onclick: act(() => patch(`/events/${id}/tiers/${t.id}`, { name: nm.value, zone_ids: [...zc.set], ...(office ? sc.value() : {}) })) }, 'Save'),
+          data.tiers.length > 1 && h('button', { class: 'btn danger small', type: 'button', onclick: act(async () => { if (!confirm(`Remove "${t.name}"?`)) throw new Error('Not removed'); await del(`/events/${id}/tiers/${t.id}`); }, 'Removed') }, 'Remove'),
+          h('span', { class: 'hint' }, `${t.issued} issued`)));
+    })));
+
+  const addName = h('input', { class: 'input', maxlength: '40', placeholder: office ? 'e.g. Cleaners' : 'e.g. VIP', 'aria-label': 'New ' + W.typeOne + ' name' });
+  const addZones = zoneChecks(data.zones.length === 1 ? [data.zones[0].id] : []);
+  const addPrice = h('input', { class: 'input', style: 'width:120px', inputmode: 'decimal', placeholder: 'Free', 'aria-label': 'Price in naira' });
+  const addCap = h('input', { class: 'input', style: 'width:120px', inputmode: 'numeric', placeholder: 'No limit', 'aria-label': 'Limit' });
+  const addSc = office && scheduleInputs(null);
+  const add = h('form', { class: 'card', onsubmit: act(() => post(`/events/${id}/tiers`, {
+    name: addName.value, zone_ids: [...addZones.set],
+    ...(office ? addSc.value() : { price_kobo: addPrice.value.trim() ? Math.round(parseFloat(addPrice.value) * 100) : 0, capacity: addCap.value.trim() || undefined })
+  }), 'Added') },
+    h('h3', {}, 'Add a ' + W.typeOne),
+    h('div', { class: 'field' }, h('label', {}, 'Name'), addName),
+    h('div', { class: 'field' }, h('label', {}, `Opens these ${W.areaOne}s`), addZones.el),
+    office ? h('div', { class: 'field' }, h('label', {}, 'Days and hours'), addSc.el)
+      : h('div', { class: 'row', style: 'margin-top:10px' }, h('label', { class: 'hint' }, 'Price (₦)'), addPrice, h('label', { class: 'hint' }, 'Limit'), addCap),
+    h('div', { style: 'margin-top:12px' }, h('button', { class: 'btn primary', type: 'submit' }, 'Add ' + W.typeOne)));
+
+  body.append(basics, h('div', { class: 'grid two', style: 'margin-top:14px' }, zones, add), h('div', { style: 'margin-top:14px' }, types));
 }
 
 boot();

@@ -106,6 +106,17 @@ Migration `0006_photos.sql` adds `events.require_photo` and the `user_photos` ta
 
 Migration `0004_payments.sql` creates `wallets`, `vendors` and `ledger`.
 
+## Editing an event after setup
+
+Console tab **Edit details** (events and offices):
+- Name, venue, city and date (`PATCH /api/events/:id`). The invite-code prefix stays as it was, so codes issued
+  before a rename keep working.
+- Areas (doors): add, rename, and remove until someone has been scanned there and as long as no ticket type is left
+  without an area (`POST /api/events/:id/zones`, `PATCH|DELETE /api/events/:id/zones/:zoneId`).
+- Ticket types (access groups): rename, change which areas they open and, for offices, the days and hours
+  (`PATCH /api/events/:id/tiers/:tierId`); add new ones with price and limit (`POST /api/events/:id/tiers`); remove one
+  only while nothing has been issued for it (`DELETE …/tiers/:tierId`). Area and hour changes apply at the next scan.
+
 ## Gate team and the event report
 
 - **Gate team** (console tab; "Door staff" for offices): the organiser adds each steward by name and gets a one-time
