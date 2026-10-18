@@ -1,5 +1,6 @@
 import { h, wordmarkText, mount, when } from '/js/dom.js';
-import { get, post } from '/js/api.js';
+import { ApiError, get, post } from '/js/api.js';
+import { identify, withinSchedule } from '/js/offline.js';
 
 const top = document.getElementById('top');
 const main = document.getElementById('main');
@@ -13,7 +14,119 @@ let looping = false;
 // The scanner stays signed in on this phone (a steward's own key can be switched off by the organiser at any time).
 function load() { try { return JSON.parse(localStorage.getItem(KEY) || sessionStorage.getItem(KEY)) || {}; } catch { return {}; } }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(cfg)); sessionStorage.removeItem(KEY); } catch {} }
-function signOut(msg = '') { cfg = {}; info = null; recent = []; save(); viewKey(msg); }
+function signOut(msg = '') {
+  // Unsent offline scans stay queued for the next sign-in on this phone; the saved ticket list does not.
+  cfg = {}; info = null; recent = []; save(); dropPack(); viewKey(msg);
+}
+
+// ---- Offline ---------------------------------------------------------------------------------------------
+// The scanner keeps the event's ticket list on the phone (refreshed every minute while online). With no signal it
+// decides each scan itself with the same rules as the server, queues the result, and sends the queue when the
+// signal is back. Two scanners that are both offline cannot see each other's entries; the report marks any
+// ticket that got in twice that way.
+const PACK = 'tapin-gate-pack';
+const QUEUE = 'tapin-gate-queue';
+const MESSAGES = {
+  invalid_token: 'Not a valid Tap In pass.', revoked: 'This pass was cancelled.', no_zone_access: 'This pass does not include this area.',
+  already_used: 'This pass has already been used here.', expired: 'This pass has expired.', stale_code: 'This pass code is out of date. Ask them to reopen their pass.',
+  static_pass: 'This event needs the live code from the app. Screenshots and printed codes do not work.', outside_hours: 'This pass is not valid at this time.'
+};
+let pack = null;        // { data, fetched_at, offset }
+let idx = null;         // lookups built from the pack
+let offline = false;
+let syncing = false;
+let paintStatus = () => {};
+const readJSON = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } };
+const queue = () => readJSON(QUEUE, []);
+function dropPack() { pack = null; idx = null; try { localStorage.removeItem(PACK); } catch {} }
+function index() {
+  const d = pack.data;
+  idx = {
+    passes: new Map(d.passes.map((p) => [p.id, p])),
+    guests: new Map(d.guests.map((g) => [g.id, g])),
+    codes: new Map(d.guests.filter((g) => g.code_hash).map((g) => [g.code_hash, g])),
+    tiers: new Map(d.tiers.map((t) => [t.id, t])),
+    entered: new Map(d.entries.map((e) => [e.ref + '|' + e.zone_id, e.at]))
+  };
+  for (const q of queue()) if (q.result === 'granted' && q.event_id === d.event.id && !idx.entered.has(q.ref + '|' + q.zone_id)) idx.entered.set(q.ref + '|' + q.zone_id, q.at);
+}
+function usePack(p) { pack = p; index(); }
+async function refreshPack() {
+  const d = await get('/gate/list', auth());
+  const p = { data: d, fetched_at: Date.now(), offset: d.generated_at - Date.now() / 1000 };
+  if (!writeJSON(PACK, p)) console.warn('Could not save the ticket list on this phone');
+  usePack(p);
+}
+const gateNow = () => Math.floor(Date.now() / 1000 + (pack ? pack.offset : 0));
+const randomId = () => { const B = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; return [...crypto.getRandomValues(new Uint8Array(16))].map((b) => B[b & 31]).join(''); };
+
+// Decide a scan with no signal, exactly as the server would from the saved list.
+async function decideOffline(token, zone) {
+  const d = pack.data, ev = d.event, now = gateNow();
+  const code = await identify(token, d.key, now);
+  let h0 = null, ref = null, reason = null, kind = null;
+  if (code.kind === 'pass') { h0 = idx.passes.get(code.id); ref = 'p:' + code.id; }
+  else if (code.kind === 'guest') { h0 = idx.guests.get(code.id); ref = 'g:' + code.id; kind = h0 && h0.kind; }
+  else { h0 = idx.codes.get(code.hash); ref = h0 ? 'g:' + h0.id : null; kind = 'import'; }
+  if (code.kind === 'pass' && code.live && code.unverified) reason = 'stale_code'; // server-made live codes can't be checked offline
+  else if (!h0) reason = 'invalid_token';
+  else if (h0.status !== 'active') reason = 'revoked';
+  else if (code.kind === 'pass' && ev.secure_qr && !code.rolling) reason = 'static_pass';
+  else if (code.stale) reason = 'stale_code';
+  else if (h0.expires_at && h0.expires_at <= now) reason = 'expired';
+  else {
+    const tier = idx.tiers.get(h0.tier_id);
+    if (!tier || !withinSchedule(tier, now, ev.tz_offset_min)) reason = 'outside_hours';
+    else if (!tier.zones.includes(zone.id)) reason = 'no_zone_access';
+  }
+  let previous = null;
+  if (!reason && !ev.allow_reentry && idx.entered.has(ref + '|' + zone.id)) { reason = 'already_used'; previous = idx.entered.get(ref + '|' + zone.id); }
+  const granted = !reason;
+  if (granted && !idx.entered.has(ref + '|' + zone.id)) idx.entered.set(ref + '|' + zone.id, now);
+  const q = queue();
+  q.push({ id: randomId(), event_id: ev.id, ref: h0 ? ref : null, zone_id: zone.id, result: granted ? 'granted' : 'denied', reason, at: now });
+  writeJSON(QUEUE, q);
+  const tier = h0 && idx.tiers.get(h0.tier_id);
+  return {
+    offline: true, result: granted ? 'granted' : 'denied', reason, message: granted ? 'Welcome in.' : MESSAGES[reason],
+    holder: h0 ? h0.holder : null, tier: tier ? tier.name : null, zone: zone.name, previous_at: previous,
+    ...(h0 && code.kind !== 'pass' ? { guest: kind || h0.kind, party: h0.party, table: h0.table, rsvp: h0.rsvp } : {}),
+    ...(ev.require_photo && h0 ? { photo: null, photo_missing: true } : {})
+  };
+}
+
+// Send queued offline scans, then fetch a fresh list. Quietly does nothing with no signal.
+async function syncNow() {
+  if (syncing || !cfg.key) return;
+  syncing = true;
+  try {
+    let q = queue();
+    const mine = (x) => !pack || x.event_id === pack.data.event.id;
+    while (q.some(mine)) {
+      const batch = q.filter(mine).slice(0, 500);
+      await post('/gate/sync', { scans: batch.map(({ event_id, ...rest }) => rest) }, auth());
+      const sent = new Set(batch.map((x) => x.id));
+      q = queue().filter((x) => !sent.has(x.id));
+      writeJSON(QUEUE, q);
+    }
+    await refreshPack();
+    offline = false;
+  } catch (ex) {
+    if (ex.status === 0) offline = true;
+    else if (ex.status === 401) { syncing = false; return signOut('This scanner is no longer signed in. Ask the organiser for a new scanner link.'); }
+  }
+  syncing = false;
+  paintStatus();
+}
+setInterval(syncNow, 60000);
+window.addEventListener('online', syncNow);
+window.addEventListener('offline', () => { offline = true; paintStatus(); });
+
+// A scan with a time limit: on a weak signal, decide offline rather than keep the queue waiting.
+function postScan(body) {
+  return Promise.race([post('/gate/scan', body, auth()), new Promise((_, rej) => setTimeout(() => rej(new ApiError(0, 'timeout', 'No answer from Tap In.')), 6000))]);
+}
 // Who is scanning, with a way to hand the phone over.
 const whoBar = () => h('p', { class: 'hint', style: 'margin-top:12px' },
   info && info.steward ? ['Signed in as ', h('strong', {}, info.steward.name), ' \u00b7 '] : ['Using the shared gate key \u00b7 '],
@@ -68,7 +181,17 @@ function viewScan(result) {
     if (!t) return;
     input.disabled = true;
     try {
-      const r = await post('/gate/scan', { token: t, zone_id: zone.id }, auth());
+      let r;
+      try {
+        if (navigator.onLine === false) throw new ApiError(0, 'network', 'offline');
+        r = await postScan({ token: t, zone_id: zone.id });
+        if (offline) { offline = false; syncNow(); }
+      } catch (ex) {
+        if (ex.status !== 0 || !pack) throw ex;
+        offline = true;
+        r = await decideOffline(t, zone);
+      }
+      paintStatus();
       recent.unshift(r);
       recent = recent.slice(0, 8);
       paintResult(resBox, r);
@@ -76,7 +199,7 @@ function viewScan(result) {
       beep(r.result === 'granted');
     } catch (ex) {
       if (ex.status === 401) return signOut('This scanner is no longer signed in. Ask the organiser for a new scanner link.');
-      paintResult(resBox, { result: 'error', message: ex.message });
+      paintResult(resBox, { result: 'error', message: ex.status === 0 ? 'No signal, and this phone has no saved ticket list yet. Connect once so the list can download.' : ex.message });
     }
     input.value = '';
     input.disabled = false;
@@ -88,7 +211,20 @@ function viewScan(result) {
     mount(recentBox, recent.map((r) => h('div', { class: 'item' }, h('span', {}, r.holder || 'Unknown pass'), h('span', { class: r.result === 'granted' ? 'chip ok' : 'chip bad' }, r.result === 'granted' ? 'Entered' : 'Declined'))));
   }
 
+  // Online or offline, how fresh the saved list is, and how many scans are waiting to be sent.
+  const statusBox = h('div', { class: 'netstatus', role: 'status' });
+  paintStatus = () => {
+    const waiting = queue().length;
+    const age = pack ? Math.round((Date.now() - pack.fetched_at) / 60000) : null;
+    const listTxt = pack ? `${pack.data.passes.length + pack.data.guests.length} tickets saved ${age < 1 ? 'just now' : age + ' min ago'}` : 'Ticket list not saved yet';
+    mount(statusBox, h('span', { class: 'dot ' + (offline ? 'off' : 'on') }), h('strong', {}, offline ? 'No signal: checking against the saved list' : 'Online'),
+      h('span', { class: 'hint' }, ` \u00b7 ${listTxt}${waiting ? ` \u00b7 ${waiting} scan${waiting === 1 ? '' : 's'} waiting to send` : ''}`),
+      !offline && waiting > 0 && h('button', { class: 'linkbtn', style: 'margin-left:6px', type: 'button', onclick: syncNow }, 'Send now'));
+  };
+  paintStatus();
+
   mount(main, h('div', { class: 'narrow' },
+    statusBox,
     h('div', { class: 'spread' }, h('div', {}, h('p', { class: 'eyebrow' }, info.event.name), h('h2', {}, zone.name)),
       h('button', { class: 'btn ghost small', type: 'button', onclick: viewZone }, 'Change area')),
     h('form', { style: 'margin-top:14px', onsubmit: (e) => { e.preventDefault(); submit(input.value); } }, input,
@@ -118,7 +254,8 @@ function paintResult(box, r) {
     r.tier && h('p', { class: 'muted' }, r.tier + (r.zone ? ' · ' + r.zone : '') + (r.guest === 'import' ? ' · imported ticket' : r.guest === 'invite' ? ' · guest list' : '')),
     ok && r.rsvp === 'no' && h('div', { class: 'notice warn', style: 'margin:10px auto;max-width:340px' }, 'They told the host they could not come. Check with the host if unsure.'),
     h('p', { style: 'margin-top:8px' }, r.message),
-    r.previous_at && h('p', { class: 'hint' }, 'First used at ' + when(r.previous_at, { timeStyle: 'short' }))));
+    r.previous_at && h('p', { class: 'hint' }, 'First used at ' + when(r.previous_at, { timeStyle: 'short' })),
+    r.offline && h('p', { class: 'hint' }, 'Decided offline from the saved list. It will be sent when the signal is back.')));
 }
 
 let audio;
@@ -184,5 +321,21 @@ function stopCamera(video, btn) {
     history.replaceState(null, '', location.pathname);
   }
   if (!cfg.key) return viewKey();
-  try { await ensureInfo(); cfg.zoneId ? viewScan() : viewZone(); } catch { signOut('That scanner link or key no longer works. Ask the organiser for a new one.'); }
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/gate/sw.js', { scope: '/gate/' }).catch(() => {});
+  const saved = readJSON(PACK, null);
+  try {
+    await ensureInfo();
+    if (saved && saved.data.event.id === info.event.id) usePack(saved);
+    syncNow(); // sends anything left from last time and saves a fresh list
+    cfg.zoneId ? viewScan() : viewZone();
+  } catch (ex) {
+    // No signal on start-up: carry on from the saved list if there is one.
+    if (ex.status === 0 && saved) {
+      usePack(saved);
+      offline = true;
+      info = { event: saved.data.event, zones: saved.data.zones, steward: saved.data.steward };
+      return cfg.zoneId ? viewScan() : viewZone();
+    }
+    signOut(ex.status === 0 ? 'No signal. Connect once to sign this scanner in.' : 'That scanner link or key no longer works. Ask the organiser for a new one.');
+  }
 })();

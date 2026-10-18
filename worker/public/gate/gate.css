@@ -13,3 +13,9 @@
 
 /* a guest's party size at the gate */
 .result .party{font-size:20px;font-weight:800;margin-top:6px;color:var(--fg)}
+
+/* online / offline status above the scanner */
+.netstatus{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px;padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:var(--card);margin-bottom:12px}
+.netstatus .dot{width:9px;height:9px;border-radius:50%;flex:none}
+.netstatus .dot.on{background:var(--ok)}
+.netstatus .dot.off{background:var(--warn);box-shadow:0 0 0 3px color-mix(in srgb,var(--warn) 30%,transparent)}

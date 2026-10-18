@@ -61,6 +61,8 @@ const ROUTES = [
 
   ['GET', '/api/gate/info', 'none', gate.gateInfo],
   ['POST', '/api/gate/scan', 'none', gate.gateScan],
+  ['GET', '/api/gate/list', 'none', gate.gateList],
+  ['POST', '/api/gate/sync', 'none', gate.gateSync],
 
   ['GET', '/api/wallet', 'user', wallet.wallet],
   ['POST', '/api/wallet/topup', 'user', wallet.topup],

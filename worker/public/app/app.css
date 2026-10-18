@@ -66,3 +66,8 @@
 .obc .tc .cname{font-size:15px;max-width:70%}
 .obc .tc .cnum{font-size:9px}
 .chips .hint{flex-basis:100%;margin:2px 0 0}
+
+/* Live pass: a bar that runs down to the next code, so staff can see the code is moving (not a screenshot) */
+.countdown{width:min(78vw,320px);height:6px;border-radius:99px;background:color-mix(in srgb,var(--fg) 15%,transparent);overflow:hidden;margin:-4px 0 10px}
+.countdown i{display:block;height:100%;background:var(--signal);border-radius:99px;transition:width 1s linear}
+@media (prefers-reduced-motion:reduce){.countdown i{transition:none}}

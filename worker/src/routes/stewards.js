@@ -162,6 +162,11 @@ export function buildReport(ev, { scans, passes, tiers, zones, stewards, guests 
   for (const s of denied) if (s.reason === 'already_used' && holderKey(s)) reusedPerPass.set(holderKey(s), (reusedPerPass.get(holderKey(s)) || 0) + 1);
   const heavy = [...reusedPerPass.values()].filter((n) => n >= 3).length;
   if (heavy) flags.push({ level: 'warn', text: `${heavy} ticket${heavy === 1 ? ' was' : 's were'} shown again 3 or more times after first entry. That usually means a shared screenshot or a ticket passed back out.` });
+  // Offline: scans made with no signal and sent later, and tickets two offline scanners both let in.
+  const offlineScans = scans.filter((s) => String(s.id).startsWith('OF')).length;
+  const offlineDup = granted.filter((s) => s.reason === 'offline_duplicate').length;
+  if (offlineDup) flags.push({ level: 'warn', text: `${offlineDup} ticket${offlineDup === 1 ? ' was' : 's were'} let in twice while scanners had no signal and could not see each other's entries.` });
+  if (offlineScans) flags.push({ level: 'info', text: `${offlineScans} scan${offlineScans === 1 ? ' was' : 's were'} made with no signal and sent when the connection came back.` });
   // Bursts: 5 or more fake codes at one area within two minutes.
   for (const z of zones) {
     const fakes = denied.filter((s) => s.zone_id === z.id && s.reason === 'invalid_token').map((s) => s.at);
@@ -189,6 +194,7 @@ export function buildReport(ev, { scans, passes, tiers, zones, stewards, guests 
       reentries: granted.length - firstEntries.size,
       refusals: denied.length,
       refusal_pct: overallRefusal,
+      offline_scans: offlineScans,
       first_entry: times[0] ?? null,
       last_entry: times[times.length - 1] ?? null
     },
@@ -237,7 +243,8 @@ export async function eventReport({ env, user, params }) {
 // GET /api/events/:id/scans.csv -> every scan, for the organiser's own records. No phone numbers or emails.
 const REASON_TEXT = {
   invalid_token: 'Fake or unreadable code', already_used: 'Already used', stale_code: 'Old code or screenshot', static_pass: 'Screenshot or printout',
-  revoked: 'Cancelled pass', no_zone_access: 'Wrong area', wrong_event: 'Other event', outside_hours: 'Outside hours', expired: 'Pass expired'
+  revoked: 'Cancelled pass', no_zone_access: 'Wrong area', wrong_event: 'Other event', outside_hours: 'Outside hours', expired: 'Pass expired',
+  offline_duplicate: 'Entered twice while offline'
 };
 // A cell that starts with = + - @ could run as a formula in a spreadsheet; prefix it so it stays text.
 const cell = (v) => {
@@ -254,7 +261,7 @@ export async function scansCsv({ env, user, params }) {
   const ev = await ownedEvent(env, user, params.id);
   const rows = (
     await env.DB.prepare(
-      `SELECT s.at, s.result, s.reason, z.name AS zone, t.name AS tier, COALESCE(u.name, g.name) AS holder, st.name AS steward
+      `SELECT s.at, s.result, s.reason, s.id LIKE 'OF%' AS offline, z.name AS zone, t.name AS tier, COALESCE(u.name, g.name) AS holder, st.name AS steward
        FROM scans s
        LEFT JOIN zones z ON z.id = s.zone_id
        LEFT JOIN passes p ON p.id = s.pass_id
@@ -269,7 +276,7 @@ export async function scansCsv({ env, user, params }) {
   ).results;
   const lines = [['Time (Lagos)', 'Area', 'Result', 'Reason', 'Ticket type', 'Guest', 'Steward'].join(',')];
   for (const r of rows) {
-    lines.push([lagosStamp(r.at), r.zone, r.result === 'granted' ? 'Entered' : 'Refused', r.reason ? REASON_TEXT[r.reason] || r.reason : '', r.tier, r.holder, r.steward || 'Shared gate key'].map(cell).join(','));
+    lines.push([lagosStamp(r.at), r.zone, r.result === 'granted' ? 'Entered' + (r.offline ? ' (offline)' : '') : 'Refused' + (r.offline ? ' (offline)' : ''), r.reason ? REASON_TEXT[r.reason] || r.reason : '', r.tier, r.holder, r.steward || 'Shared gate key'].map(cell).join(','));
   }
   const file = `tap-in-${(ev.prefix || 'event').toLowerCase()}-scans.csv`;
   return new Response(lines.join('\r\n') + '\r\n', {

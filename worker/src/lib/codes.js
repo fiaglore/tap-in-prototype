@@ -6,7 +6,7 @@
 //
 // Plus the gate key staff use to authorise a scanner: GK-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX.
 
-import { B32, base32, hmacBytes, hmacHex, normaliseCode, randomBase32, randomInt } from './util.js';
+import { B32, base32, base64url, hmacBytes, hmacHex, normaliseCode, randomBase32, randomInt } from './util.js';
 
 // ---------- 1. invite codes ----------
 
@@ -66,8 +66,9 @@ export function parsePassToken(raw) {
 // Gate code = "TG" + guest id (10) + mac (10), mac = HMAC(pepper, "guest|" + id): shown as a QR on the invitation page.
 // Invitation link token = guest id (10) + mac (12), mac = HMAC(pepper, "glink|" + id): opens that page.
 // Both are derived, so the database holds nothing that works as a code or a link.
-// Codes imported from another ticketer are stored as HMAC(pepper, "guestcode|" + event + "|" + code), so the same
-// printed code at two different events never collides and a leak reveals no usable code.
+// Codes imported from another ticketer are stored as HMAC(event offline key, "code|" + code) (see 3c), so the same
+// printed code at two different events never collides, a leak reveals no usable code, and a signed-in scanner
+// can check a printed code with no signal.
 
 export async function guestMac(pepper, id) {
   return base32(await hmacBytes(pepper, 'guest|' + id)).slice(0, 10);
@@ -90,7 +91,7 @@ export function parseInviteLinkToken(raw) {
   const m = /^([0-9A-Z]{10})([0-9A-Z]{12})$/.exec(String(raw ?? '').trim().toUpperCase());
   return m ? { id: m[1], mac: m[2] } : null;
 }
-export const hashGuestCode = (pepper, eventId, code) => hmacHex(pepper, `guestcode|${eventId}|${normaliseCode(code)}`);
+export const hashGuestCode = async (pepper, eventId, code) => hmacHex(await eventOfflineKey(pepper, eventId), 'code|' + normaliseCode(code));
 
 // ---------- 3b. live (rotating) pass tokens ----------
 // token = "TQ" + id (10) + window (6, base32 of the 30-second window number) + mac (10).
@@ -132,6 +133,32 @@ export function liveWindowFresh(win, nowSec) {
   return age >= -1 && age <= LIVE_GRACE; // one window of clock skew into the future
 }
 export const liveMacFor = liveMac;
+
+// ---------- 3c. offline: per-event key and rolling codes made on the phone ----------
+// eventOfflineKey = HMAC(pepper, "offline|" + event). Signed-in scanners for that event download it, so they can
+// check codes with no signal. A pass's rolling key = HMAC(eventOfflineKey, "pass|" + pass id); only the pass holder's
+// phone gets it, and it makes a new code every 30 seconds by itself: "TR" + id (10) + window (6) + mac (10), with
+// mac = HMAC(rolling key, "roll|" + window). A screenshot still goes stale, but the phone needs no connection.
+// Keys are base64url strings so the browser can use exactly the same HMAC calls.
+
+export async function eventOfflineKey(pepper, eventId) {
+  return base64url(await hmacBytes(pepper, 'offline|' + eventId));
+}
+export async function passRollingKey(eventKey, passId) {
+  return base64url(await hmacBytes(eventKey, 'pass|' + passId));
+}
+export async function rollingMac(passKey, win) {
+  return base32(await hmacBytes(passKey, 'roll|' + win)).slice(0, 10);
+}
+export async function rollingToken(passKey, id, nowSec) {
+  const win = encodeWindow(liveWindow(nowSec));
+  const s = id + win + (await rollingMac(passKey, win));
+  return `TR-${s.slice(0, 5)}-${s.slice(5, 10)}-${s.slice(10, 15)}-${s.slice(15, 20)}-${s.slice(20, 26)}`;
+}
+export function parseRollingToken(raw) {
+  const m = /^TR([0-9A-Z]{26})$/.exec(normaliseCode(raw));
+  return m ? { id: m[1].slice(0, 10), win: m[1].slice(10, 16), mac: m[1].slice(16) } : null;
+}
 
 // ---------- gate keys ----------
 

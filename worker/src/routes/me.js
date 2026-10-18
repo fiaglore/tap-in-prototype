@@ -1,6 +1,6 @@
 import { HttpError, normaliseCode, newId, nowSec } from '../lib/util.js';
 import { clientIp, json, readJson } from '../lib/http.js';
-import { LIVE_GRACE, LIVE_STEP, hashInvite, liveToken, passToken } from '../lib/codes.js';
+import { LIVE_GRACE, LIVE_STEP, eventOfflineKey, hashInvite, liveToken, passRollingKey, passToken } from '../lib/codes.js';
 import { isFull, record } from '../lib/limits.js';
 import { publicUser } from '../lib/session.js';
 
@@ -40,6 +40,8 @@ async function loadPasses(env, userId, onlyId) {
       // On a secure-QR event the permanent code is never handed out; the phone asks for a live one.
       token: p.secure_qr ? null : await passToken(env.SECRET_PEPPER, p.id),
       live: !!p.secure_qr,
+      // The phone makes its own rolling code from this key, so the live pass works with no signal.
+      roll_key: p.secure_qr && p.status === 'active' ? await passRollingKey(await eventOfflineKey(env.SECRET_PEPPER, p.event_id), p.id) : undefined,
       event: { id: p.event_id, kind: p.kind, secure_qr: !!p.secure_qr, require_photo: !!p.require_photo, name: p.event_name, venue: p.venue, city: p.city, starts_at: p.starts_at },
       tier: p.tier_name,
       zones: zonesByPass[p.id] || [],
@@ -67,7 +69,8 @@ export async function me({ env, user }) {
   }));
 
   const ph = await env.DB.prepare('SELECT 1 AS x FROM user_photos WHERE user_id = ?1').bind(user.id).first();
-  return json({ user: { ...publicUser(user), has_photo: !!ph }, passes: await loadPasses(env, user.id), waiting });
+  // server_time lets the phone correct its clock before making rolling codes offline.
+  return json({ user: { ...publicUser(user), has_photo: !!ph }, passes: await loadPasses(env, user.id), waiting, server_time: now });
 }
 
 // GET /api/me/history  -> every time one of my passes was scanned
@@ -171,5 +174,5 @@ export async function liveCode({ env, user, params }) {
   if (!p) throw new HttpError(404, 'not_found', 'Pass not found.');
   const now = nowSec();
   if (p.status !== 'active' || (p.expires_at && p.expires_at <= now)) throw new HttpError(409, 'pass_not_active', 'This pass is not active.');
-  return json({ token: await liveToken(env.SECRET_PEPPER, p.id, now), valid_for: LIVE_STEP * (LIVE_GRACE + 1), refresh_in: 20 });
+  return json({ token: await liveToken(env.SECRET_PEPPER, p.id, now), valid_for: LIVE_STEP * (LIVE_GRACE + 1), refresh_in: 20, server_time: now });
 }

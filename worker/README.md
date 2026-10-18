@@ -137,6 +137,26 @@ Both live in the `guests` table (migration 0009) and need no Tap In account. Con
   re-entry, single use, cancelled). The camera also reads common barcodes (Code 128, EAN-13, PDF417 and others) where
   the phone supports them. Guests are counted in the overview, report and CSV.
 
+## Offline gates
+
+- **Passes.** The app keeps the signed-in person's passes on the phone (cleared on sign out) and a service worker
+  (`/app/sw.js`) keeps the app itself, so passes open with no signal. Live passes come with a rolling key
+  (`roll_key` in `/api/me`); the phone makes a new `TR-…` code every 30 seconds from it, corrected by the server time,
+  so screenshots still go stale with no connection. Key chain: event offline key = HMAC(pepper, "offline|" + event),
+  pass key = HMAC(event key, "pass|" + pass), code mac = HMAC(pass key, "roll|" + window). The gate accepts `TQ`
+  (server-made) and `TR` codes.
+- **Scanners.** A signed-in scanner downloads the event's list every minute (`GET /api/gate/list`: rules, tickets with
+  first name and initial, entries so far, imported-code hashes, the event offline key) and keeps it on the phone, with
+  a service worker (`/gate/sw.js`) for the page. With no signal (or no answer within 6 seconds) it decides each scan
+  itself with the server's rules (`public/js/offline.js` mirrors `codes.js` and `schedule.js`, and a test checks they
+  agree), queues it, and sends the queue with `POST /api/gate/sync` when the signal returns. Offline scans are stored
+  with an `OF` id prefix and the steward; resending is harmless.
+- **Limits.** Scanners that are offline at the same time cannot see each other's entries: a ticket let in at two of
+  them is recorded with reason `offline_duplicate` and flagged in the report. Offline, a plain `TP`/`TG` code is
+  accepted if its ticket is on the list (its mac needs the server's secret), and server-made `TQ` codes are refused as
+  out of date (the app shows `TR` codes). Photos are not downloaded; offline scans at photo events say "check ID".
+  Removing a steward takes effect at their next sync.
+
 ## Link previews, privacy and terms
 
 - Every public page has Open Graph tags and the share image `public/og.png` (1200x630). Static pages point at

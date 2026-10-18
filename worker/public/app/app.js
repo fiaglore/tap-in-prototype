@@ -5,6 +5,7 @@ import { signInFlow } from '/js/auth-ui.js';
 import { cardEl, cardNumber, loadCard, saveCard, sanitise, PRESETS, SWATCHES, FINISHES, PATTERNS, TYPES } from '/js/card.js';
 import { orbitSvg, nextIndex, daysTo } from '/app/orbit.js';
 import { qrSvg } from '/js/qr.js';
+import { rollingToken, secondsLeft, LIVE_STEP } from '/js/offline.js';
 
 const root = document.getElementById('app');
 const state = { user: null, passes: [], waiting: [], history: [], wallet: null, tab: 'around', config: {}, sel: null, ctx: [] };
@@ -31,12 +32,33 @@ const icon = (name) => {
 };
 
 // ---- Data ----------------------------------------------------------------------------------------
-async function refresh() {
-  const r = await get('/me');
+// Passes are kept on this phone too, so they still open with no signal (cleared on sign out).
+const CACHE = 'tapin-me';
+function useData(r) {
   state.user = r.user;
   state.passes = r.passes;
-  state.waiting = r.waiting;
+  state.waiting = r.waiting || [];
+  // How far this phone's clock is from the server's, so codes made offline match the gate's time.
+  if (r.server_time && r.fetched_at) state.clockOffset = r.server_time - r.fetched_at / 1000;
 }
+async function refresh() {
+  try {
+    const r = await get('/me');
+    r.fetched_at = Date.now();
+    useData(r);
+    state.offline = false;
+    try { localStorage.setItem(CACHE, JSON.stringify(r)); } catch {}
+  } catch (ex) {
+    if (ex.status !== 0) throw ex;
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(CACHE)); } catch {}
+    if (!saved) throw ex;
+    useData(saved);
+    state.offline = true;
+  }
+}
+const forgetCache = () => { try { localStorage.removeItem(CACHE); } catch {} };
+const nowSec = () => Date.now() / 1000 + (state.clockOffset || 0);
 const firstName = () => (state.user && state.user.name ? state.user.name.trim().split(/\s+/)[0] : 'there');
 const cardInfo = (status = 'Active') => ({ name: (loadCard().name || (state.user && state.user.name) || 'Your name').slice(0, 16), num: cardNumber(state.user && state.user.id), status });
 
@@ -45,7 +67,8 @@ function shell(content, { tabs = true, title } = {}) {
   const head = h('div', { class: 'head' },
     h('a', { class: 'wordmark', href: '/' }, wordmarkText()),
     window.TapTheme.button());
-  mount(root, head, h('main', { class: 'page' }, content), tabs && tabBar());
+  const offline = state.offline && h('div', { class: 'notice warn', role: 'status', style: 'margin-bottom:12px' }, 'No connection. Your saved passes still work at the gate; everything else updates when you are back online.');
+  mount(root, head, h('main', { class: 'page' }, offline, content), tabs && tabBar());
   if (title) document.title = title + ' · Tap In';
   window.scrollTo(0, 0);
 }
@@ -336,8 +359,25 @@ function showPass(p) {
   const note = h('p', { class: 'hint', style: 'margin-top:14px;text-align:center;max-width:320px' });
   const copyBtn = h('button', { class: 'btn ghost small', style: 'margin-top:12px', type: 'button', onclick: () => copy(tokenEl.textContent, 'Pass code copied') }, 'Copy pass code');
   function draw(token) { mount(qrBox, qrSvg(token)); tokenEl.textContent = token; }
-  if (p.live) {
-    // Secure event: the code changes every 30 seconds, so keep asking the server for a fresh one.
+  const countdown = h('div', { class: 'countdown', 'aria-hidden': 'true' }, h('i', {}));
+  countdown.hidden = true;
+  if (p.live && p.roll_key) {
+    // Secure event: the phone makes a new code every 30 seconds by itself, so it works with no signal.
+    // The moving bar shows staff the code is live, not a screenshot.
+    copyBtn.hidden = true;
+    countdown.hidden = false;
+    note.textContent = 'This code changes every 30 seconds, so a screenshot will not work. It works without a connection.';
+    let shownWin = -1;
+    const tick = async () => {
+      const now = nowSec();
+      const win = Math.floor(now / LIVE_STEP);
+      if (win !== shownWin) { shownWin = win; draw(await rollingToken(p.roll_key, p.id, now)); }
+      countdown.firstChild.style.width = (secondsLeft(now) / LIVE_STEP) * 100 + '%';
+    };
+    tick();
+    timer = setInterval(tick, 1000);
+  } else if (p.live) {
+    // Secure event on an older saved pass without a key: keep asking the server for a fresh code.
     note.textContent = 'Getting your live code…';
     copyBtn.hidden = true;
     let last = 0;
@@ -364,7 +404,7 @@ function showPass(p) {
     h('p', { class: 'muted', style: 'text-align:center' }, state.user.name || ''),
     needsPhoto(p) && h('div', { class: 'notice warn', style: 'max-width:340px;text-align:center' }, 'This event checks passes against a photo of you. ',
       h('button', { class: 'btn small primary', style: 'margin-top:8px', type: 'button', onclick: async () => { try { if (await ensurePhoto()) { toast('Photo saved'); close(); render(); } } catch (ex) { toast(ex.message); } } }, 'Add my photo')),
-    qrBox, tokenEl,
+    qrBox, countdown, tokenEl,
     h('div', { class: 'zones', style: 'margin-top:12px;justify-content:center' }, p.zones.map((z) => h('span', { class: 'chip' }, z))),
     note, copyBtn);
   document.body.style.overflow = 'hidden';
@@ -482,7 +522,7 @@ function viewMe() {
       h('button', { class: 'btn ghost', type: 'button', onclick: () => { flag(false); onboarding('ctx'); } }, 'Replay intro'),
       h('a', { class: 'btn ghost', href: '/privacy/' }, 'Privacy'),
       h('a', { class: 'btn ghost', href: '/terms/' }, 'Terms'),
-      h('button', { class: 'btn ghost', type: 'button', onclick: async () => { await post('/auth/logout').catch(() => {}); state.user = null; state.passes = []; state.waiting = []; flag(false); onboarding('welcome'); } }, 'Sign out'))), { title: 'Me' });
+      h('button', { class: 'btn ghost', type: 'button', onclick: async () => { await post('/auth/logout').catch(() => {}); forgetCache(); state.user = null; state.passes = []; state.waiting = []; flag(false); onboarding('welcome'); } }, 'Sign out'))), { title: 'Me' });
 }
 
 // ---- My photo (shown to door staff only at events that ask for it) -----------------------------------
@@ -535,6 +575,8 @@ function viewCustom() {
 
 // ---- Start ---------------------------------------------------------------------------------------
 (async function start() {
+  // Keep the app itself on the phone so it opens with no signal.
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/app/sw.js', { scope: '/app/' }).catch(() => {});
   const splash = document.getElementById('splash');
   if (splash) setTimeout(() => splash.remove(), 3300);
   state.config = await get('/config').catch(() => ({}));

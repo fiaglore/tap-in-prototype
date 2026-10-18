@@ -4,7 +4,7 @@
 
 import { HttpError, newId, normaliseCode, nowSec, safeEqual } from '../lib/util.js';
 import { clientIp, json, readJson } from '../lib/http.js';
-import { guestMac, hashGateKey, hashGuestCode, hashStewardKey, isStewardKey, liveMacFor, liveWindowFresh, parseGuestToken, parseLiveToken, parsePassToken, passMac } from '../lib/codes.js';
+import { eventOfflineKey, guestMac, hashGateKey, hashGuestCode, hashStewardKey, isStewardKey, liveMacFor, liveWindowFresh, parseGuestToken, parseLiveToken, parsePassToken, parseRollingToken, passMac, passRollingKey, rollingMac } from '../lib/codes.js';
 import { isFull, record } from '../lib/limits.js';
 import { withinSchedule } from '../lib/schedule.js';
 import { NEW_PHOTO_SECS, photoDataUrl } from '../lib/photo.js';
@@ -83,7 +83,9 @@ export async function gateScan({ request, env }) {
   let reason = null;
   let pass = null;
   let guest = null;
-  const live = parseLiveToken(body.token);
+  // Live codes come from the server (TQ) or are made on the phone itself with no signal (TR); both expire fast.
+  const rolling = parseRollingToken(body.token);
+  const live = parseLiveToken(body.token) || rolling;
   const parsed = live || parsePassToken(body.token);
   const guestTok = !parsed && parseGuestToken(body.token);
 
@@ -96,7 +98,9 @@ export async function gateScan({ request, env }) {
   if (guestTok && safeEqual(await guestMac(env.SECRET_PEPPER, guestTok.id), guestTok.mac)) {
     guest = await loadGuest('g.id = ?1', [guestTok.id]);
   } else if (parsed) {
-    const macOk = live ? safeEqual(await liveMacFor(env.SECRET_PEPPER, live.id, live.win), live.mac) : safeEqual(await passMac(env.SECRET_PEPPER, parsed.id), parsed.mac);
+    const macOk = rolling
+      ? safeEqual(await rollingMac(await passRollingKey(await eventOfflineKey(env.SECRET_PEPPER, ev.id), rolling.id), rolling.win), rolling.mac)
+      : live ? safeEqual(await liveMacFor(env.SECRET_PEPPER, live.id, live.win), live.mac) : safeEqual(await passMac(env.SECRET_PEPPER, parsed.id), parsed.mac);
     if (macOk && live && !liveWindowFresh(live.win, now)) reason = 'stale_code';
     else if (macOk) {
       pass = await env.DB.prepare(
@@ -189,4 +193,98 @@ export async function gateScan({ request, env }) {
     at: now,
     previous_at: previousAt
   });
+}
+
+// ---- Offline ---------------------------------------------------------------------------------------------
+// A signed-in scanner downloads everything it needs to decide on its own when the signal drops, and sends the
+// scans it made offline when the signal comes back.
+
+// GET /api/gate/list -> the event's rules, every ticket (first name and initial only), entries so far, and the
+// event's offline key (to check rolling codes and imported codes without the server).
+export async function gateList({ request, env }) {
+  const ev = await gateEvent(request, env);
+  const q = (sql) => env.DB.prepare(sql).bind(ev.id);
+  const [zones, tiers, tierZones, passes, guests, entries] = await Promise.all([
+    q('SELECT id, name FROM zones WHERE event_id = ?1 ORDER BY sort, name').all(),
+    q('SELECT id, name, days_mask, from_min, to_min FROM tiers WHERE event_id = ?1').all(),
+    q('SELECT tz.tier_id, tz.zone_id FROM tier_zones tz JOIN tiers t ON t.id = tz.tier_id WHERE t.event_id = ?1').all(),
+    q('SELECT p.id, p.tier_id, p.status, p.expires_at, u.name FROM passes p JOIN users u ON u.id = p.user_id WHERE p.event_id = ?1').all(),
+    q('SELECT id, kind, tier_id, name, party_size, attending, rsvp, table_label, status, code_hash FROM guests WHERE event_id = ?1').all(),
+    q("SELECT pass_id, guest_id, zone_id, MIN(at) AS at FROM scans WHERE event_id = ?1 AND result = 'granted' GROUP BY pass_id, guest_id, zone_id").all()
+  ]);
+  const zonesOf = {};
+  for (const r of tierZones.results) (zonesOf[r.tier_id] ||= []).push(r.zone_id);
+  return json({
+    event: { id: ev.id, name: ev.name, allow_reentry: !!ev.allow_reentry, secure_qr: !!ev.secure_qr, require_photo: !!ev.require_photo, tz_offset_min: ev.tz_offset_min },
+    zones: zones.results,
+    tiers: tiers.results.map((t) => ({ ...t, zones: zonesOf[t.id] || [] })),
+    passes: passes.results.map((p) => ({ id: p.id, tier_id: p.tier_id, status: p.status, expires_at: p.expires_at, holder: displayName(p.name) })),
+    guests: guests.results.map((g) => ({ id: g.id, kind: g.kind, tier_id: g.tier_id, holder: displayName(g.name), party: g.rsvp === 'yes' && g.attending ? g.attending : g.party_size, table: g.table_label, rsvp: g.kind === 'invite' ? g.rsvp : null, status: g.status, code_hash: g.code_hash })),
+    entries: entries.results.map((e) => ({ ref: e.pass_id ? 'p:' + e.pass_id : 'g:' + e.guest_id, zone_id: e.zone_id, at: e.at })),
+    key: await eventOfflineKey(env.SECRET_PEPPER, ev.id),
+    steward: ev.steward_id ? { name: ev.steward_name } : null,
+    generated_at: nowSec()
+  });
+}
+
+const MAX_SYNC = 500;
+const SYNC_REASONS = new Set(Object.keys(MESSAGES));
+
+// POST /api/gate/sync { scans: [{ id, ref: 'p:<pass>'|'g:<guest>'|null, zone_id, result, reason, at }] }
+// Offline scans are recorded as the scanner decided them, with the signed-in steward. A ticket let in at two
+// scanners while both were offline is still recorded (it happened) and marked "offline_duplicate" for the report.
+export async function gateSync({ request, env }) {
+  const ev = await gateEvent(request, env);
+  const b = await readJson(request, 512 * 1024);
+  const list = Array.isArray(b.scans) ? b.scans.slice(0, MAX_SYNC) : [];
+  const now = nowSec();
+  const ok = [];
+  let skipped = 0;
+  for (const s of list) {
+    const id = typeof s?.id === 'string' && /^[0-9A-Z]{12,24}$/.test(s.id) ? 'OF' + s.id : null;
+    const at = Number(s?.at);
+    const result = s?.result === 'granted' || s?.result === 'denied' ? s.result : null;
+    const reason = result === 'denied' && SYNC_REASONS.has(s.reason) ? s.reason : null;
+    const m = typeof s?.ref === 'string' ? /^([pg]):([0-9A-Z]{10})$/.exec(s.ref) : null;
+    if (!id || !result || (result === 'denied' && !reason) || !Number.isInteger(at) || at > now + 300 || at < now - 7 * 86400 || (result === 'granted' && !m)) { skipped++; continue; }
+    ok.push({ id, at, result, reason, kind: m ? m[1] : null, ref: m ? m[2] : null, zone_id: String(s.zone_id ?? '').slice(0, 40) });
+  }
+  if (!ok.length) return json({ synced: 0, duplicates: 0, skipped });
+
+  const j = (arr) => JSON.stringify([...new Set(arr)]);
+  const passIds = ok.filter((s) => s.kind === 'p').map((s) => s.ref);
+  const guestIds = ok.filter((s) => s.kind === 'g').map((s) => s.ref);
+  const [zones, passes, guests, seen, entered] = await Promise.all([
+    env.DB.prepare('SELECT id FROM zones WHERE event_id = ?1').bind(ev.id).all(),
+    env.DB.prepare('SELECT id FROM passes WHERE event_id = ?1 AND id IN (SELECT value FROM json_each(?2))').bind(ev.id, j(passIds)).all(),
+    env.DB.prepare('SELECT id FROM guests WHERE event_id = ?1 AND id IN (SELECT value FROM json_each(?2))').bind(ev.id, j(guestIds)).all(),
+    env.DB.prepare('SELECT id FROM scans WHERE id IN (SELECT value FROM json_each(?1))').bind(j(ok.map((s) => s.id))).all(),
+    env.DB.prepare(
+      `SELECT pass_id, guest_id, zone_id FROM scans WHERE event_id = ?1 AND result = 'granted' AND once = 1
+       AND (pass_id IN (SELECT value FROM json_each(?2)) OR guest_id IN (SELECT value FROM json_each(?3)))`
+    ).bind(ev.id, j(passIds), j(guestIds)).all()
+  ]);
+  const zoneOk = new Set(zones.results.map((r) => r.id));
+  const passOk = new Set(passes.results.map((r) => r.id));
+  const guestOk = new Set(guests.results.map((r) => r.id));
+  const already = new Set(seen.results.map((r) => r.id));
+  const inside = new Set(entered.results.map((r) => (r.pass_id ? 'p:' + r.pass_id : 'g:' + r.guest_id) + '|' + r.zone_id));
+
+  const stmts = [];
+  let duplicates = 0;
+  for (const s of ok.sort((a, c) => a.at - c.at)) {
+    if (already.has(s.id) || !zoneOk.has(s.zone_id)) { if (!already.has(s.id)) skipped++; continue; }
+    const known = s.kind === 'p' ? passOk.has(s.ref) : s.kind === 'g' ? guestOk.has(s.ref) : false;
+    if (s.result === 'granted' && !known) { skipped++; continue; }
+    let once = 0, reason = s.reason;
+    if (s.result === 'granted' && !ev.allow_reentry) {
+      const key = `${s.kind}:${s.ref}|${s.zone_id}`;
+      if (inside.has(key)) { reason = 'offline_duplicate'; duplicates++; } else { once = 1; inside.add(key); }
+    }
+    stmts.push(env.DB.prepare(
+      `INSERT OR IGNORE INTO scans (id, event_id, pass_id, guest_id, zone_id, result, reason, once, at, steward_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`
+    ).bind(s.id, ev.id, known && s.kind === 'p' ? s.ref : null, known && s.kind === 'g' ? s.ref : null, s.zone_id, s.result, reason, once, s.at, ev.steward_id));
+  }
+  if (stmts.length) await env.DB.batch(stmts);
+  return json({ synced: stmts.length, duplicates, skipped });
 }
