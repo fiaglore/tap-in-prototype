@@ -84,3 +84,10 @@
   .stat.dk b,.stat.dk span,.report .stat.dk small{color:#000!important}
   .bars i,.bar .fill{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
+
+/* Attendance: day-by-day arrival grid */
+.att-table td,.att-table th{white-space:nowrap}
+.att-cell{text-align:center;font-size:12.5px}
+.att-cell.late{color:var(--bad);font-weight:700}
+.att-cell.off{color:var(--muted)}
+.att-bars{height:90px}

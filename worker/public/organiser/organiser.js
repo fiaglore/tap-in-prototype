@@ -219,7 +219,7 @@ async function viewEvent(id, tab) {
     const office = data.event.kind === 'workplace';
     if (office !== OFFICE) { location.replace((office ? '/offices/' : '/organiser/') + '#/e/' + id); return; }
     const tabs = office
-      ? [['overview', 'Overview'], ['edit', 'Edit details'], ['visitors', 'Visitors'], ['people', 'Add people'], ['attendees', 'Who has access'], ['team', 'Door staff'], ['report', 'Report'], ['gate', 'Doors & key']]
+      ? [['overview', 'Overview'], ['edit', 'Edit details'], ['visitors', 'Visitors'], ['attendance', 'Attendance'], ['people', 'Add people'], ['attendees', 'Who has access'], ['team', 'Door staff'], ['report', 'Report'], ['gate', 'Doors & key']]
       : [['overview', 'Overview'], ['edit', 'Edit details'], ['tickets', 'Tickets'], ['guests', 'Guest list'], ['invites', 'Invite codes'], ['attendees', 'Attendees'], ['team', 'Gate team'], ['report', 'Report'], ['gate', 'Gate key & rules']];
     const items = [{ href: '#/', text: OFFICE ? '\u2190 All offices' : '\u2190 All events' }, { label: data.event.name }]
       .concat(tabs.map(([k, label]) => ({ href: `#/e/${id}/${k}`, text: label, on: tab === k })))
@@ -231,7 +231,7 @@ async function viewEvent(id, tab) {
         // A private event with only free tickets has no sales page worth sharing: guests come in by invitation.
         !office && (data.event.listed || data.tiers.some((t) => t.price_kobo > 0)) && h('button', { class: 'btn ghost small', type: 'button', onclick: () => copy(location.origin + '/e/?id=' + id, 'Sales page link copied') }, 'Copy sales page link')),
       body)));
-    ({ overview: tabOverview, tickets: tabTickets, invites: tabInvites, people: tabPeople, attendees: tabAttendees, team: tabTeam, report: tabReport, guests: tabGuests, edit: tabEdit, visitors: tabVisitors, gate: tabGate }[tab] || tabOverview)(body, data);
+    ({ overview: tabOverview, tickets: tabTickets, invites: tabInvites, people: tabPeople, attendees: tabAttendees, team: tabTeam, report: tabReport, guests: tabGuests, edit: tabEdit, visitors: tabVisitors, attendance: tabAttendance, gate: tabGate }[tab] || tabOverview)(body, data);
   } catch (ex) { fail(ex); }
 }
 
@@ -934,6 +934,88 @@ async function tabVisitors(body, data) {
       h('div', { style: 'margin-top:12px' }, h('button', { class: 'btn primary', type: 'submit' }, 'Create visitor pass')), out),
     list);
   try { await load(); } catch (ex) { mount(list, h('div', { class: 'error' }, ex.message)); }
+}
+
+// ---- Attendance (offices): who came in, when they arrived, who was late, visitors; CSV for HR or payroll ----
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function attendanceRange(preset) {
+  const t = new Date(); t.setHours(12, 0, 0, 0);
+  const day = (offset) => { const d = new Date(t); d.setDate(d.getDate() + offset); return d; };
+  const mondayOffset = -((t.getDay() + 6) % 7);
+  if (preset === 'week') return [ymd(day(mondayOffset)), ymd(t)];
+  if (preset === 'lastweek') return [ymd(day(mondayOffset - 7)), ymd(day(mondayOffset - 1))];
+  if (preset === 'month') return [ymd(new Date(t.getFullYear(), t.getMonth(), 1)), ymd(t)];
+  if (preset === 'lastmonth') return [ymd(new Date(t.getFullYear(), t.getMonth() - 1, 1)), ymd(new Date(t.getFullYear(), t.getMonth(), 0))];
+  return [ymd(day(-6)), ymd(t)];
+}
+
+async function tabAttendance(body, data) {
+  const id = data.event.id;
+  let preset = 'week';
+  let [from, to] = attendanceRange(preset);
+  let grace = 15;
+  const fromIn = h('input', { class: 'input', type: 'date', value: from, style: 'width:auto', 'aria-label': 'From' });
+  const toIn = h('input', { class: 'input', type: 'date', value: to, style: 'width:auto', 'aria-label': 'To' });
+  const graceIn = h('input', { class: 'input', type: 'number', min: '0', max: '240', value: String(grace), style: 'width:90px', 'aria-label': 'Grace minutes' });
+  const presets = h('div', { class: 'row noprint' });
+  const out = h('div', {});
+  const qs = () => `from=${from}&to=${to}&grace=${grace}`;
+
+  function drawPresets() {
+    mount(presets, [['week', 'This week'], ['last7', 'Last 7 days'], ['lastweek', 'Last week'], ['month', 'This month'], ['lastmonth', 'Last month']].map(([k, l]) =>
+      h('button', { class: 'btn small ' + (preset === k ? 'primary' : 'ghost'), type: 'button', onclick: () => { preset = k; [from, to] = attendanceRange(k); fromIn.value = from; toIn.value = to; drawPresets(); load(); } }, l)));
+  }
+
+  async function load() {
+    mount(out, h('p', { class: 'muted', style: 'margin-top:14px' }, 'Working it out…'));
+    let r;
+    try { r = await get(`/events/${id}/attendance?${qs()}`); } catch (ex) { return mount(out, h('div', { class: 'error', style: 'margin-top:14px' }, ex.message)); }
+    const s = r.summary;
+    const showGrid = r.days.length <= 14;
+    const dmax = Math.max(1, ...r.days.map((d) => d.expected || d.present));
+    mount(out,
+      h('div', { class: 'grid cols', style: 'margin-top:14px' },
+        [['Came in', `${s.came_in} of ${s.people_with_access}`, 'people with access', true], ['On an average workday', String(s.avg_present), 'people in'], ['Late arrivals', String(s.late_arrivals), `after start time + ${r.grace} min`], ['Visitors', String(s.visitors), 'arrived']]
+          .map(([l, v, sub, dk]) => h('div', { class: 'card stat' + (dk ? ' dk' : '') }, h('b', {}, v), h('span', {}, l), h('small', {}, sub)))),
+      s.not_set_up > 0 && h('p', { class: 'hint', style: 'margin-top:8px' }, `${s.not_set_up} ${s.not_set_up === 1 ? 'person has' : 'people have'} been given access but not added their pass yet, so they are not counted.`),
+      h('div', { class: 'card', style: 'margin-top:14px' }, h('h3', {}, 'Each day'),
+        h('div', { class: 'bars att-bars', role: 'img', 'aria-label': 'People in each day' }, r.days.map((d) => h('i', { title: `${d.weekday} ${d.date}: ${d.present} in of ${d.expected} expected, ${d.late} late`, style: `height:${Math.round((d.present / dmax) * 100)}%` }))),
+        h('div', { class: 'scroll-x' }, h('table', { style: 'margin-top:8px' },
+          h('thead', {}, h('tr', {}, ['Day', 'Expected', 'In', 'Late', 'Visitors'].map((c) => h('th', {}, c)))),
+          h('tbody', {}, r.days.map((d) => h('tr', { class: d.expected ? '' : 'muted' }, h('td', {}, `${d.weekday} ${d.date.slice(5)}`), h('td', { class: 'mono' }, String(d.expected)), h('td', { class: 'mono' }, String(d.present)), h('td', { class: 'mono' }, String(d.late)), h('td', { class: 'mono' }, String(d.visitors)))))))),
+      h('div', { class: 'card', style: 'margin-top:14px' }, h('h3', {}, 'People'),
+        h('p', { class: 'hint', style: 'margin-top:4px' }, 'First scan of the day is the arrival time. There is no exit scan, so "last seen" is the last time they used a door, not when they left.' + (showGrid ? '' : ' Pick 14 days or fewer to see arrival times day by day.')),
+        r.people.length ? h('div', { class: 'scroll-x' }, h('table', { class: 'att-table' },
+          h('thead', {}, h('tr', {}, ['Name', 'Group', 'Days in', 'Late', 'Avg arrival', ...(showGrid ? r.days.map((d) => `${d.weekday} ${d.date.slice(8)}`) : [])].map((c) => h('th', {}, c)))),
+          h('tbody', {}, r.people.map((p) => h('tr', { class: p.status === 'active' ? '' : 'muted' },
+            h('td', {}, h('strong', {}, p.name), p.status !== 'active' && h('div', { class: 'hint' }, 'access removed')),
+            h('td', {}, p.group, p.starts && h('div', { class: 'hint' }, 'starts ' + p.starts)),
+            h('td', { class: 'mono' }, `${p.days_present}/${p.expected_days}`, p.attendance_pct !== null && h('div', { class: 'hint' }, p.attendance_pct + '%')),
+            h('td', { class: 'mono' }, String(p.late_days)),
+            h('td', { class: 'mono' }, p.avg_arrival || '—'),
+            ...(showGrid ? r.days.map((d) => { const x = p.days[d.date]; return h('td', { class: 'mono att-cell' + (x && x.late ? ' late' : '') + (x ? '' : ' off'), title: x ? `${x.first} to ${x.last}, ${x.scans} scan${x.scans === 1 ? '' : 's'}${x.late ? ', late' : ''}` : 'Not in' }, x ? x.first : '·'); }) : []))))))
+          : h('p', { class: 'muted', style: 'margin-top:8px' }, 'Nobody has access yet. Add people first.')),
+      h('div', { class: 'card', style: 'margin-top:14px' }, h('h3', {}, `Visitors (${r.visitors.length})`),
+        r.visitors.length ? h('div', { class: 'scroll-x' }, h('table', {},
+          h('thead', {}, h('tr', {}, ['Date', 'Visitor', 'Visiting', 'How', 'Arrived'].map((c) => h('th', {}, c)))),
+          h('tbody', {}, r.visitors.map((v) => h('tr', {}, h('td', {}, v.date.slice(5)), h('td', {}, h('strong', {}, v.name), v.purpose && h('div', { class: 'hint' }, v.purpose)), h('td', {}, v.host || ''), h('td', {}, v.walk_in ? 'Walk-in' : 'Invited'), h('td', { class: 'mono' }, v.arrived || 'Did not arrive'))))))
+          : h('p', { class: 'muted', style: 'margin-top:8px' }, 'No visitors in this period.')));
+  }
+
+  const csv = (type, label) => h('a', { class: 'btn ghost small', href: `/api/events/${id}/attendance.csv?type=${type}&${qs()}`, download: '', onclick: (e) => { e.currentTarget.href = `/api/events/${id}/attendance.csv?type=${type}&${qs()}`; } }, label);
+  drawPresets();
+  body.append(
+    h('div', { class: 'card noprint' },
+      h('div', { class: 'spread', style: 'flex-wrap:wrap;gap:10px' }, h('h3', {}, 'Attendance'), h('button', { class: 'btn ghost small', type: 'button', onclick: () => window.print() }, 'Print or save as PDF')),
+      h('div', { style: 'margin-top:10px' }, presets),
+      h('form', { class: 'row', style: 'margin-top:10px;flex-wrap:wrap', onsubmit: (e) => { e.preventDefault(); from = fromIn.value; to = toIn.value; grace = Math.max(0, Math.min(240, parseInt(graceIn.value, 10) || 0)); preset = ''; drawPresets(); load(); } },
+        h('span', { class: 'hint' }, 'From'), fromIn, h('span', { class: 'hint' }, 'to'), toIn,
+        h('span', { class: 'hint' }, 'Late after start time +'), graceIn, h('span', { class: 'hint' }, 'min'),
+        h('button', { class: 'btn primary small', type: 'submit' }, 'Show')),
+      h('div', { class: 'row', style: 'margin-top:12px' }, h('span', { class: 'hint' }, 'Download (CSV):'), csv('daily', 'Daily attendance'), csv('summary', 'Summary per person'), csv('visitors', 'Visitor log'))),
+    h('h2', { class: 'printonly' }, data.event.name + ' · Attendance'),
+    out);
+  load();
 }
 
 boot();

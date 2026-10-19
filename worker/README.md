@@ -117,6 +117,18 @@ Console tab **Edit details** (events and offices):
   (`PATCH /api/events/:id/tiers/:tierId`); add new ones with price and limit (`POST /api/events/:id/tiers`); remove one
   only while nothing has been issued for it (`DELETE …/tiers/:tierId`). Area and hour changes apply at the next scan.
 
+## Attendance (Tap In for Business)
+
+Console tab **Attendance** (offices): pick a range (this week, last 7 days, last week, this month, last month, or any
+dates up to 92 days) and a grace period. Days are in the office's time zone.
+- Per person: days in against days expected (their group's working days), attendance %, late days (first scan after
+  the group's start time plus the grace), average arrival, and, for 14 days or fewer, the arrival time each day.
+  Groups with no set hours are never late. There is no exit scan, so "last seen" is the last door used, not a leaving time.
+- Per day: expected, in, late, visitors. Visitors (invited and walk-in) are listed separately.
+- People given access who have not added their pass yet are counted separately, not as absent.
+- CSV: `/api/events/:id/attendance.csv?type=daily|summary|visitors&from=YYYY-MM-DD&to=YYYY-MM-DD&grace=15`
+  (daily rows, one row per person, or the visitor log), formula-safe.
+
 ## Visitors (Tap In for Business)
 
 Visitors are guests of kind `visitor` (migration 0010 adds `host`, `purpose`, `valid_from`, `valid_until`, `walk_in`).

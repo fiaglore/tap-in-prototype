@@ -11,6 +11,7 @@ import * as gate from './routes/gate.js';
 import * as publicSale from './routes/public.js';
 import * as stewards from './routes/stewards.js';
 import * as guests from './routes/guests.js';
+import * as attendance from './routes/attendance.js';
 import * as walletPasses from './routes/wallet-passes.js';
 import { walletConfig } from './lib/wallet.js';
 import * as wallet from './routes/wallet.js';
@@ -74,6 +75,8 @@ const ROUTES = [
   ['POST', '/api/gate/sync', 'none', gate.gateSync],
   ['POST', '/api/gate/walkin', 'none', gate.gateWalkin],
   ['GET', '/api/events/:id/visitors', 'user', guests.listVisitors],
+  ['GET', '/api/events/:id/attendance', 'user', attendance.attendance],
+  ['GET', '/api/events/:id/attendance.csv', 'user', attendance.attendanceCsv],
   ['POST', '/api/events/:id/visitors', 'user', guests.addVisitor],
 
   ['GET', '/api/wallet', 'user', wallet.wallet],
