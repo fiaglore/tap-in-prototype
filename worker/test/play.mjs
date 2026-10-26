@@ -1,6 +1,8 @@
 // The public Play page: upcoming events people can open the sales page for. Run with: node test/play.mjs
 import assert from 'node:assert/strict';
 import { client, makeEnv, signIn } from './harness.mjs';
+import worker from '../src/index.js';
+import { eventJsonLd } from '../src/routes/public.js';
 
 let passed = 0;
 const failures = [];
@@ -103,6 +105,34 @@ await test('the list is capped, and the id in each entry opens that event’s sa
   assert.equal(sale.status, 200);
   assert.equal(sale.body.event.name, e.name);
   assert.ok((await list()).length <= 60);
+});
+
+await test('the sitemap lists the public pages and upcoming listed events, never private ones or offices', async () => {
+  const listed = await mk({ name: 'Sitemap fest', starts_at: iso(20) });
+  const hidden = await mk({ name: 'Secret party', starts_at: iso(21), listed: false });
+  const res = await worker.fetch(new Request('https://tap-in.example.workers.dev/sitemap.xml'), env);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /application\/xml/);
+  const xml = await res.text();
+  for (const p of ['/', '/business/', '/play/', '/privacy/', '/terms/']) assert.ok(xml.includes(`<loc>https://www.tap-in.world${p}</loc>`), p);
+  assert.ok(xml.includes('https://www.tap-in.world/e/?id=' + listed.event.id));
+  assert.ok(!xml.includes(hidden.event.id));
+  assert.ok(!xml.includes('/organiser/') && !xml.includes('/app/'));
+});
+await test('event search data has the date in Lagos time, the place, prices in naira and availability', async () => {
+  const start = Date.UTC(2026, 11, 5, 18, 0) / 1000;
+  const ev = { name: 'Owambe </script> Live', venue: 'Eko Hotel', city: 'Lagos', starts_at: start, sales_start: null, sales_end: null };
+  const tiers = [{ name: 'GA', price_kobo: 1500000, capacity: 10, issued: 10 }, { name: 'VIP', price_kobo: 5000000, capacity: null, issued: 3 }];
+  const raw = eventJsonLd(ev, tiers, 'https://www.tap-in.world/e/?id=x', start - 86400);
+  assert.ok(!raw.includes('</script>'), 'a name cannot close the script tag');
+  const d = JSON.parse(raw);
+  assert.equal(d['@type'], 'Event');
+  assert.equal(d.startDate, '2026-12-05T19:00:00+01:00');
+  assert.equal(d.location.name, 'Eko Hotel');
+  assert.equal(d.location.address.addressCountry, 'NG');
+  assert.deepEqual(d.offers.map((o) => [o.price, o.priceCurrency, o.availability.split('/').pop()]), [['15000.00', 'NGN', 'SoldOut'], ['50000.00', 'NGN', 'InStock']]);
+  assert.equal(eventJsonLd({ ...ev, starts_at: null }, tiers, 'u', start), null, 'no date, no event data');
+  assert.equal(eventJsonLd({ ...ev, venue: null, city: null }, tiers, 'u', start), null, 'no place, no event data');
 });
 
 console.log(`\n${passed} passed, ${failures.length} failed`);

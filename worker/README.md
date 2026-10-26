@@ -221,9 +221,23 @@ Both live in the `guests` table (migration 0009) and need no Tap In account. Con
 - Every public page has Open Graph tags and the share image `public/og.png` (1200x630). Static pages point at
   `https://www.tap-in.world` (the custom domain; `tap-in.world` redirects to it). Change them if the domain changes.
 - Ticket sales pages (`/e/?id=…`) get the event's name, place and date written into their title and preview tags by
-  the Worker (`salePageHtml` in `src/routes/public.js`), using the host the link was opened on.
+  the Worker (`salePageHtml` in `src/routes/public.js`), always pointing at `https://www.tap-in.world` (`SITE`).
 - `/privacy/` and `/terms/` are plain pages linked from the footers, every sign-in form and the app's Me tab.
   They describe what the code actually stores; update them whenever that changes. Contact: hello@tap-in.world.
+
+## Search engines
+
+- Indexed: `/`, `/business/`, `/play/`, `/privacy/`, `/terms/`, and the sales page of every event its organiser
+  listed on Play. Each has a canonical link to `https://www.tap-in.world`, so the workers.dev address and
+  `tap-in.world` never compete with it.
+- Not indexed (`noindex`): the app, gate, organiser and office consoles, sign-in, invitations, vendor, till, the
+  404 page, and sales pages of unlisted events (private events stay off search even when their link is shared).
+- `public/robots.txt` keeps crawlers out of `/api/` and names the sitemap. `/sitemap.xml` is written by the Worker
+  (`sitemap` in `src/routes/public.js`): the indexed pages plus upcoming listed events.
+- Structured data: the homepage carries schema.org Organization, WebSite and SoftwareApplication; the Business page
+  a SoftwareApplication; listed sales pages a schema.org Event with naira offers, added only when the event has a
+  date and a place, which Google requires for event results.
+- After deploying, submit `https://www.tap-in.world/sitemap.xml` in Google Search Console and Bing Webmaster Tools.
 
 ## Deploy
 

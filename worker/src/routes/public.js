@@ -120,32 +120,120 @@ export async function listUpcoming({ env }) {
   });
 }
 
-// GET /e/?id=…  The sales page itself is static, but link previews (WhatsApp, X, iMessage) only read the
-// HTML, so the Worker writes the event's name, place and date into the title and Open Graph tags on the way out.
+// Search engines and sitemaps always point at the main domain, whichever host served the page.
+export const SITE = 'https://www.tap-in.world';
+
+// GET /e/?id=…  The sales page itself is static, but link previews (WhatsApp, X, iMessage) and search engines
+// only read the HTML, so the Worker writes the event's name, place and date into the title, Open Graph tags and
+// canonical link on the way out, lets the page be indexed, and adds schema.org Event data for search results.
 const lagosDate = (sec) =>
   new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Lagos', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
     .format(new Date(sec * 1000));
+
+// Lagos is UTC+1 all year, so the offset is fixed.
+const lagosIso = (sec) => new Date((sec + 3600) * 1000).toISOString().slice(0, 19) + '+01:00';
+
+// schema.org Event for one sales page, or null when it lacks what search engines require (a date and a place).
+export function eventJsonLd(ev, tiers, pageUrl, now) {
+  if (!ev.starts_at || !(ev.venue || ev.city)) return null;
+  const state = salesState(ev, now);
+  const data = {
+    '@context': 'https://schema.org',
+    '@type': 'Event',
+    name: ev.name,
+    startDate: lagosIso(ev.starts_at),
+    eventStatus: 'https://schema.org/EventScheduled',
+    eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+    location: {
+      '@type': 'Place',
+      name: ev.venue || ev.city,
+      address: { '@type': 'PostalAddress', ...(ev.city ? { addressLocality: ev.city } : {}), addressCountry: 'NG' }
+    },
+    image: [SITE + '/og.png'],
+    description: [ev.venue, ev.city, lagosDate(ev.starts_at)].filter(Boolean).join(' · '),
+    url: pageUrl
+  };
+  if (tiers.length) {
+    data.offers = tiers.map((t) => ({
+      '@type': 'Offer',
+      name: t.name,
+      price: (t.price_kobo / 100).toFixed(2),
+      priceCurrency: 'NGN',
+      url: pageUrl,
+      availability:
+        state === 'upcoming' ? 'https://schema.org/PreOrder'
+          : state === 'closed' || (t.capacity !== null && t.issued >= t.capacity) ? 'https://schema.org/SoldOut'
+            : 'https://schema.org/InStock',
+      ...(ev.sales_start ? { validFrom: lagosIso(ev.sales_start) } : {})
+    }));
+  }
+  // "<" is escaped so an event name can never close the script element.
+  return JSON.stringify(data).replace(/</g, '\\u003c');
+}
 
 export async function salePageHtml(request, env) {
   const res = await env.ASSETS.fetch(request);
   const id = new URL(request.url).searchParams.get('id');
   if (!id || !res.ok || typeof HTMLRewriter === 'undefined' || !(res.headers.get('content-type') || '').includes('text/html')) return res;
   let ev = null;
+  let tiers = [];
   try {
-    ev = await env.DB.prepare('SELECT name, venue, city, starts_at, kind FROM events WHERE id = ?1').bind(String(id).slice(0, 40)).first();
+    ev = await env.DB.prepare('SELECT id, name, venue, city, starts_at, sales_start, sales_end, kind, listed FROM events WHERE id = ?1').bind(String(id).slice(0, 40)).first();
+    if (ev && ev.kind !== 'workplace') {
+      tiers = (
+        await env.DB.prepare(
+          `SELECT name, price_kobo, capacity,
+            (SELECT COUNT(*) FROM invites i WHERE i.tier_id = tiers.id AND i.status != 'revoked') AS issued
+           FROM tiers WHERE event_id = ?1 ORDER BY sort, name`
+        ).bind(ev.id).all()
+      ).results;
+    }
   } catch {
     return res;
   }
   if (!ev || ev.kind === 'workplace') return res;
+  const pageUrl = SITE + '/e/?id=' + encodeURIComponent(ev.id);
   const title = ev.name + ' · Tickets on Tap In';
   const desc = [ev.venue, ev.city, ev.starts_at && lagosDate(ev.starts_at)].filter(Boolean).join(' · ') || 'Tickets for this event, sold on Tap In.';
+  const ld = ev.listed ? eventJsonLd(ev, tiers, pageUrl, nowSec()) : null;
   const content = (v) => ({ element(el) { el.setAttribute('content', v); } });
   return new HTMLRewriter()
     .on('title', { element(el) { el.setInnerContent(title); } })
     .on('meta[name="description"]', content(desc))
+    // Only events the organiser chose to list publicly are offered to search engines.
+    .on('meta[name="robots"]', ev.listed ? { element(el) { el.remove(); } } : content('noindex'))
+    .on('link[rel="canonical"]', { element(el) { el.setAttribute('href', pageUrl); } })
     .on('meta[property="og:title"]', content(title))
     .on('meta[property="og:description"]', content(desc))
-    .on('meta[property="og:url"]', content(new URL('/e/?id=' + encodeURIComponent(id), request.url).href))
-    .on('meta[property="og:image"]', content(new URL('/og.png', request.url).href))
+    .on('meta[property="og:url"]', content(pageUrl))
+    .on('meta[property="og:image"]', content(SITE + '/og.png'))
+    .on('head', { element(el) { if (ld) el.append(`<script type="application/ld+json">${ld}</script>`, { html: true }); } })
     .transform(res);
+}
+
+// GET /sitemap.xml  The public pages plus every upcoming event its organiser listed on Play.
+const STATIC_PAGES = ['/', '/business/', '/play/', '/privacy/', '/terms/'];
+const xmlEscape = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+export async function sitemap(env) {
+  const now = nowSec();
+  let events = [];
+  try {
+    events = (
+      await env.DB.prepare(
+        `SELECT id, created_at FROM events
+         WHERE kind = 'event' AND listed = 1 AND (starts_at IS NULL OR starts_at >= ?1)
+         ORDER BY created_at DESC LIMIT 1000`
+      ).bind(now - 12 * 3600).all()
+    ).results;
+  } catch {
+    // The static pages are still worth listing if the database is unreachable.
+  }
+  const urls = [
+    ...STATIC_PAGES.map((p) => `<url><loc>${SITE}${p}</loc></url>`),
+    ...events.map((e) => `<url><loc>${xmlEscape(SITE + '/e/?id=' + encodeURIComponent(e.id))}</loc>`
+      + (e.created_at ? `<lastmod>${new Date(e.created_at * 1000).toISOString().slice(0, 10)}</lastmod>` : '') + '</url>')
+  ];
+  const body = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + urls.join('\n') + '\n</urlset>\n';
+  return new Response(body, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
 }
