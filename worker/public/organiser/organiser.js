@@ -686,7 +686,7 @@ async function tabGuests(body, data) {
         ? h('div', { class: 'scroll-x', style: 'margin-top:10px' }, h('table', {},
             h('thead', {}, h('tr', {}, ['Guest', 'Party', 'Table', 'Reply', 'Arrived', ''].map((c) => h('th', {}, c)))),
             h('tbody', {}, rows.slice(0, 1000).map((g) => h('tr', { class: g.status === 'revoked' ? 'muted' : '' },
-              h('td', {}, h('strong', {}, g.name), h('div', { class: 'hint' }, g.kind === 'import' ? `Imported ticket · code ends ${g.code_hint} · ${g.tier}` : `${g.tier}${g.contact ? ' · ' + g.contact : ''}`)),
+              h('td', {}, h('strong', {}, g.name), h('div', { class: 'hint' }, g.kind === 'import' ? `${/^Wristband-\d+$/.test(g.name) ? 'Wristband' : 'Imported ticket'} · code ends ${g.code_hint} · ${g.tier}` : `${g.tier}${g.contact ? ' · ' + g.contact : ''}`)),
               h('td', { class: 'mono' }, g.kind === 'invite' && g.rsvp === 'yes' && g.attending ? `${g.attending} of ${g.party_size}` : String(g.party_size)),
               h('td', {}, g.table_label || ''),
               h('td', {}, g.status === 'revoked' ? h('span', { class: 'chip' }, 'Cancelled') : g.kind === 'import' ? '' : g.rsvp === 'yes' ? h('span', { class: 'chip ok' }, 'Coming') : g.rsvp === 'no' ? h('span', { class: 'chip bad' }, 'Not coming') : h('span', { class: 'chip' }, 'No reply')),
@@ -719,6 +719,55 @@ async function tabGuests(body, data) {
   impFile.onchange = async () => { const f = impFile.files && impFile.files[0]; if (f) impText.value = await f.text(); };
   const impOut = h('div', {});
   const impBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Import list');
+
+  // Print wristbands: random codes the gate already accepts, printed as QR + readable code
+  const wbTier = tierSelect(data.tiers[0] && data.tiers[0].id);
+  const wbCount = h('input', { class: 'input', id: 'wbn', type: 'number', min: '1', max: '500', value: '100' });
+  const wbOut = h('div', {});
+  const wbBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Make wristbands');
+  const wbShow = (c) => `${c.slice(0, 2)}-${c.slice(2, 7)}-${c.slice(7)}`;
+  function wbSheet(r) {
+    const stub = (w) => h('div', { class: 'wb' },
+      h('div', { class: 'wb-qr' }, qrSvg(w.code, 'Wristband ' + w.number)),
+      h('div', { class: 'wb-info' },
+        h('b', {}, data.event.name),
+        h('span', {}, `${r.tier} · No. ${w.number}`),
+        h('code', {}, wbShow(w.code))));
+    const sheet = h('div', { class: 'wb-sheet' }, r.wristbands.map(stub));
+    mount(wbOut,
+      h('div', { class: 'notice noprint', style: 'margin-top:12px' }, `${r.wristbands.length} wristband${r.wristbands.length === 1 ? '' : 's'} ready. These codes are shown only now: print the sheet or download the file before you leave this page. The gate scanner already accepts them.`),
+      h('div', { class: 'row noprint', style: 'margin-top:10px' },
+        h('button', { class: 'btn primary small', type: 'button', onclick: () => {
+          // Print a copy placed straight under <body>, with everything else hidden, so cards and sidebars cannot move it.
+          const copy = sheet.cloneNode(true);
+          copy.id = 'wb-print';
+          document.body.append(copy);
+          document.body.classList.add('printing-wb');
+          window.addEventListener('afterprint', () => { document.body.classList.remove('printing-wb'); copy.remove(); }, { once: true });
+          window.print();
+        } }, 'Print sheet'),
+        h('button', { class: 'btn ghost small', type: 'button', onclick: () => {
+          const lines = [['Number', 'Code', 'Ticket type'].join(',')].concat(r.wristbands.map((w) => [w.number, wbShow(w.code), r.tier].map(csvCell).join(',')));
+          download(`${data.event.name.replace(/[^\w]+/g, '-').toLowerCase()}-wristbands.csv`, lines.join('\r\n') + '\r\n');
+        } }, 'Download codes (CSV)')),
+      sheet);
+  }
+  const wbCard = h('form', { class: 'card', style: 'margin-top:14px', onsubmit: async (e) => {
+    e.preventDefault();
+    wbBtn.disabled = true;
+    try {
+      const r = await post(`/events/${id}/wristbands`, { tier_id: wbTier.value, count: Number(wbCount.value) });
+      wbSheet(r);
+      await load();
+    } catch (ex) { mount(wbOut, h('div', { class: 'error', role: 'alert' }, ex.message)); }
+    wbBtn.disabled = false;
+  } },
+    h('h3', {}, 'Print wristbands'),
+    h('p', { class: 'muted', style: 'margin-top:4px' }, 'For guests with no phone, no data or a flat battery. Make a batch of numbered codes, print the sheet (or send the file to a wristband printer), and put one on each guest. The gate scanner reads the QR or the typed code, lets each in once per area, and lost ones can be cancelled in the list below.'),
+    h('div', { class: 'grid two' },
+      h('div', { class: 'field' }, h('label', {}, 'Ticket type'), wbTier),
+      h('div', { class: 'field' }, h('label', { for: 'wbn' }, 'How many (up to 500 at a time)'), wbCount)),
+    h('div', { style: 'margin-top:12px' }, wbBtn), wbOut);
 
   body.append(summary,
     h('div', { class: 'grid two', style: 'margin-top:14px' },
@@ -771,6 +820,7 @@ async function tabGuests(body, data) {
         h('div', { class: 'field' }, h('label', { for: 'il' }, 'Or paste the list (a header row with "code", "name" and "ticket type" helps)'), impText),
         h('p', { class: 'hint' }, 'Codes are stored scrambled. A ticket type in the list that matches one of yours by name is used; otherwise the one chosen above.'),
         h('div', { style: 'margin-top:12px' }, impBtn), impOut)),
+    wbCard,
     listBox);
   try { await load(); } catch (ex) { mount(summary, h('div', { class: 'error' }, ex.message)); }
 }
