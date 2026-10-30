@@ -106,3 +106,4 @@
   body.printing-wb #wb-print{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:0}
   .wb{border-color:#000}
 }
+.wb-info small{color:#555;font-size:11px}

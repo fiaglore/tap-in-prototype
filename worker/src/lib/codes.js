@@ -91,6 +91,15 @@ export function parseInviteLinkToken(raw) {
   const m = /^([0-9A-Z]{10})([0-9A-Z]{12})$/.exec(String(raw ?? '').trim().toUpperCase());
   return m ? { id: m[1], mac: m[2] } : null;
 }
+// A wristband's code is worked out, not drawn at random, so a sheet can be reprinted at any time without storing the
+// plain code: "WB" + 10 characters of HMAC(event key, origin | seat | generation). Only its hash is kept, as for any
+// imported code. Replacing a lost wristband raises the generation, which gives that seat a new code.
+export async function wristbandCode(pepper, eventId, originId, seat, gen) {
+  const key = await eventOfflineKey(pepper, eventId);
+  return 'WB' + base32(await hmacBytes(key, `wristband|${originId}|${seat}|${gen}`)).slice(0, 10);
+}
+export const wristbandShow = (c) => `${c.slice(0, 2)}-${c.slice(2, 7)}-${c.slice(7)}`;
+
 export const hashGuestCode = async (pepper, eventId, code) => hmacHex(await eventOfflineKey(pepper, eventId), 'code|' + normaliseCode(code));
 
 // ---------- 3b. live (rotating) pass tokens ----------

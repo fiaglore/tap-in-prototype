@@ -104,7 +104,8 @@ export function buildReport(ev, { scans, passes, tiers, zones, stewards, guests 
   const tierById = new Map(tiers.map((t) => [t.id, t]));
   // A ticket is a Tap In pass or a guest (invitation or imported ticket); both are counted the same way.
   const holderKey = (s) => s.pass_id || (s.guest_id ? 'g:' + s.guest_id : null);
-  passes = passes.concat(guests.map((g) => ({ id: 'g:' + g.id, tier_id: g.tier_id, status: g.status })));
+  // A ticket that has wristbands is counted through its wristbands (one per person), not twice.
+  passes = passes.filter((p) => !p.wristbanded).concat(guests.filter((g) => !g.wristbanded).map((g) => ({ id: 'g:' + g.id, tier_id: g.tier_id, status: g.status })));
   const activePasses = passes.filter((p) => p.status === 'active');
   const granted = scans.filter((s) => s.result === 'granted');
   const denied = scans.filter((s) => s.result === 'denied');
@@ -208,7 +209,8 @@ export function buildReport(ev, { scans, passes, tiers, zones, stewards, guests 
     },
     guest_list: guests.length ? {
       invitations: guests.filter((g) => g.kind === 'invite' && g.status === 'active').length,
-      imported: guests.filter((g) => g.kind === 'import' && g.status === 'active').length,
+      imported: guests.filter((g) => g.kind === 'import' && !g.wristband_of && g.status === 'active').length,
+      wristbands: guests.filter((g) => g.wristband_of && g.status === 'active').length,
       rsvp_yes: guests.filter((g) => g.kind === 'invite' && g.status === 'active' && g.rsvp === 'yes').length,
       arrived: guests.filter((g) => g.status === 'active' && inPasses.has('g:' + g.id)).length
     } : null,
@@ -225,11 +227,11 @@ async function reportData(env, eventId) {
   const q = (sql) => env.DB.prepare(sql).bind(eventId);
   const [scans, passes, tiers, zones, stewards, guests] = await Promise.all([
     q(`SELECT id, pass_id, guest_id, zone_id, steward_id, result, reason, at FROM scans WHERE event_id = ?1 ORDER BY at, id LIMIT ${MAX_REPORT_SCANS}`).all(),
-    q('SELECT id, tier_id, status FROM passes WHERE event_id = ?1').all(),
+    q('SELECT id, tier_id, status, wristbanded FROM passes WHERE event_id = ?1').all(),
     q('SELECT id, name, price_kobo FROM tiers WHERE event_id = ?1 ORDER BY sort, name').all(),
     q('SELECT id, name FROM zones WHERE event_id = ?1 ORDER BY sort, name').all(),
     q('SELECT id, name, revoked_at FROM stewards WHERE event_id = ?1 ORDER BY created_at').all(),
-    q('SELECT id, tier_id, kind, status, rsvp FROM guests WHERE event_id = ?1').all()
+    q('SELECT id, tier_id, kind, status, rsvp, wristbanded, wristband_of FROM guests WHERE event_id = ?1').all()
   ]);
   return { scans: scans.results, passes: passes.results, tiers: tiers.results, zones: zones.results, stewards: stewards.results, guests: guests.results };
 }
@@ -244,7 +246,7 @@ export async function eventReport({ env, user, params }) {
 const REASON_TEXT = {
   invalid_token: 'Fake or unreadable code', already_used: 'Already used', stale_code: 'Old code or screenshot', static_pass: 'Screenshot or printout',
   revoked: 'Cancelled pass', no_zone_access: 'Wrong area', wrong_event: 'Other event', outside_hours: 'Outside hours', expired: 'Pass expired',
-  offline_duplicate: 'Entered twice while offline'
+  offline_duplicate: 'Entered twice while offline', use_wristband: 'Phone pass or old code used after wristbands were made'
 };
 // A cell that starts with = + - @ could run as a formula in a spreadsheet; prefix it so it stays text.
 const cell = (v) => {
