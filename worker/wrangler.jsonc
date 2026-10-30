@@ -27,7 +27,7 @@
     // "off": the wallet, vendor console and till are withdrawn (pages 404, API 404) until a licensed partner is signed.
     "PAYMENTS_MODE": "off",
     // Firebase "Web API key" (Project settings > General). It is public by design, not a secret.
-    "FIREBASE_API_KEY": ""AIzaSyDDz7HRknsyGwJ_x0pX1iCUjZwUn4aSc_4",
+    "FIREBASE_API_KEY": "AIzaSyDDz7HRknsyGwJ_x0pX1iCUjZwUn4aSc_4",
     // Comma-separated phone numbers or emails allowed to create events. Empty = anyone who signs in.
     "ORGANISER_IDENTIFIERS": ""
   },
