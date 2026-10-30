@@ -29,7 +29,8 @@ const QUEUE = 'tapin-gate-queue';
 const MESSAGES = {
   invalid_token: 'Not a valid Tap In pass.', revoked: 'This pass was cancelled.', no_zone_access: 'This pass does not include this area.',
   already_used: 'This pass has already been used here.', expired: 'This pass has expired.', stale_code: 'This pass code is out of date. Ask them to reopen their pass.',
-  static_pass: 'This event needs the live code from the app. Screenshots and printed codes do not work.', outside_hours: 'This pass is not valid at this time.'
+  static_pass: 'This event needs the live code from the app. Screenshots and printed codes do not work.', outside_hours: 'This pass is not valid at this time.',
+  use_wristband: 'Wristbands were made for this ticket. Scan their wristband instead.'
 };
 let pack = null;        // { data, fetched_at, offset }
 let idx = null;         // lookups built from the pack
@@ -72,6 +73,7 @@ async function decideOffline(token, zone) {
   if (code.kind === 'pass' && code.live && code.unverified) reason = 'stale_code'; // server-made live codes can't be checked offline
   else if (!h0) reason = 'invalid_token';
   else if (h0.status !== 'active') reason = 'revoked';
+  else if (h0.wristbanded) reason = 'use_wristband';
   else if (code.kind === 'pass' && ev.secure_qr && !code.rolling) reason = 'static_pass';
   else if (code.stale) reason = 'stale_code';
   else if (h0.expires_at && h0.expires_at <= now) reason = 'expired';

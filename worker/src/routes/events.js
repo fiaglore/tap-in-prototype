@@ -223,8 +223,8 @@ export async function listEvents({ env, user, url }) {
   const rows = (
     await env.DB.prepare(
       `SELECT e.id, e.name, e.kind, e.venue, e.city, e.starts_at, e.created_at,
-        (SELECT COUNT(*) FROM passes p WHERE p.event_id = e.id AND p.status = 'active')
-          + (SELECT COUNT(*) FROM guests g WHERE g.event_id = e.id AND g.status = 'active') AS registered,
+        (SELECT COUNT(*) FROM passes p WHERE p.event_id = e.id AND p.status = 'active' AND p.wristbanded = 0)
+          + (SELECT COUNT(*) FROM guests g WHERE g.event_id = e.id AND g.status = 'active' AND g.wristbanded = 0) AS registered,
         (SELECT COUNT(DISTINCT s.pass_id) FROM scans s WHERE s.event_id = e.id AND s.result = 'granted')
           + (SELECT COUNT(DISTINCT s.guest_id) FROM scans s WHERE s.event_id = e.id AND s.result = 'granted') AS checked_in,
         (SELECT COUNT(*) FROM invites i WHERE i.event_id = e.id AND i.status = 'unused') AS invites_open
@@ -257,15 +257,15 @@ async function recentScans(env, eventId, limit) {
 async function stats(env, eventId) {
   const q = (sql) => env.DB.prepare(sql).bind(eventId);
   const [reg, chk, den, scn, inv, byTier, byZone, volume] = await Promise.all([
-    q("SELECT (SELECT COUNT(*) FROM passes WHERE event_id = ?1 AND status = 'active') + (SELECT COUNT(*) FROM guests WHERE event_id = ?1 AND status = 'active') AS n").first(),
+    q("SELECT (SELECT COUNT(*) FROM passes WHERE event_id = ?1 AND status = 'active' AND wristbanded = 0) + (SELECT COUNT(*) FROM guests WHERE event_id = ?1 AND status = 'active' AND wristbanded = 0) AS n").first(),
     q("SELECT COUNT(DISTINCT pass_id) + COUNT(DISTINCT guest_id) AS n FROM scans WHERE event_id = ?1 AND result = 'granted'").first(),
     q("SELECT COUNT(*) AS n FROM scans WHERE event_id = ?1 AND result = 'denied'").first(),
     q('SELECT COUNT(*) AS n FROM scans WHERE event_id = ?1').first(),
     q('SELECT status, COUNT(*) AS n FROM invites WHERE event_id = ?1 GROUP BY status').all(),
     q(
       `SELECT t.id, t.name,
-        (SELECT COUNT(*) FROM passes p WHERE p.tier_id = t.id AND p.status = 'active')
-          + (SELECT COUNT(*) FROM guests g WHERE g.tier_id = t.id AND g.status = 'active') AS registered,
+        (SELECT COUNT(*) FROM passes p WHERE p.tier_id = t.id AND p.status = 'active' AND p.wristbanded = 0)
+          + (SELECT COUNT(*) FROM guests g WHERE g.tier_id = t.id AND g.status = 'active' AND g.wristbanded = 0) AS registered,
         (SELECT COUNT(DISTINCT s.pass_id) FROM scans s JOIN passes p ON p.id = s.pass_id
           WHERE p.tier_id = t.id AND s.result = 'granted')
           + (SELECT COUNT(DISTINCT s.guest_id) FROM scans s JOIN guests g ON g.id = s.guest_id

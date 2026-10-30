@@ -4,15 +4,14 @@
 //  - Imported tickets: a list exported from another ticketer (or a bank-transfer spreadsheet). The printed codes are
 //    checked at the gate like Tap In passes, so organisers can keep selling wherever they sell.
 
-import { HttpError, cleanText, newId, normaliseCode, nowSec, parseIdentifier, randomBase32, safeEqual } from '../lib/util.js';
+import { HttpError, cleanText, newId, normaliseCode, nowSec, parseIdentifier, safeEqual } from '../lib/util.js';
 import { clientIp, json, readJson } from '../lib/http.js';
-import { guestToken, hashGuestCode, inviteLinkMac, inviteLinkToken, parseInviteLinkToken } from '../lib/codes.js';
+import { guestToken, hashGuestCode, inviteLinkMac, inviteLinkToken, parseInviteLinkToken, wristbandCode } from '../lib/codes.js';
 import { isFull, record } from '../lib/limits.js';
 import { ownedEvent } from './events.js';
 
 const MAX_INVITES_PER_CALL = 500;
 const MAX_IMPORT_PER_CALL = 1000;
-const MAX_WRISTBANDS_PER_CALL = 500;
 const MAX_GUESTS_PER_EVENT = 20_000;
 const MAX_PARTY = 20;
 
@@ -41,6 +40,7 @@ export async function listGuests({ env, user, params, url }) {
   const rows = (
     await env.DB.prepare(
       `SELECT g.id, g.kind, g.name, g.contact, g.party_size, g.table_label, g.code_hint, g.rsvp, g.attending, g.rsvp_at, g.status, g.created_at,
+        g.wristbanded, g.wristband_of, g.wb_seat, g.wb_seats,
         t.name AS tier,
         (SELECT MIN(s.at) FROM scans s WHERE s.guest_id = g.id AND s.result = 'granted') AS entered_at
        FROM guests g JOIN tiers t ON t.id = g.tier_id WHERE g.event_id = ?1 AND g.kind IN ('invite', 'import') ORDER BY g.created_at, g.name LIMIT ${MAX_GUESTS_PER_EVENT}`
@@ -65,7 +65,8 @@ export async function listGuests({ env, user, params, url }) {
       yes_people: invites.filter((g) => g.rsvp === 'yes').reduce((n, g) => n + people(g), 0),
       no: invites.filter((g) => g.rsvp === 'no').length,
       pending: invites.filter((g) => g.rsvp === 'pending').length,
-      imported: active.filter((g) => g.kind === 'import').length,
+      imported: active.filter((g) => g.kind === 'import' && !g.wristband_of).length,
+      wristbands: active.filter((g) => g.wristband_of).length,
       arrived: active.filter((g) => g.entered_at).length
     }
   });
@@ -148,35 +149,110 @@ export async function importGuests({ request, env, user, params }) {
   return json({ imported, skipped }, 201);
 }
 
-// POST /api/events/:id/wristbands { tier_id, count } -> printable wristband codes
-// Each wristband is an imported-ticket row with a fresh random code (WB + 10 characters, 50 bits), so the gate scanner
-// already accepts it: one entry per area, cancellable, counted in the report. The plain codes are returned once, here;
-// only their scrambled form is stored.
-export async function createWristbands({ request, env, user, params }) {
-  const ev = await ownedEvent(env, user, params.id);
-  const b = await readJson(request);
-  const tier = pickTier(await eventTiers(env, ev.id), b.tier_id);
-  const count = Number(b.count);
-  if (!Number.isInteger(count) || count < 1 || count > MAX_WRISTBANDS_PER_CALL) throw new HttpError(400, 'invalid_count', `Make between 1 and ${MAX_WRISTBANDS_PER_CALL} wristbands at a time.`);
-  await roomFor(env, ev.id, count);
+// ---- Wristbands: a physical, per-person code for guests who are confirmed ---------------------------------
+// Confirmed means: replied Yes to an invitation, holds a Tap In pass, or holds an imported ticket. Each person gets
+// their own wristband (a party of 3 gets 3), stored as a guest row that points at what it was made for. Once a
+// person has wristbands, their phone invitation, pass or old printed code stops admitting, so nobody gets in twice.
 
-  const made = (await env.DB.prepare("SELECT COUNT(*) AS n FROM guests WHERE event_id = ?1 AND kind = 'import' AND name LIKE 'Wristband-%'").bind(ev.id).first()).n;
-  const now = nowSec();
-  const wristbands = [];
-  // A clash on the unique code index is astronomically unlikely, but a skipped row would be a blank wristband, so retry.
-  for (let attempt = 0; attempt < 3 && wristbands.length < count; attempt++) {
-    const batch = [];
-    for (let i = wristbands.length; i < count; i++) {
-      const code = 'WB' + randomBase32(10);
-      batch.push({ code, number: made + batch.length + wristbands.length + 1, hash: await hashGuestCode(env.SECRET_PEPPER, ev.id, code) });
-    }
-    const res = await env.DB.batch(batch.map((w) => env.DB.prepare(
-      `INSERT OR IGNORE INTO guests (id, event_id, tier_id, kind, name, party_size, code_hash, code_hint, created_at) VALUES (?1, ?2, ?3, 'import', ?4, 1, ?5, ?6, ?7)`
-    ).bind(newId(10), ev.id, tier.id, `Wristband-${w.number}`, w.hash, w.code.slice(-4), now)));
-    res.forEach((r, k) => { if (r.meta.changes) wristbands.push({ number: batch[k].number, code: batch[k].code }); });
+const MAX_WRISTBAND_PEOPLE = 200;
+const MAX_WRISTBANDS_PER_CALL = 600;
+
+// Everyone who may have wristbands, with how many and how many are already made. `entered` people are listed but
+// refused: they are already inside.
+async function confirmedPeople(env, eventId) {
+  const q = (sql) => env.DB.prepare(sql).bind(eventId);
+  const [invites, passes, imports, bands, entered] = await Promise.all([
+    q(`SELECT g.id, g.name, g.table_label, g.party_size, g.attending, t.name AS tier, t.id AS tier_id
+       FROM guests g JOIN tiers t ON t.id = g.tier_id
+       WHERE g.event_id = ?1 AND g.kind = 'invite' AND g.status = 'active' AND g.rsvp = 'yes'`).all(),
+    q(`SELECT p.id, u.name, t.name AS tier, t.id AS tier_id
+       FROM passes p JOIN users u ON u.id = p.user_id JOIN tiers t ON t.id = p.tier_id
+       WHERE p.event_id = ?1 AND p.status = 'active'`).all(),
+    q(`SELECT g.id, g.name, g.table_label, t.name AS tier, t.id AS tier_id
+       FROM guests g JOIN tiers t ON t.id = g.tier_id
+       WHERE g.event_id = ?1 AND g.kind = 'import' AND g.wristband_of IS NULL AND g.name NOT LIKE 'Wristband-%' AND g.status = 'active'`).all(),
+    q(`SELECT wristband_of AS origin, wb_seat AS seat, wb_gen AS gen, status FROM guests WHERE event_id = ?1 AND wristband_of IS NOT NULL`).all(),
+    q(`SELECT DISTINCT COALESCE(pass_id, guest_id) AS id FROM scans WHERE event_id = ?1 AND result = 'granted'`).all()
+  ]);
+  const inside = new Set(entered.results.map((r) => r.id));
+  const byOrigin = new Map();
+  for (const r of bands.results) (byOrigin.get(r.origin) || byOrigin.set(r.origin, []).get(r.origin)).push(r);
+  const person = (kind, row, seats, label) => {
+    const rows = byOrigin.get(row.id) || [];
+    return {
+      kind, id: row.id, name: row.name, table: row.table_label || null, tier: row.tier, tier_id: row.tier_id, seats, source: label,
+      made: new Set(rows.filter((r) => r.status === 'active').map((r) => r.seat)).size,
+      entered: inside.has(row.id)
+    };
+  };
+  return [
+    ...invites.results.map((g) => person('guest', g, g.attending || g.party_size, 'Replied yes')),
+    ...passes.results.map((p) => person('pass', p, 1, 'Tap In pass')),
+    ...imports.results.map((g) => person('guest', g, 1, 'Imported ticket'))
+  ].sort((a, c) => a.name.localeCompare(c.name));
+}
+
+// GET /api/events/:id/wristbands -> the confirmed people, and how many wristbands each has
+export async function listWristbandPeople({ env, user, params }) {
+  const ev = await ownedEvent(env, user, params.id);
+  if (ev.kind !== 'event') throw new HttpError(400, 'not_an_event', 'Wristbands are for events.');
+  return json({ people: await confirmedPeople(env, ev.id) });
+}
+
+// POST /api/events/:id/wristbands { people: [{ kind: 'guest' | 'pass', id }] }
+// Makes whatever wristbands are missing for each person, then returns every active wristband for them (new and
+// existing), so the same call prints, reprints, and replaces a cancelled one.
+export async function makeWristbands({ request, env, user, params }) {
+  const ev = await ownedEvent(env, user, params.id);
+  if (ev.kind !== 'event') throw new HttpError(400, 'not_an_event', 'Wristbands are for events.');
+  const b = await readJson(request);
+  const asked = Array.isArray(b.people) ? b.people : [];
+  if (!asked.length) throw new HttpError(400, 'no_people', 'Choose who the wristbands are for.');
+  if (asked.length > MAX_WRISTBAND_PEOPLE) throw new HttpError(400, 'too_many', `Choose up to ${MAX_WRISTBAND_PEOPLE} people at a time.`);
+
+  const confirmed = new Map((await confirmedPeople(env, ev.id)).map((p) => [p.kind + ':' + p.id, p]));
+  const picked = [];
+  const seenKey = new Set();
+  for (const a of asked) {
+    const key = `${a && a.kind}:${a && a.id}`;
+    if (seenKey.has(key)) continue;
+    seenKey.add(key);
+    const p = confirmed.get(key);
+    if (!p) throw new HttpError(400, 'not_confirmed', 'Wristbands are only for confirmed guests: people who replied Yes, or hold a pass or an imported ticket.');
+    if (p.entered) throw new HttpError(409, 'already_entered', `${p.name} is already inside, so they do not need a wristband.`);
+    picked.push(p);
   }
-  if (wristbands.length !== count) throw new HttpError(500, 'wristband_failed', 'Could not make every wristband. Try again.');
-  return json({ tier: tier.name, wristbands }, 201);
+  if (picked.reduce((n, p) => n + p.seats, 0) > MAX_WRISTBANDS_PER_CALL) throw new HttpError(400, 'too_many', `That is more than ${MAX_WRISTBANDS_PER_CALL} wristbands at once. Choose fewer people.`);
+
+  const existing = (await env.DB.prepare(
+    `SELECT id, wristband_of AS origin, wb_seat AS seat, wb_gen AS gen, status FROM guests WHERE event_id = ?1 AND wristband_of IN (SELECT value FROM json_each(?2))`
+  ).bind(ev.id, JSON.stringify(picked.map((p) => p.id))).all()).results;
+  const rowsOf = new Map();
+  for (const r of existing) (rowsOf.get(r.origin + ':' + r.seat) || rowsOf.set(r.origin + ':' + r.seat, []).get(r.origin + ':' + r.seat)).push(r);
+  await roomFor(env, ev.id, picked.reduce((n, p) => n + p.seats, 0));
+
+  const now = nowSec();
+  const stmts = [];
+  const out = [];
+  for (const p of picked) {
+    for (let seat = 1; seat <= p.seats; seat++) {
+      const rows = rowsOf.get(`${p.id}:${seat}`) || [];
+      let gen = (rows.find((r) => r.status === 'active') || {}).gen;
+      if (gen === undefined) {
+        gen = rows.length; // every earlier wristband for this seat was cancelled: a new generation, a new code
+        const code = await wristbandCode(env.SECRET_PEPPER, ev.id, p.id, seat, gen);
+        stmts.push(env.DB.prepare(
+          `INSERT OR IGNORE INTO guests (id, event_id, tier_id, kind, name, party_size, table_label, code_hash, code_hint, wristband_of, wb_seat, wb_seats, wb_gen, created_at)
+           VALUES (?1, ?2, ?3, 'import', ?4, 1, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`
+        ).bind(newId(10), ev.id, p.tier_id, p.name, p.table, await hashGuestCode(env.SECRET_PEPPER, ev.id, code), code.slice(-4), p.id, seat, p.seats, gen, now));
+      }
+      out.push({ name: p.name, table: p.table, tier: p.tier, seat, seats: p.seats, code: await wristbandCode(env.SECRET_PEPPER, ev.id, p.id, seat, gen) });
+    }
+    // The original code stops admitting from now on.
+    stmts.push(env.DB.prepare(`UPDATE ${p.kind === 'pass' ? 'passes' : 'guests'} SET wristbanded = 1 WHERE id = ?1 AND event_id = ?2`).bind(p.id, ev.id));
+  }
+  if (stmts.length) await env.DB.batch(stmts);
+  return json({ wristbands: out }, 201);
 }
 
 // POST /api/events/:id/guests/:guestId/revoke -> the code and link stop working

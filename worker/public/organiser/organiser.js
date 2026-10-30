@@ -667,6 +667,7 @@ async function tabGuests(body, data) {
        ['Can’t come', `${s.no}`, ''],
        ['No reply yet', `${s.pending}`, ''],
        ['Imported tickets', `${s.imported}`, 'from other platforms'],
+       ['Wristbands', `${s.wristbands}`, 'made for guests'],
        ['Arrived', `${s.arrived}`, 'scanned in']].map(([l, v, sub, dk]) => h('div', { class: 'card stat' + (dk ? ' dk' : '') }, h('b', {}, v), h('span', {}, l), sub && h('small', {}, sub)))));
     drawList();
   }
@@ -675,13 +676,14 @@ async function tabGuests(body, data) {
     const q = search.trim().toLowerCase();
     const rows = all.filter((g) => {
       if (filter === 'invite' && g.kind !== 'invite') return false;
-      if (filter === 'import' && g.kind !== 'import') return false;
+      if (filter === 'import' && !(g.kind === 'import' && !g.wristband_of)) return false;
+      if (filter === 'band' && !g.wristband_of) return false;
       if (filter === 'yes' && g.rsvp !== 'yes') return false;
       if (filter === 'pending' && !(g.kind === 'invite' && g.rsvp === 'pending')) return false;
       if (filter === 'arrived' && !g.entered_at) return false;
       return !q || g.name.toLowerCase().includes(q) || (g.table_label || '').toLowerCase().includes(q) || (g.code_hint || '').toLowerCase().includes(q);
     });
-    const tabs = [['all', 'All'], ['invite', 'Invitations'], ['yes', 'Coming'], ['pending', 'No reply'], ['import', 'Imported'], ['arrived', 'Arrived']];
+    const tabs = [['all', 'All'], ['invite', 'Invitations'], ['yes', 'Coming'], ['pending', 'No reply'], ['import', 'Imported'], ['band', 'Wristbands'], ['arrived', 'Arrived']];
     mount(listBox,
       h('div', { class: 'spread', style: 'margin-top:22px;gap:10px;flex-wrap:wrap' },
         h('div', { class: 'row' }, tabs.map(([k, l]) => h('button', { class: 'btn small ' + (filter === k ? 'primary' : 'ghost'), type: 'button', onclick: () => { filter = k; drawList(); } }, l))),
@@ -690,7 +692,7 @@ async function tabGuests(body, data) {
         ? h('div', { class: 'scroll-x', style: 'margin-top:10px' }, h('table', {},
             h('thead', {}, h('tr', {}, ['Guest', 'Party', 'Table', 'Reply', 'Arrived', ''].map((c) => h('th', {}, c)))),
             h('tbody', {}, rows.slice(0, 1000).map((g) => h('tr', { class: g.status === 'revoked' ? 'muted' : '' },
-              h('td', {}, h('strong', {}, g.name), h('div', { class: 'hint' }, g.kind === 'import' ? `${/^Wristband-\d+$/.test(g.name) ? 'Wristband' : 'Imported ticket'} · code ends ${g.code_hint} · ${g.tier}` : `${g.tier}${g.contact ? ' · ' + g.contact : ''}`)),
+              h('td', {}, h('strong', {}, g.name), h('div', { class: 'hint' }, g.wristband_of ? `Wristband${g.wb_seats > 1 ? ` ${g.wb_seat} of ${g.wb_seats}` : ''} · code ends ${g.code_hint} · ${g.tier}` : g.kind === 'import' ? `Imported ticket · code ends ${g.code_hint} · ${g.tier}` : `${g.tier}${g.contact ? ' · ' + g.contact : ''}`)),
               h('td', { class: 'mono' }, g.kind === 'invite' && g.rsvp === 'yes' && g.attending ? `${g.attending} of ${g.party_size}` : String(g.party_size)),
               h('td', {}, g.table_label || ''),
               h('td', {}, g.status === 'revoked' ? h('span', { class: 'chip' }, 'Cancelled') : g.kind === 'import' ? '' : g.rsvp === 'yes' ? h('span', { class: 'chip ok' }, 'Coming') : g.rsvp === 'no' ? h('span', { class: 'chip bad' }, 'Not coming') : h('span', { class: 'chip' }, 'No reply')),
@@ -724,22 +726,32 @@ async function tabGuests(body, data) {
   const impOut = h('div', {});
   const impBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Import list');
 
-  // Print wristbands: random codes the gate already accepts, printed as QR + readable code
-  const wbTier = tierSelect(data.tiers[0] && data.tiers[0].id);
-  const wbCount = h('input', { class: 'input', id: 'wbn', type: 'number', min: '1', max: '500', value: '100' });
-  const wbOut = h('div', {});
-  const wbBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Make wristbands');
+  // Wristbands: one per person, only for confirmed guests (replied yes, hold a pass, or hold an imported ticket)
   const wbShow = (c) => `${c.slice(0, 2)}-${c.slice(2, 7)}-${c.slice(7)}`;
+  const wbBox = h('div', {});
+  const wbOut = h('div', {});
+  let wbPeople = [];
+  let wbPick = new Set();
+  let wbQuery = '';
+  let wbShowAll = false;
+  const wbKey = (p) => p.kind + ':' + p.id;
+  async function loadWb() {
+    try { wbPeople = (await get(`/events/${id}/wristbands`)).people; } catch (ex) { return mount(wbBox, h('div', { class: 'error' }, ex.message)); }
+    wbPick = new Set([...wbPick].filter((k) => wbPeople.some((p) => wbKey(p) === k && !p.entered)));
+    drawWb();
+  }
   function wbSheet(r) {
     const stub = (w) => h('div', { class: 'wb' },
-      h('div', { class: 'wb-qr' }, qrSvg(w.code, 'Wristband ' + w.number)),
+      h('div', { class: 'wb-qr' }, qrSvg(w.code, `Wristband for ${w.name}`)),
       h('div', { class: 'wb-info' },
-        h('b', {}, data.event.name),
-        h('span', {}, `${r.tier} · No. ${w.number}`),
-        h('code', {}, wbShow(w.code))));
+        h('b', {}, w.name),
+        h('span', {}, [w.table, w.tier].filter(Boolean).join(' · ')),
+        w.seats > 1 && h('span', {}, `${w.seat} of ${w.seats}`),
+        h('code', {}, wbShow(w.code)),
+        h('small', {}, data.event.name)));
     const sheet = h('div', { class: 'wb-sheet' }, r.wristbands.map(stub));
     mount(wbOut,
-      h('div', { class: 'notice noprint', style: 'margin-top:12px' }, `${r.wristbands.length} wristband${r.wristbands.length === 1 ? '' : 's'} ready. These codes are shown only now: print the sheet or download the file before you leave this page. The gate scanner already accepts them.`),
+      h('div', { class: 'notice noprint', style: 'margin-top:12px' }, `${r.wristbands.length} wristband${r.wristbands.length === 1 ? '' : 's'} ready. Their phone invitation or pass no longer opens the gate: the wristband does. You can reprint these any time from this list.`),
       h('div', { class: 'row noprint', style: 'margin-top:10px' },
         h('button', { class: 'btn primary small', type: 'button', onclick: () => {
           // Print a copy placed straight under <body>, with everything else hidden, so cards and sidebars cannot move it.
@@ -751,27 +763,59 @@ async function tabGuests(body, data) {
           window.print();
         } }, 'Print sheet'),
         h('button', { class: 'btn ghost small', type: 'button', onclick: () => {
-          const lines = [['Number', 'Code', 'Ticket type'].join(',')].concat(r.wristbands.map((w) => [w.number, wbShow(w.code), r.tier].map(csvCell).join(',')));
+          const lines = [['Name', 'Table', 'Ticket type', 'Wristband', 'Code'].join(',')].concat(r.wristbands.map((w) => [w.name, w.table, w.tier, `${w.seat} of ${w.seats}`, wbShow(w.code)].map(csvCell).join(',')));
           download(`${data.event.name.replace(/[^\w]+/g, '-').toLowerCase()}-wristbands.csv`, lines.join('\r\n') + '\r\n');
         } }, 'Download codes (CSV)')),
       sheet);
   }
-  const wbCard = h('form', { class: 'card', style: 'margin-top:14px', onsubmit: async (e) => {
-    e.preventDefault();
-    wbBtn.disabled = true;
+  async function wbMake(people) {
     try {
-      const r = await post(`/events/${id}/wristbands`, { tier_id: wbTier.value, count: Number(wbCount.value) });
+      const r = await post(`/events/${id}/wristbands`, { people: people.map((p) => ({ kind: p.kind, id: p.id })) });
       wbSheet(r);
+      wbPick.clear();
+      await loadWb();
       await load();
     } catch (ex) { mount(wbOut, h('div', { class: 'error', role: 'alert' }, ex.message)); }
-    wbBtn.disabled = false;
-  } },
-    h('h3', {}, 'Print wristbands'),
-    h('p', { class: 'muted', style: 'margin-top:4px' }, 'For guests with no phone, no data or a flat battery. Make a batch of numbered codes, print the sheet (or send the file to a wristband printer), and put one on each guest. The gate scanner reads the QR or the typed code, lets each in once per area, and lost ones can be cancelled in the list below.'),
-    h('div', { class: 'grid two' },
-      h('div', { class: 'field' }, h('label', {}, 'Ticket type'), wbTier),
-      h('div', { class: 'field' }, h('label', { for: 'wbn' }, 'How many (up to 500 at a time)'), wbCount)),
-    h('div', { style: 'margin-top:12px' }, wbBtn), wbOut);
+  }
+  function drawWb() {
+    const q = wbQuery.trim().toLowerCase();
+    const shown = wbPeople.filter((p) => (wbShowAll || p.made < p.seats) && (!q || p.name.toLowerCase().includes(q) || (p.table || '').toLowerCase().includes(q)));
+    const pickable = shown.filter((p) => !p.entered);
+    const picked = wbPeople.filter((p) => wbPick.has(wbKey(p)));
+    const count = picked.reduce((n, p) => n + p.seats, 0);
+    const state = (p) => p.entered ? h('span', { class: 'chip' }, 'Already inside')
+      : p.made >= p.seats ? h('span', { class: 'chip ok' }, p.seats > 1 ? `${p.made} of ${p.seats} made` : 'Made')
+      : p.made > 0 ? h('span', { class: 'chip' }, `${p.made} of ${p.seats} made`) : h('span', { class: 'chip' }, 'Not made');
+    mount(wbBox,
+      !wbPeople.length
+        ? h('p', { class: 'muted', style: 'margin-top:12px' }, 'No confirmed guests yet. People appear here once they reply Yes to an invitation, claim a pass, or have an imported ticket.')
+        : h('div', {},
+          h('div', { class: 'spread', style: 'margin-top:12px;gap:10px;flex-wrap:wrap' },
+            h('div', { class: 'row' },
+              h('label', { class: 'hint', style: 'display:flex;gap:6px;align-items:center' }, h('input', { type: 'checkbox', checked: wbShowAll, onchange: (e) => { wbShowAll = e.target.checked; drawWb(); } }), 'Also show people who already have wristbands'),
+              h('button', { class: 'btn ghost small', type: 'button', onclick: () => { pickable.forEach((p) => wbPick.add(wbKey(p))); drawWb(); } }, 'Select all shown'),
+              wbPick.size > 0 && h('button', { class: 'btn ghost small', type: 'button', onclick: () => { wbPick.clear(); drawWb(); } }, 'Clear')),
+            h('input', { class: 'input', style: 'max-width:240px', type: 'search', placeholder: 'Search name or table', value: wbQuery, 'aria-label': 'Search confirmed guests', oninput: (e) => { wbQuery = e.target.value; const pos = e.target.selectionStart; drawWb(); const el = wbBox.querySelector('input[type=search]'); el.focus(); el.setSelectionRange(pos, pos); } })),
+          shown.length
+            ? h('div', { class: 'scroll-x', style: 'margin-top:10px' }, h('table', {},
+                h('thead', {}, h('tr', {}, ['', 'Guest', 'Table', 'Ticket', 'Wristbands', ''].map((c) => h('th', {}, c)))),
+                h('tbody', {}, shown.slice(0, 500).map((p) => h('tr', {},
+                  h('td', {}, h('input', { type: 'checkbox', disabled: p.entered, checked: wbPick.has(wbKey(p)), 'aria-label': 'Select ' + p.name, onchange: (e) => { e.target.checked ? wbPick.add(wbKey(p)) : wbPick.delete(wbKey(p)); drawWb(); } })),
+                  h('td', {}, h('strong', {}, p.name), h('div', { class: 'hint' }, p.source)),
+                  h('td', {}, p.table || ''),
+                  h('td', {}, p.tier),
+                  h('td', { class: 'mono' }, String(p.seats)),
+                  h('td', {}, state(p)))))),
+                shown.length > 500 && h('p', { class: 'hint' }, `Showing the first 500 of ${shown.length}. Search to narrow it down.`))
+            : h('p', { class: 'muted', style: 'margin-top:12px' }, q ? 'Nobody matches.' : 'Everyone confirmed already has their wristbands.'),
+          h('div', { style: 'margin-top:12px' },
+            h('button', { class: 'btn primary', type: 'button', disabled: !wbPick.size, onclick: async (e) => { e.target.disabled = true; await wbMake(picked); } },
+              wbPick.size ? `Make ${count} wristband${count === 1 ? '' : 's'} for ${wbPick.size} ${wbPick.size === 1 ? 'person' : 'people'}` : 'Select guests to make wristbands'))));
+  }
+  const wbCard = h('div', { class: 'card', style: 'margin-top:14px' },
+    h('h3', {}, 'Wristbands'),
+    h('p', { class: 'muted', style: 'margin-top:4px' }, 'A physical way in instead of a phone or paper ticket, made only for confirmed guests: people who replied Yes, hold a Tap In pass, or hold an imported ticket. Each person gets their own wristband with their name, so a party of 3 gets 3. Once someone has wristbands, their phone invitation or pass stops opening the gate, so nobody gets in twice.'),
+    wbBox, wbOut);
 
   body.append(summary,
     h('div', { class: 'grid two', style: 'margin-top:14px' },
@@ -827,6 +871,7 @@ async function tabGuests(body, data) {
     wbCard,
     listBox);
   try { await load(); } catch (ex) { mount(summary, h('div', { class: 'error' }, ex.message)); }
+  loadWb();
 }
 
 // ---- Edit details: name, place and date; areas; ticket types (or access groups and their hours) ----------
