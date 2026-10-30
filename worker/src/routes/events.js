@@ -92,6 +92,13 @@ function futureDate(v, current = null) {
   return t;
 }
 
+// Tickets cannot go on sale after the event has begun. Only checked when both dates are set.
+function assertSalesOpenBeforeEvent(salesStart, startsAt) {
+  if (salesStart && startsAt && salesStart > startsAt) {
+    throw new HttpError(400, 'sales_open_after_event', 'Ticket sales must open on or before the event date.');
+  }
+}
+
 // A ticket-type limit: blank means no limit, otherwise a whole number from 1 to 1,000,000.
 function parseCapacity(v, name) {
   if (v === undefined || v === null || v === '') return null;
@@ -148,6 +155,7 @@ export async function createEvent({ request, env, user }) {
   const salesStart = parseWhen(b.sales_start, 'sales start');
   const salesEnd = parseWhen(b.sales_end, 'sales end');
   if (salesStart && salesEnd && salesEnd <= salesStart) throw new HttpError(400, 'invalid_sales_window', 'Ticket sales must end after they start.');
+  assertSalesOpenBeforeEvent(salesStart, startsAt);
   const tierPrices = b.tiers.map((t, ti) => {
     if (t?.price_kobo === undefined || t?.price_kobo === null || t?.price_kobo === '') return 0;
     const p = Number.parseInt(t.price_kobo, 10);
@@ -304,6 +312,13 @@ export async function getEvent({ env, user, params }) {
 export async function patchEvent({ request, env, user, params }) {
   const ev = await ownedEvent(env, user, params.id);
   const b = await readJson(request);
+  // Check the sales-open date against the event date before anything is saved. Only when one of them is being changed,
+  // so an event that already has an odd pair can still be renamed.
+  if (('starts_at' in b || 'sales_start' in b) && ev.kind === 'event') {
+    const nextStarts = 'starts_at' in b ? futureDate(b.starts_at, ev.starts_at) : ev.starts_at;
+    const nextSales = 'sales_start' in b ? parseWhen(b.sales_start, 'sales start') : ev.sales_start;
+    if (nextStarts !== ev.starts_at || nextSales !== ev.sales_start) assertSalesOpenBeforeEvent(nextSales, nextStarts);
+  }
   // The basics. The code prefix stays as it was, so tickets already issued keep working after a rename.
   if ('name' in b || 'venue' in b || 'city' in b || 'starts_at' in b) {
     const name = 'name' in b ? cleanText(b.name, 'name', { min: 2, max: 80 }) : ev.name;

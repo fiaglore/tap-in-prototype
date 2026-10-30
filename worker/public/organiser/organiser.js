@@ -115,6 +115,9 @@ function viewNew(err = '', draft, office = false) {
   const selfie = h('input', { type: 'checkbox', id: 'sf', checked: d.require_photo === undefined ? office : !!d.require_photo });
   const salesStart = h('input', { class: 'input', id: 'ss', type: 'datetime-local', value: d.sales_start || '' });
   const salesEnd = h('input', { class: 'input', id: 'se', type: 'datetime-local', value: d.sales_end || '' });
+  // Sales cannot open after the event starts (the server checks too).
+  salesStart.max = d.starts_at || '';
+  starts.addEventListener('input', () => { salesStart.max = starts.value || ''; });
   const zoneInputs = [];
   const zoneBox = h('div', { class: 'stack' });
   const tierBox = h('div', { class: 'stack' });
@@ -190,7 +193,7 @@ function viewNew(err = '', draft, office = false) {
       h('h3', { style: 'margin-top:22px' }, T.group), tierBox,
       h('button', { class: 'btn ghost small', style: 'margin-top:8px', type: 'button', onclick: () => { tiers.push({ name: '', zones: new Set(), days: new Set([0, 1, 2, 3, 4, 5, 6]), from: '', to: '', price: '', capacity: '' }); drawTiers(); } }, 'Add ' + T.groupOne),
       !office && h('div', { class: 'grid two', style: 'margin-top:14px' },
-        h('div', { class: 'field' }, h('label', { for: 'ss' }, 'Ticket sales open (optional)'), salesStart),
+        h('div', { class: 'field' }, h('label', { for: 'ss' }, 'Ticket sales open (optional)'), salesStart, h('p', { class: 'hint' }, 'On or before the event starts.')),
         h('div', { class: 'field' }, h('label', { for: 'se' }, 'Ticket sales close (optional)'), salesEnd)),
       !office && h('div', { class: 'checks', style: 'margin-top:20px' },
         h('label', {}, reentry, 'Allow re-entry (a pass can be scanned in again at the same area)'),
@@ -326,6 +329,7 @@ async function tabTickets(body, data) {
   });
   const start = h('input', { class: 'input', id: 'ts', type: 'datetime-local', value: local(data.event.sales_start) });
   const end = h('input', { class: 'input', id: 'te', type: 'datetime-local', value: local(data.event.sales_end) });
+  if (data.event.starts_at) start.max = localInput(data.event.starts_at); // sales cannot open after the event starts
   const secure = h('input', { type: 'checkbox', checked: data.event.secure_qr, onchange: async (e) => {
     try { await patch('/events/' + id, { secure_qr: e.target.checked }); toast('Saved'); } catch (ex) { e.target.checked = !e.target.checked; toast(ex.message); }
   } });
@@ -339,7 +343,7 @@ async function tabTickets(body, data) {
         try { await patch('/events/' + id, { sales_start: start.value ? new Date(start.value).toISOString() : null, sales_end: end.value ? new Date(end.value).toISOString() : null }); toast('Saved'); } catch (ex) { toast(ex.message); }
       } }, h('h3', {}, 'Sales window'),
         h('p', { class: 'hint', style: 'margin:4px 0 8px' }, 'The public page only sells between these times. You can still issue codes yourself outside them.'),
-        h('div', { class: 'field' }, h('label', { for: 'ts' }, 'Opens'), start), h('div', { class: 'field' }, h('label', { for: 'te' }, 'Closes'), end),
+        h('div', { class: 'field' }, h('label', { for: 'ts' }, 'Opens'), start, data.event.starts_at && h('p', { class: 'hint' }, 'On or before the event starts (' + when(data.event.starts_at) + ').')), h('div', { class: 'field' }, h('label', { for: 'te' }, 'Closes'), end),
         h('button', { class: 'btn primary small', style: 'margin-top:12px', type: 'submit' }, 'Save window')),
       h('div', { class: 'card' }, h('h3', {}, 'Live QR'),
         h('p', { class: 'muted', style: 'margin-top:6px' }, 'The pass code changes every 30 seconds, so a screenshot or forwarded picture is useless. Guests need a phone connection at the gate. Printed or screenshotted codes are refused.'),
