@@ -135,6 +135,31 @@ await test('a window that ends before it starts is refused, and it can be change
   assert.equal((await client(env, '10.40.2.2').get(`/api/public/events/${e.event.id}`)).body.event.sales, 'open');
   assert.equal((await org.call('PATCH', '/api/events/' + e.event.id, { body: { sales_end: iso(-60), sales_start: iso(60) } })).status, 400);
 });
+await test('ticket sales cannot open after the event date: refused when creating and when editing', async () => {
+  const day = 86400;
+  const org = await signIn(env, 'sales-dates@example.com', '10.40.0.9', 'Sales Dates'); // its own organiser: events are limited per person
+  const mk = async (extra) => (await org.post('/api/events', { name: 'Test Fest', zones: ['Gate'], tiers: [{ name: 'GA', zones: ['Gate'] }], ...extra })).body;
+  const late = await org.post('/api/events', { name: 'Late sales', zones: ['G'], tiers: [{ name: 'T', zones: ['G'] }], starts_at: iso(2 * day), sales_start: iso(3 * day) });
+  assert.equal(late.status, 400);
+  assert.equal(late.body.error.code, 'sales_open_after_event');
+  // Before the event, or no sales date at all, is fine; so is an event with no date yet.
+  assert.equal((await org.post('/api/events', { name: 'Ok sales', zones: ['G'], tiers: [{ name: 'T', zones: ['G'] }], starts_at: iso(2 * day), sales_start: iso(day) })).status, 201);
+  assert.equal((await org.post('/api/events', { name: 'No date', zones: ['G'], tiers: [{ name: 'T', zones: ['G'] }], sales_start: iso(3 * day) })).status, 201);
+  const e = await mk({ starts_at: iso(5 * day), sales_start: iso(day) });
+  const patch = (body) => org.call('PATCH', '/api/events/' + e.event.id, { body });
+  const edit = await patch({ sales_start: iso(6 * day) });
+  assert.equal(edit.status, 400);
+  assert.equal(edit.body.error.code, 'sales_open_after_event');
+  // Moving the event earlier than the sales-open date is refused too, and nothing is saved.
+  const move = await patch({ name: 'Renamed', starts_at: iso(day / 2) });
+  assert.equal(move.status, 400);
+  assert.equal(move.body.error.code, 'sales_open_after_event');
+  const after = (await org.get('/api/events/' + e.event.id)).body.event;
+  assert.equal(after.name, 'Test Fest', 'a refused edit saves nothing');
+  // Changing both together to a valid pair works; renaming alone is never blocked.
+  assert.equal((await patch({ starts_at: iso(8 * day), sales_start: iso(7 * day) })).status, 200);
+  assert.equal((await patch({ name: 'Renamed' })).status, 200);
+});
 
 group('Live QR (screenshots stop working)');
 let sec, secPass, gk, zone;
