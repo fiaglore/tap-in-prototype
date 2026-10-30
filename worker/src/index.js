@@ -19,6 +19,7 @@ import * as vendors from './routes/vendors.js';
 import * as till from './routes/till.js';
 import { PAYMENT_API, PAYMENT_PAGES, paymentsOff } from './lib/money.js';
 import * as photo from './routes/photo.js';
+import { routeByHost } from './lib/hosts.js';
 
 // [method, path, auth, handler]. auth "user" needs a signed-in session; gate routes check their own key.
 const ROUTES = [
@@ -173,6 +174,8 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/') && url.pathname !== '/api') {
+      const hop = routeByHost(request, env, url);
+      if (hop) return hop;
       // With payments off the vendor and till pages answer like any missing page.
       if (paymentsOff(env) && PAYMENT_PAGES.test(url.pathname)) return env.ASSETS.fetch(new Request(new URL('/__payments_off__', url), request));
       if (url.pathname === '/e/' || url.pathname === '/e/index.html') return publicSale.salePageHtml(request, env);
