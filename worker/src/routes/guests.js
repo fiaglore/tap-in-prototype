@@ -4,7 +4,7 @@
 //  - Imported tickets: a list exported from another ticketer (or a bank-transfer spreadsheet). The printed codes are
 //    checked at the gate like Tap In passes, so organisers can keep selling wherever they sell.
 
-import { HttpError, cleanText, newId, normaliseCode, nowSec, parseIdentifier, safeEqual } from '../lib/util.js';
+import { HttpError, cleanText, newId, normaliseCode, nowSec, parseIdentifier, randomBase32, safeEqual } from '../lib/util.js';
 import { clientIp, json, readJson } from '../lib/http.js';
 import { guestToken, hashGuestCode, inviteLinkMac, inviteLinkToken, parseInviteLinkToken } from '../lib/codes.js';
 import { isFull, record } from '../lib/limits.js';
@@ -12,6 +12,7 @@ import { ownedEvent } from './events.js';
 
 const MAX_INVITES_PER_CALL = 500;
 const MAX_IMPORT_PER_CALL = 1000;
+const MAX_WRISTBANDS_PER_CALL = 500;
 const MAX_GUESTS_PER_EVENT = 20_000;
 const MAX_PARTY = 20;
 
@@ -145,6 +146,37 @@ export async function importGuests({ request, env, user, params }) {
   }
   skipped.sort((a, b2) => a.line - b2.line);
   return json({ imported, skipped }, 201);
+}
+
+// POST /api/events/:id/wristbands { tier_id, count } -> printable wristband codes
+// Each wristband is an imported-ticket row with a fresh random code (WB + 10 characters, 50 bits), so the gate scanner
+// already accepts it: one entry per area, cancellable, counted in the report. The plain codes are returned once, here;
+// only their scrambled form is stored.
+export async function createWristbands({ request, env, user, params }) {
+  const ev = await ownedEvent(env, user, params.id);
+  const b = await readJson(request);
+  const tier = pickTier(await eventTiers(env, ev.id), b.tier_id);
+  const count = Number(b.count);
+  if (!Number.isInteger(count) || count < 1 || count > MAX_WRISTBANDS_PER_CALL) throw new HttpError(400, 'invalid_count', `Make between 1 and ${MAX_WRISTBANDS_PER_CALL} wristbands at a time.`);
+  await roomFor(env, ev.id, count);
+
+  const made = (await env.DB.prepare("SELECT COUNT(*) AS n FROM guests WHERE event_id = ?1 AND kind = 'import' AND name LIKE 'Wristband-%'").bind(ev.id).first()).n;
+  const now = nowSec();
+  const wristbands = [];
+  // A clash on the unique code index is astronomically unlikely, but a skipped row would be a blank wristband, so retry.
+  for (let attempt = 0; attempt < 3 && wristbands.length < count; attempt++) {
+    const batch = [];
+    for (let i = wristbands.length; i < count; i++) {
+      const code = 'WB' + randomBase32(10);
+      batch.push({ code, number: made + batch.length + wristbands.length + 1, hash: await hashGuestCode(env.SECRET_PEPPER, ev.id, code) });
+    }
+    const res = await env.DB.batch(batch.map((w) => env.DB.prepare(
+      `INSERT OR IGNORE INTO guests (id, event_id, tier_id, kind, name, party_size, code_hash, code_hint, created_at) VALUES (?1, ?2, ?3, 'import', ?4, 1, ?5, ?6, ?7)`
+    ).bind(newId(10), ev.id, tier.id, `Wristband-${w.number}`, w.hash, w.code.slice(-4), now)));
+    res.forEach((r, k) => { if (r.meta.changes) wristbands.push({ number: batch[k].number, code: batch[k].code }); });
+  }
+  if (wristbands.length !== count) throw new HttpError(500, 'wristband_failed', 'Could not make every wristband. Try again.');
+  return json({ tier: tier.name, wristbands }, 201);
 }
 
 // POST /api/events/:id/guests/:guestId/revoke -> the code and link stop working

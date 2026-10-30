@@ -56,6 +56,7 @@ const ROUTES = [
   ['GET', '/api/events/:id/guests', 'user', guests.listGuests],
   ['POST', '/api/events/:id/guests', 'user', guests.addInvitations],
   ['POST', '/api/events/:id/guests/import', 'user', guests.importGuests],
+  ['POST', '/api/events/:id/wristbands', 'user', guests.createWristbands],
   ['POST', '/api/events/:id/guests/:guestId/revoke', 'user', guests.revokeGuest],
   ['POST', '/api/invitation', 'none', guests.openInvitation],
   ['POST', '/api/invitation/rsvp', 'none', guests.rsvp],
