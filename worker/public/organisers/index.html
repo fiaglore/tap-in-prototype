@@ -50,114 +50,40 @@
 </header>
 
 <main>
-  <section class="hero2 wrap">
-    <div class="hero-copy">
-      <p class="eyebrow tag"><span class="dot"></span> Ticketing and entry for events of 500 to 10,000</p>
+  <section class="lp photo-hero" style="--pos:50% 40%;--pos-m:44% 40%">
+    <div class="lp-stage"><img class="bg" src="/img/beams-bg.webp" width="2000" height="1333" alt="" fetchpriority="high" decoding="async"><img class="fg" src="/img/beams-fg.webp" width="2000" height="1333" alt="A crowd facing a DJ on stage, with beams of light crossing above them" fetchpriority="high" decoding="async"></div>
+    <i class="lp-beam b1"></i><i class="lp-beam b2"></i><i class="lp-beam b3"></i><i class="lp-pulse"></i>
+    <div class="lp-copy wrap hero-copy">
       <h1><span class="hl">Tap in.</span> We&rsquo;ve got the gate.</h1>
-      <p class="lede">Sell tickets that cannot be faked, forwarded or oversold. Get thousands of guests through the gate without the chaos, and know exactly who came.</p>
+      <p class="lede">Tickets that cannot be faked. A gate that keeps moving.</p>
       <div class="row cta">
         <a class="btn primary glow" href="/organiser/">Open the organiser console</a>
         <a class="btn ghost" href="/play/">Find an event</a>
       </div>
-      <ul class="pills" aria-label="What every event gets">
-        <li>Single-use tickets</li>
-        <li>Live QR that beats screenshots</li>
-        <li>Every scan logged</li>
-      </ul>
-    </div>
-
-    <div class="stage" id="stage" aria-hidden="true">
-      <div class="orbit o1"><span class="sat">Concerts</span></div>
-      <div class="orbit o2"><span class="sat">Festivals</span></div>
-      <div class="orbit o3"><span class="sat">Club nights</span></div>
-      <div class="frag f1" data-depth="46"><b>Gate A</b><span class="ok-dot"></span> 1,284 in</div>
-      <div class="frag f2" data-depth="70"><b>Copied code</b> turned away</div>
-      <div class="frag f3" data-depth="30"><b>VIP</b> &middot; 12 left</div>
-      <div class="frag f4" data-depth="58"><b>Live QR</b> <em id="fragTimer">0:30</em></div>
-      <div class="phone" id="phone">
-        <div class="phone-in">
-          <div class="p-top"><span class="chip">VIP Access</span><span class="live"><i></i> LIVE</span></div>
-          <p class="p-name">Lagos Live &middot; Gate A</p>
-          <div class="qrwrap"><canvas id="qr" width="168" height="168"></canvas><div class="beam"></div></div>
-          <p class="p-code mono" id="code">TQ-0000-0000-0000</p>
-          <div class="p-status" id="status">Scanning…</div>
-        </div>
-        <div class="glare"></div>
-      </div>
     </div>
   </section>
-
-  <div class="ticker" aria-hidden="true"><div class="ticker-in">
-    <span>CONCERTS</span><span>FESTIVALS</span><span>CLUB NIGHTS</span><span>CONFERENCES</span><span>NO FAKES</span><span>NO OVERSELLING</span><span>LIVE QR</span><span>GUEST LISTS</span><span>CONCERTS</span><span>FESTIVALS</span><span>CLUB NIGHTS</span><span>CONFERENCES</span><span>NO FAKES</span><span>NO OVERSELLING</span><span>LIVE QR</span><span>GUEST LISTS</span>
-  </div></div>
 
   <section class="wrap sec rv" id="problems">
-    <p class="eyebrow">Why organisers switch</p>
-    <h2 class="big">The gate is where events lose money.</h2>
-    <div class="grid three pains" style="margin-top:22px">
-      <article class="card spot"><p class="eyebrow">Fake and copied tickets</p><h3>Every ticket works once</h3><p class="muted">Each ticket is a single-use code checked at the gate. A copy or a made-up code is turned away, and staff see when the real one was first used.</p></article>
-      <article class="card spot"><p class="eyebrow">Screenshots on WhatsApp</p><h3>A code that keeps moving</h3><p class="muted">Turn on Live QR and the code on the guest&rsquo;s phone changes every 30 seconds. A screenshot sent to a friend stops working.</p></article>
-      <article class="card spot"><p class="eyebrow">Overselling</p><h3>Your limit is the limit</h3><p class="muted">Ticket limits are enforced on the server, so the last ticket sells once, even when two people press buy at the same moment.</p></article>
-      <article class="card spot"><p class="eyebrow">Friends waved through</p><h3>Every entry on record</h3><p class="muted">Every scan is logged with the time, the area and the result. For high-value events, staff can see the ticket holder&rsquo;s photo next to their name.</p></article>
-      <article class="card spot"><p class="eyebrow">Slow, chaotic gates</p><h3>A clear yes or no</h3><p class="muted">Staff get a big Admit or Do not admit, the guest&rsquo;s first name and ticket type. Any Android phone with Chrome is a scanner, and USB or Bluetooth scanners work too.</p></article>
-      <article class="card spot"><p class="eyebrow">Not knowing who came</p><h3>See the night as it happens</h3><p class="muted">Your console shows who has entered and who was turned away, ticket type by ticket type, updated every few seconds.</p></article>
+    <div class="six">
+      <div class="mini"><h3>Fake tickets</h3><p class="muted">Every ticket works once.</p></div>
+      <div class="mini"><h3>Screenshots</h3><p class="muted">Live QR changes every 30 seconds.</p></div>
+      <div class="mini"><h3>Overselling</h3><p class="muted">Your limit is the limit.</p></div>
+      <div class="mini"><h3>Friends waved through</h3><p class="muted">Every scan is logged.</p></div>
+      <div class="mini"><h3>Slow gates</h3><p class="muted">A clear Admit or Do not admit.</p></div>
+      <div class="mini"><h3>Not knowing who came</h3><p class="muted">Live numbers all night.</p></div>
     </div>
   </section>
 
-  <div class="bigtext" id="bigtext" aria-hidden="true"><span>SELL &middot; SCAN &middot; ENTER &middot; SELL &middot; SCAN &middot; ENTER &middot;</span></div>
-
-  <section class="story" id="story" aria-labelledby="storyTitle">
-    <div class="story-track">
-      <div class="story-pin">
-        <div class="story-grid wrap">
-          <div class="story-text">
-            <p class="eyebrow">One event, start to finish</p>
-            <h2 class="big" id="storyTitle">From first sale to last entry.</h2>
-            <ol class="story-steps">
-              <li class="on"><span class="clock">Mon</span><div><h3>Tickets go on sale</h3><p class="muted">Ticket types, prices, limits and a sales window. Your event gets its own sales page, and guests buy in a minute.</p></div></li>
-              <li><span class="clock">19:30</span><div><h3>Doors open</h3><p class="muted">Guests show the pass on their phone. Staff scan it and get a clear answer. Copies, screenshots and used tickets are turned away.</p></div></li>
-              <li><span class="clock">22:15</span><div><h3>You know the numbers</h3><p class="muted">How many are in, how many were refused and why, by ticket type and area, while the night is still going.</p></div></li>
-            </ol>
-            <div class="story-prog" aria-hidden="true"><i></i></div>
-          </div>
-          <div class="story-stage" aria-hidden="true">
-            <div class="story-phone" id="storyPhone">
-              <div class="sp-in">
-                <div class="screen on s0">
-                  <p class="sp-eyebrow">Lagos Live &middot; Regular</p>
-                  <div class="sp-amt">&#8358;15,000</div>
-                  <div class="viz cap sp-cap"><div class="meter"><i></i></div><div class="cap-l"><span>Regular</span><b>Only 12 left</b></div></div>
-                  <div class="sp-ok">On sale until Friday 18:00</div>
-                </div>
-                <div class="screen s1">
-                  <p class="sp-eyebrow">Lagos Live &middot; VIP</p>
-                  <canvas id="storyQr" width="144" height="144"></canvas>
-                  <p class="mono sp-code" id="storyCode">TQ-0000-0000</p>
-                  <div class="sp-ok">Gate A &middot; Entered</div>
-                </div>
-                <div class="screen s2">
-                  <p class="sp-eyebrow">Lagos Live &middot; Tonight</p>
-                  <div class="sp-amt">4,812 in</div>
-                  <div class="tick"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="23"/><path d="M15 27l8 8 15-17"/></svg></div>
-                  <div class="sp-ok">37 copies and repeats refused</div>
-                </div>
-              </div>
-            </div>
-            <div class="story-ring r1"></div><div class="story-ring r2"></div>
-          </div>
-        </div>
-      </div>
+  <section class="lp band" style="--pos:50% 30%" aria-label="Create, share, scan">
+    <div class="lp-stage"><img class="bg" src="/img/hands-bg.webp" width="2000" height="1235" alt="" loading="lazy" decoding="async"><img class="fg" src="/img/hands-fg.webp" width="2000" height="1235" alt="A crowd at a night show with hands raised towards the stage lights" loading="lazy" decoding="async"></div>
+    <i class="lp-beam b1"></i><i class="lp-beam b2"></i><i class="lp-beam b3"></i><i class="lp-pulse"></i>
+    <div class="lp-copy wrap">
+      <ol class="words long">
+        <li><b>Create</b><span>the event</span></li>
+        <li><b>Share</b><span>the page</span></li>
+        <li><b>Scan</b><span>at the gate</span></li>
+      </ol>
     </div>
-  </section>
-
-  <section class="wrap sec rv" id="how">
-    <p class="eyebrow">How it works</p>
-    <h2 class="big">Three steps to a calm gate.</h2>
-    <ol class="steps">
-      <li><span class="n">01</span><div><h3>Create the event</h3><p class="muted">Add ticket types with prices and limits, the areas each one can enter, a sales window and re-entry rules. Share your sales page, or send invite codes for a guest list.</p></div></li>
-      <li><span class="n">02</span><div><h3>Guests get their pass</h3><p class="muted">They buy on your page or add an invite code, sign in with a phone number or email, and the pass lives in the Tap In app. Each ticket belongs to one person.</p></div></li>
-      <li><span class="n">03</span><div><h3>Scan at the gate</h3><p class="muted">Open the scanner on any staff phone with your gate key. Admit or Do not admit, the guest&rsquo;s first name and ticket type, and a log of every scan.</p></div></li>
-    </ol>
   </section>
 
   <section class="wrap sec rv">
@@ -170,54 +96,20 @@
     </div>
   </section>
 
-  <section class="wrap sec rv">
-    <p class="eyebrow">Built for the gate team</p>
-    <h2 class="big">Works with the staff and kit you have.</h2>
-    <div class="grid three" style="margin-top:18px">
-      <article class="card spot"><h3>Any phone is a scanner</h3><p class="muted">Chrome on Android scans with the camera. USB and Bluetooth barcode scanners type straight into the scanner page, and codes can be typed by hand.</p></article>
-      <article class="card spot"><h3>Areas and re-entry</h3><p class="muted">VIP, backstage and the main floor are separate areas. A pass only opens the areas its ticket type allows, with re-entry on or off.</p></article>
-      <article class="card spot"><h3>Guest details stay private</h3><p class="muted">Gate staff see a first name and last initial, never a phone number or email. Ticket codes are stored scrambled, so a database leak gives nobody working tickets.</p></article>
-    </div>
-  </section>
-
-  <section class="wrap sec rv" id="more">
-    <p class="eyebrow">Beyond the ticket sale</p>
-    <h2 class="big">Weddings, outside tickets and no signal.</h2>
-    <div class="grid three" style="margin-top:18px">
-      <article class="card spot"><p class="eyebrow">Weddings and private parties</p><h3>Invitations that check people in</h3><p class="muted">Add your guest list and send each guest their own link on WhatsApp. They tell you if they are coming and how many, with no app or account. At the door, one scan lets their whole party in and shows the usher their table.</p></article>
-      <article class="card spot"><p class="eyebrow">Already selling elsewhere?</p><h3>Bring the tickets, keep your ticketer</h3><p class="muted">Selling on another platform, on Instagram or by bank transfer? Import the buyer list and Tap In checks those codes at the gate: each works once, fakes are refused, and every entry lands in your report.</p></article>
-      <article class="card spot"><p class="eyebrow">No signal at the gate</p><h3>The gate keeps working</h3><p class="muted">Scanners save the ticket list and keep checking when the network drops, then send every scan when it comes back. Live passes make their own code on the guest&rsquo;s phone, so screenshots still fail with no data.</p></article>
-    </div>
+  <section class="wrap sec rv" id="today">
+    <p class="eyebrow">At the gate, today</p>
+    <ul class="chips">
+      <li>Phone camera</li><li>USB or Bluetooth scanner</li><li>Typed codes</li><li>No signal</li><li>Tickets from other platforms</li><li>Weddings and invitations</li>
+      <li class="next">Tap on a reader (NFC): coming next</li>
+    </ul>
+    <p class="fine">Camera scanning works on Chrome for Android. NFC needs a native app, so it is not available yet. Two scanners that are offline at once cannot see each other&rsquo;s entries until they reconnect, and the report flags any ticket that got in twice.</p>
   </section>
 
   <section class="wrap sec rv">
-    <div class="card spot" style="padding:0;overflow:hidden">
-      <table>
-        <thead><tr><th>At the gate, today</th><th>Status</th><th>Notes</th></tr></thead>
-        <tbody>
-          <tr><td>QR on the phone, scanned by a staff phone camera</td><td><span class="chip ok">Works now</span></td><td>Chrome on Android with a camera. Other phones can use a USB scanner or typing.</td></tr>
-          <tr><td>USB or Bluetooth barcode scanner</td><td><span class="chip ok">Works now</span></td><td>The scanner types the code into the gate page.</td></tr>
-          <tr><td>Typed pass code</td><td><span class="chip ok">Works now</span></td><td>Fallback if a screen is cracked or a camera is struggling.</td></tr>
-          <tr><td>Gates with no signal</td><td><span class="chip ok">Works now</span></td><td>Scanners check against a saved list and send scans later. Two scanners offline at once cannot see each other&rsquo;s entries until they reconnect; the report flags any ticket that got in twice.</td></tr>
-          <tr><td>Tickets sold on other platforms</td><td><span class="chip ok">Works now</span></td><td>Import the buyer list; the scanner reads QR codes and common barcodes on phones that support them.</td></tr>
-          <tr><td>Tap the phone on a receiver (NFC)</td><td><span class="chip">Coming next</span></td><td>Needs a native app. Browsers cannot act as a tap-to-enter card, and iPhone access to this is restricted, so we will not pretend it is possible yet.</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <section class="wrap sec rv">
-    <div class="grid two audiences">
-      <a class="card prod spot" href="/play/">
-        <p class="eyebrow">Going out?</p><h3>Find an event</h3>
-        <p class="muted">See what is coming up, get your ticket and keep the pass on your phone.</p>
-        <span class="more">Upcoming events &rarr;</span>
-      </a>
-      <a class="card prod spot" href="/business/">
-        <p class="eyebrow">Offices and workplaces</p><h3>Tap In for Business</h3>
-        <p class="muted">Staff and visitor check-in for offices, with access by group, day and hour. A separate product with its own console.</p>
-        <span class="more">See Tap In for Business &rarr;</span>
-      </a>
+    <div class="portals">
+      <a class="portal spot" href="/organiser/"><p class="eyebrow">Ready?</p><h3>Organiser console</h3><span class="more">Sign in or start &rarr;</span></a>
+      <a class="portal spot" href="/play/"><p class="eyebrow">Going out?</p><h3>Find an event</h3><span class="more">Upcoming events &rarr;</span></a>
+      <a class="portal spot" href="/business/"><p class="eyebrow">Offices</p><h3>Tap In for Business</h3><span class="more">Staff and visitor check-in &rarr;</span></a>
     </div>
   </section>
 

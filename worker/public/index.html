@@ -67,85 +67,41 @@
 </header>
 
 <main>
-  <div class="herobg" aria-hidden="true"><picture><source type="image/webp" srcset="/img/crowd-hands.webp"><img src="/img/crowd-hands.jpg" width="2000" height="1235" alt="" fetchpriority="high"></picture></div>
-  <section class="hero2 wrap">
-    <div class="hero-copy">
-      <p class="eyebrow tag"><span class="dot"></span> Concerts, festivals, club nights and more</p>
+  <section class="lp photo-hero" style="--pos:50% 28%;--pos-m:62% 30%">
+    <div class="lp-stage"><img class="bg" src="/img/hands-bg.webp" width="2000" height="1235" alt="" fetchpriority="high" decoding="async"><img class="fg" src="/img/hands-fg.webp" width="2000" height="1235" alt="A crowd at a night show with hands raised towards the stage lights" fetchpriority="high" decoding="async"></div>
+    <i class="lp-beam b1"></i><i class="lp-beam b2"></i><i class="lp-beam b3"></i><i class="lp-pulse"></i>
+    <div class="lp-copy wrap hero-copy">
       <h1>No paper. <span class="hl">Just tap in.</span></h1>
-      <p class="lede">Find an event, get your pass, walk in.</p>
       <div class="row cta">
         <a class="btn primary glow" href="/play/">Find an event</a>
         <a class="btn ghost" href="/app/">Open the app</a>
       </div>
-      <ul class="pills" aria-label="What every guest gets">
-        <li>A ticket that is yours alone</li>
-        <li>Live QR that beats screenshots</li>
-        <li>Nothing to print</li>
-      </ul>
-    </div>
-
-    <div class="stage" id="stage" aria-hidden="true">
-      <div class="orbit o1"><span class="sat">Concerts</span></div>
-      <div class="orbit o2"><span class="sat">Festivals</span></div>
-      <div class="orbit o3"><span class="sat">Club nights</span></div>
-      <div class="frag f1" data-depth="46"><b>Gate A</b><span class="ok-dot"></span> 1,284 in</div>
-      <div class="frag f2" data-depth="70"><b>Screenshots</b> do not work</div>
-      <div class="frag f3" data-depth="30"><b>Re-entry</b> &middot; on</div>
-      <div class="frag f4" data-depth="58"><b>Live QR</b> <em id="fragTimer">0:30</em></div>
-      <div class="phone" id="phone">
-        <div class="phone-in">
-          <div class="p-top"><span class="chip">VIP Access</span><span class="live"><i></i> LIVE</span></div>
-          <p class="p-name">Your pass &middot; Gate A</p>
-          <div class="qrwrap"><canvas id="qr" width="168" height="168"></canvas><div class="beam"></div></div>
-          <p class="p-code mono" id="code">TQ-0000-0000-0000</p>
-          <div class="p-status" id="status">Scanning…</div>
-        </div>
-        <div class="glare"></div>
-      </div>
     </div>
   </section>
 
-  <div class="ticker" aria-hidden="true"><div class="ticker-in">
-    <span>CONCERTS</span><span>FESTIVALS</span><span>CLUB NIGHTS</span><span>CONFERENCES</span><span>WEDDINGS</span><span>NO PAPER</span><span>LIVE QR</span><span>CONCERTS</span><span>FESTIVALS</span><span>CLUB NIGHTS</span><span>CONFERENCES</span><span>WEDDINGS</span><span>NO PAPER</span><span>LIVE QR</span>
-  </div></div>
-
-  <section class="wrap sec rv" id="guests">
-    <div class="panel">
-      <div class="panel-head"><p class="eyebrow">For guests</p><h2 class="big">Your pass, in your pocket.</h2></div>
-      <div class="tiles">
-        <div class="tile"><span class="ico"><svg viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 0 0 6v3h18v-3a2 2 0 0 1 0-6V6H3z"/><path d="M14 6v12" stroke-dasharray="2 2"/></svg></span><h3>One ticket, one person</h3><p class="muted">Buy it or claim a code. It lives in the app.</p></div>
-        <div class="tile"><span class="ico"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span><h3>A code that moves</h3><p class="muted">Live QR changes every 30 seconds. Screenshots fail.</p></div>
-        <div class="tile"><span class="ico"><svg viewBox="0 0 24 24"><path d="M5 3h9v18H5z"/><path d="M14 12h7M18 8l4 4-4 4"/></svg></span><h3>Show it and go</h3><p class="muted">One scan, a clear yes or no. Nothing to print.</p></div>
-      </div>
-    </div>
-  </section>
-
-  <section class="wrap sec rv" id="moments">
-    <div class="moments">
-      <figure class="shot wide spot"><picture><source type="image/webp" srcset="/img/crowd-beams.webp"><img src="/img/crowd-beams.jpg" width="1920" height="1280" loading="lazy" alt="A crowd facing a DJ on stage, with beams of light crossing above them"></picture><figcaption><b>Hands up, not tickets out.</b><span>Your pass is already on your phone.</span></figcaption></figure>
-      <figure class="shot tall spot"><picture><source type="image/webp" srcset="/img/hand-up.webp"><img src="/img/hand-up.jpg" width="900" height="1200" loading="lazy" alt="One raised hand in a crowd in front of glowing stage lights"></picture><figcaption><b>Walk in with the room.</b></figcaption></figure>
-    </div>
-  </section>
-
-  <section class="wrap sec rv" id="how">
-    <div class="panel">
-      <div class="panel-head"><p class="eyebrow">How it works</p><h2 class="big">Three taps to the door.</h2></div>
-      <ol class="strip">
-        <li><span class="n">01</span><b>Find</b><span class="muted">an event, or open your invite</span></li>
-        <li><span class="n">02</span><b>Get</b><span class="muted">your pass in the app</span></li>
-        <li><span class="n">03</span><b>Tap in</b><span class="muted">at the gate and walk in</span></li>
+  <section class="lp band" style="--pos:50% 62%" aria-label="Find, get, tap in">
+    <div class="lp-stage"><img class="bg" src="/img/beams-bg.webp" width="2000" height="1333" alt="" loading="lazy" decoding="async"><img class="fg" src="/img/beams-fg.webp" width="2000" height="1333" alt="A crowd facing a DJ on stage, with beams of light crossing above them" loading="lazy" decoding="async"></div>
+    <i class="lp-beam b1"></i><i class="lp-beam b2"></i><i class="lp-beam b3"></i><i class="lp-pulse"></i>
+    <div class="lp-copy wrap">
+      <ol class="words">
+        <li><b>Find</b><span>an event</span></li>
+        <li><b>Get</b><span>your pass</span></li>
+        <li><b>Tap in</b><span>and walk in</span></li>
       </ol>
     </div>
   </section>
 
-  <section class="wrap sec rv" id="more">
-    <div class="panel">
-      <div class="panel-head"><p class="eyebrow">Beyond the ticket sale</p><h2 class="big">More than a ticket.</h2></div>
-      <div class="acc">
-        <details name="more" open><summary>Weddings and private parties</summary><p class="muted">Your host sends a link on WhatsApp. Say who is coming, with no app or account. One scan lets your whole party in.</p></details>
-        <details name="more"><summary>Tickets bought elsewhere</summary><p class="muted">If the organiser imported the buyer list, your ticket works once at the gate and copies are turned away.</p></details>
-        <details name="more"><summary>Your privacy</summary><p class="muted">Gate staff see your first name and last initial, never your phone number or email.</p></details>
+  <section class="wrap sec rv" id="guests">
+    <div class="split">
+      <div class="lp tall" style="--pos:50% 60%">
+        <div class="lp-stage"><img class="bg" src="/img/hand-up-bg.webp" width="1500" height="2000" alt="" loading="lazy" decoding="async"><img class="fg" src="/img/hand-up-fg.webp" width="1500" height="2000" alt="One raised hand in a crowd in front of glowing stage lights" loading="lazy" decoding="async"></div>
+    <i class="lp-beam b1"></i><i class="lp-beam b2"></i><i class="lp-beam b3"></i><i class="lp-pulse"></i>
       </div>
+      <ul class="lines">
+        <li>One ticket. <em>One person.</em></li>
+        <li>A code that <em>moves.</em></li>
+        <li>Show it. <em>Go.</em></li>
+      </ul>
     </div>
   </section>
 
