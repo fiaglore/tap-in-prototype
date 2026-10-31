@@ -239,7 +239,7 @@ html.intro-lock main,html.intro-lock .topbar,html.intro-lock .progress{opacity:0
 .topbar{transition:opacity .9s ease .2s}
 html.intro-lock .hero-copy>*,html.intro-lock .stage{animation-play-state:paused!important}
 /* a soft dark edge so the logo stays legible; it opens up like an iris when you tap */
-.intro .veil{position:absolute;inset:0;background:radial-gradient(90% 75% at 50% 48%,transparent 40%,color-mix(in srgb,var(--ink) 38%,transparent) 100%);transition:transform 1.5s cubic-bezier(.6,0,.2,1) .15s,opacity 1.2s ease .3s}
+.intro .veil{position:absolute;inset:0;background:radial-gradient(90% 75% at 50% 48%,transparent 30%,color-mix(in srgb,var(--ink) 62%,transparent) 100%);transition:transform 1.5s cubic-bezier(.6,0,.2,1) .15s,opacity 1.2s ease .3s}
 .intro .spill{position:absolute;left:50%;top:50%;width:0;height:0;border-radius:50%;transform:translate(-50%,-50%);background:radial-gradient(closest-side,#fff,color-mix(in srgb,var(--signal) 65%,transparent) 45%,transparent);opacity:0;pointer-events:none}
 .intro-center{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;text-align:center;gap:clamp(14px,3vh,28px);padding:24px;z-index:2;transition:opacity .9s ease .1s,transform 1.2s cubic-bezier(.5,0,.2,1),filter 1s ease}
 .intro-logo{margin:0;width:min(88vw,900px);line-height:0;font-size:0;color:#fff;filter:drop-shadow(0 0 34px color-mix(in srgb,var(--signal) 55%,transparent)) drop-shadow(0 6px 30px rgba(0,0,0,.35))}
@@ -376,15 +376,3 @@ body.entered .photo-hero{animation:push 1.7s cubic-bezier(.2,.7,.2,1) both}
 @media(max-width:760px){.split,.six,.portals{grid-template-columns:1fr}.lp.tall{aspect-ratio:4/5}.photo-hero{height:clamp(520px,calc(100svh - 64px),760px)}.lp-stage img{object-position:var(--pos-m,var(--pos,50% 40%))}.sec{padding-top:36px}}
 @media(max-width:560px){.words.long b{font-size:5.5vw}}
 @media(prefers-reduced-motion:reduce){.lp-stage,.lp-stage .bg,.lp-stage .fg,.lp-beam,.lp-pulse{animation:none!important}.lp-pulse{opacity:.06}}
-
-/* ===== The opening screen: a full-bleed photo of the crowd under the lights, alive behind the logo ===== */
-.intro .intro-photo{position:absolute;inset:0;transition:opacity 1.2s ease .2s,transform 1.7s cubic-bezier(.5,0,.2,1)}
-.intro .intro-photo::after{background:radial-gradient(58% 52% at 50% 48%,rgba(13,7,15,.58),rgba(13,7,15,.14) 78%,transparent),linear-gradient(0deg,rgba(13,7,15,.6),transparent 38%)}
-.intro.go .intro-photo{opacity:0;transform:scale(1.16)}
-.intro.out .intro-photo{opacity:0}
-/* the photo is dark in both colour modes, so the lettering on it stays light */
-.intro .intro-logo,:root[data-mode="light"] .intro .intro-logo{color:#fff}
-.intro .intro-logo .in,:root[data-mode="light"] .intro .intro-logo .in{color:#c9bbf0}
-.intro .intro-tag{color:#e4d9ee;text-shadow:0 1px 14px rgba(13,7,15,.6)}
-.intro .tapbtn,.intro .tapbtn .lbl{color:#fff}
-.intro .intro-skip{color:#e4d9ee;border-color:rgba(255,255,255,.4);background:rgba(18,9,18,.38);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
