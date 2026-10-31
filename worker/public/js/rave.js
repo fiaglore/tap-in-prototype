@@ -1,36 +1,12 @@
-// Home page atmosphere: a quiet rave behind the content. Light beams sweep (CSS), a crowd of silhouettes sways to the
-// beat with their phones up, and tiny sparks drift. Tapping anywhere throws a few sparks and, on phones, a short buzz;
-// "Tap to enter" gets a bigger burst and the crowd cheers. Decoration only: reduced motion shows a still crowd, no sparks.
+// Home page atmosphere: a quiet rave behind the content. Light beams sweep and pulse to the beat (CSS), and
+// tiny sparks drift. Tapping anywhere throws a few sparks and, on phones, a short buzz;
+// "Tap to enter" gets a bigger burst and the lights flare. Decoration only: reduced motion shows no sparks.
 (function () {
   'use strict';
-  var rave = document.getElementById('rave'), crowd = document.getElementById('crowd'), cv = document.getElementById('sparks');
+  var rave = document.getElementById('rave'), cv = document.getElementById('sparks');
   if (!rave) return;
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var rand = function (a, b) { return a + Math.random() * (b - a); };
-  var NS = 'http://www.w3.org/2000/svg';
-
-  // ---- The crowd: heads and shoulders, some with an arm up, a few holding a phone light ------------------------------------
-  function figure(i) {
-    var w = rand(46, 70), up = Math.random() < .55, phone = up && Math.random() < .4, left = Math.random() < .5;
-    var el = document.createElement('span');
-    el.className = 'fig' + (up ? ' up' : '') + (phone ? ' ph' : '');
-    el.style.cssText = '--w:' + w.toFixed(0) + 'px;--dl:' + (-rand(0, 1.9)).toFixed(2) + 's;--h:' + rand(70, 112).toFixed(0) + 'px;--s:' + (left ? -1 : 1);
-    var s = document.createElementNS(NS, 'svg');
-    s.setAttribute('viewBox', '0 0 60 100'); s.setAttribute('aria-hidden', 'true');
-    s.innerHTML = '<circle cx="30" cy="26" r="13"/><path d="M6 100 C6 62 16 50 30 50 C44 50 54 62 54 100Z"/>' +
-      (up ? '<g class="arm"><path d="M44 62 L54 30 L60 32 L52 66Z"/>' + (phone ? '<rect class="lamp" x="50" y="14" width="11" height="18" rx="2"/>' : '<circle cx="57" cy="27" r="5"/>') + '</g>' : '');
-    el.appendChild(s);
-    return el;
-  }
-  function buildCrowd() {
-    if (!crowd) return;
-    crowd.textContent = '';
-    var n = Math.max(8, Math.round(window.innerWidth / 62));
-    for (var i = 0; i < n; i++) crowd.appendChild(figure(i));
-  }
-  buildCrowd();
-  var rw = window.innerWidth;
-  window.addEventListener('resize', function () { if (Math.abs(window.innerWidth - rw) > 80) { rw = window.innerWidth; buildCrowd(); } });
 
   // ---- Sparks --------------------------------------------------------------------------------------------------------------
   var visible = true;
@@ -71,7 +47,7 @@
   var buzz = function (p) { try { if (!reduce && navigator.vibrate) navigator.vibrate(p); } catch (e) {} };
   document.addEventListener('pointerdown', function (e) { burst(e.clientX, e.clientY, 10, 3.2); buzz(8); }, { passive: true });
 
-  // ---- "Tap to enter": the crowd hears it ----------------------------------------------------------------------------------
+  // ---- "Tap to enter": the lights flare ---------------------------------------------------------------------
   function cheer() {
     rave.classList.add('cheer');
     setTimeout(function () { rave.classList.remove('cheer'); }, 2600);
