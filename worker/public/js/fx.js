@@ -6,6 +6,7 @@
   window.__tapinFx = true;
   var body = document.body;
   if (!body || !body.classList.contains('fx')) return;
+  if (document.documentElement.classList.contains('is-native')) return;   // the phone app skips the moving background
   var calm = body.getAttribute('data-fx') === 'calm';
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var clamp = function (v, a, b) { return Math.min(b, Math.max(a, v)); };

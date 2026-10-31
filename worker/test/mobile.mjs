@@ -42,10 +42,10 @@ await test('the app keeps every file it now needs for working offline, and its s
 
 console.log('\nnative.js (inside the phone app only)');
 function run(window) {
-  const ctx = vm.createContext({ window, location: window.location, URL, setTimeout, document: window.document });
+  const ctx = vm.createContext({ window, location: window.location, URL, setTimeout, requestAnimationFrame: (fn) => fn(), document: window.document });
   vm.runInContext(read('worker/public/js/native.js'), ctx);
 }
-const fakeDoc = () => { const cls = new Set(); return { documentElement: { classList: { add: (...c) => c.forEach((x) => cls.add(x)), has: (c) => cls.has(c) } }, addEventListener() {} }; };
+const fakeDoc = () => { const cls = new Set(); return { documentElement: { classList: { add: (...c) => c.forEach((x) => cls.add(x)), has: (c) => cls.has(c) } }, addEventListener() {}, readyState: 'complete' }; };
 await test('in a browser it does nothing at all', () => {
   const doc = fakeDoc(), win = { document: doc, location: { href: '' }, addEventListener() {} };
   run(win);
@@ -65,6 +65,7 @@ await test('in the app it marks the page, hides the splash, and keeps tap-in.wor
   run(win);
   assert.ok(doc.documentElement.classList.has('is-native') && doc.documentElement.classList.has('is-android'));
   assert.ok(calls.some((c) => c[0] === 'StatusBar.setStyle'));
+  assert.ok(calls.some((c) => c[0] === 'SplashScreen.hide'), 'the splash goes at first paint, not after every file has loaded');
   assert.equal(typeof listeners['app:appUrlOpen'], 'function');
   listeners['app:appUrlOpen']({ url: 'https://www.tap-in.world/signin/?oobCode=abc#x' });
   assert.equal(loc.href, '/signin/?oobCode=abc#x');
@@ -92,10 +93,24 @@ await test('/enter/ is the website\'s Tap to enter opening, and it moves on to t
 });
 await test('enter.js: with the opening it waits and remembers where to go; without it, straight through', () => {
   const w = enterWin('?source=app', true); runScript('worker/public/js/enter.js', w);
-  assert.equal(w.__tapinNext, '/play/'); assert.deepEqual(w.replaced, []); assert.equal(w.timers.length, 1, 'a safety timer in case the opening cannot run');
+  assert.equal(w.__tapinNext, '/play/'); assert.deepEqual(w.replaced, []); assert.equal(w.timers.length, 2, 'a safety timer in case the opening cannot run, and the quiet fetch of the home page');
   const skip = enterWin('?source=app', false); runScript('worker/public/js/enter.js', skip);
   assert.deepEqual(skip.replaced, ['/play/']);
   w.timers[0](); assert.deepEqual(w.replaced, ['/play/'], 'the safety timer moves on if the opening never started');
+});
+await test('the front door shows in the app: it loads native.js (which hides the splash), ignores the reduced-motion setting, and is light', () => {
+  const html = read('worker/public/enter/index.html');
+  assert.match(html, /\/js\/native\.js/, 'without native.js the splash never goes away');
+  assert.ok(html.indexOf('native.js') < html.indexOf('/js/fx.js') && html.indexOf('native.js') < html.indexOf('/js/intro.js'), 'native.js first, so the others know they are in the app');
+  assert.match(read('worker/public/js/theme.js'), /rm = path !== '\/enter\/'/, 'Android\'s remove-animations setting must not hide the front door');
+  assert.match(read('worker/public/home.css'), /prefers-reduced-motion:reduce\)\{html:not\(\.intro-lock\) \.intro\{display:none/, 'reduced motion must not hide a locked opening');
+  for (const f of ['fx', 'liquid', 'rave']) assert.match(read(`worker/public/js/${f}.js`), /is-native/, f + '.js must skip itself in the app');
+  assert.match(read('worker/public/css/appshell.css'), /html\.is-native \*[^{]*\{[^}]*backdrop-filter:none/, 'no glass blur in the app');
+});
+await test('files pages load are kept on the phone for a few minutes, and pages themselves are not', () => {
+  const h = read('worker/public/_headers');
+  for (const p of ['/js/*', '/css/*', '/img/*']) assert.match(h, new RegExp('\\n' + p.replace('*', '\\*') + '\\n  Cache-Control: public, max-age=\\d+'), p);
+  assert.doesNotMatch(h, /\n\/(play|app|e|gate|organiser|organisers|enter)\/\*\n  Cache-Control: public/, 'html pages must keep checking for a newer copy');
 });
 await test('enter.js only ever goes to our own app pages', () => {
   const ok = enterWin('?next=/app/', false); runScript('worker/public/js/enter.js', ok); assert.deepEqual(ok.replaced, ['/app/']);
@@ -104,9 +119,9 @@ await test('enter.js only ever goes to our own app pages', () => {
   }
 });
 await test('the tabs and the app styles are on every app page, and nowhere on the website\'s own pages', () => {
-  for (const f of ['play', 'e', 'organiser', 'app']) {
+  for (const f of ['play', 'e', 'organiser', 'app', 'gate']) {
     const html = read(`worker/public/${f}/index.html`);
-    assert.match(html, /\/js\/native\.js\?v=2/, f); assert.match(html, /\/js\/appnav\.js/, f); assert.match(html, /\/css\/appshell\.css/, f);
+    assert.match(html, /\/js\/native\.js\?v=3/, f); assert.match(html, /\/js\/appnav\.js/, f); assert.match(html, /\/css\/appshell\.css/, f);
   }
   for (const f of ['index.html', 'organisers/index.html', 'business/index.html']) assert.doesNotMatch(read('worker/public/' + f), /appnav|appshell/, f);
   const css = read('worker/public/css/appshell.css');
@@ -114,10 +129,11 @@ await test('the tabs and the app styles are on every app page, and nowhere on th
     assert.match(rule, /(\.apptabs|\.has-apptabs|\.is-native|\.evtools|\.evcount|\.sharebtn)/, 'every rule is for the app only: ' + rule.slice(0, 50));
   }
 });
-await test('appnav.js lists the four tabs, Events first, and does nothing in a browser', () => {
+await test('appnav.js lists the five tabs, Events first, and does nothing in a browser', () => {
   const src = read('worker/public/js/appnav.js');
-  const order = ['Events', 'Organiser', 'Passes', 'Account'].map((l) => src.indexOf("label: '" + l + "'"));
-  assert.ok(order.every((i) => i > 0) && order.every((v, i) => i === 0 || v > order[i - 1]), 'tab order: Events, Organiser, Passes, Account');
+  const order = ['Events', 'Organiser', 'Gate', 'Passes', 'Account'].map((l) => src.indexOf("label: '" + l + "'"));
+  assert.ok(order.every((i) => i > 0) && order.every((v, i) => i === 0 || v > order[i - 1]), 'tab order: Events, Organiser, Gate, Passes, Account');
+  assert.match(src, /href: '\/gate\/'/); assert.match(src, /\^\\\/gate\\\//, 'the Gate page lights up its own tab');
   assert.match(src, /href: '\/play\/'/); assert.match(src, /href: '\/app\/#me'/);
   const doc = { documentElement: { classList: { contains: () => false } }, addEventListener() { throw new Error('touched the page in a browser'); } };
   runScript('worker/public/js/appnav.js', { document: doc, location: { pathname: '/play/', hash: '' }, addEventListener() { throw new Error('touched the window in a browser'); }, timers: [] });

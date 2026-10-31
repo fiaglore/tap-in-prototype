@@ -8,3 +8,32 @@
 /admin/*
   X-Robots-Tag: noindex, nofollow, noarchive
   Cache-Control: no-store
+
+# Files the pages load are kept on the phone for a few minutes, so moving between tabs does not ask the network again for each
+# one. (Pages themselves are never kept this way: they always check for a newer copy.) Photos carry ?v= in their address.
+/js/*
+  Cache-Control: public, max-age=600
+/css/*
+  Cache-Control: public, max-age=600
+/logo/*
+  Cache-Control: public, max-age=86400
+/img/*
+  Cache-Control: public, max-age=31536000, immutable
+/home.css
+  Cache-Control: public, max-age=600
+/site.css
+  Cache-Control: public, max-age=600
+/play/play.js
+  Cache-Control: public, max-age=600
+/play/play.css
+  Cache-Control: public, max-age=600
+/app/app.js
+  Cache-Control: public, max-age=600
+/app/app.css
+  Cache-Control: public, max-age=600
+/organiser/organiser.js
+  Cache-Control: public, max-age=600
+/organiser/organiser.css
+  Cache-Control: public, max-age=600
+/e/sale.js
+  Cache-Control: public, max-age=600

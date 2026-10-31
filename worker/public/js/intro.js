@@ -5,6 +5,7 @@
   var root = document.documentElement, intro = document.getElementById('intro');
   // A fine film grain, drawn once into a tiny canvas and tiled.
   (function grain() {
+    if (root.classList.contains('is-native')) return;   // the phone app skips the film grain
     try {
       var c = document.createElement('canvas'); c.width = c.height = 160;
       var g = c.getContext('2d'), im = g.createImageData(160, 160);
@@ -38,7 +39,7 @@
     if (done || intro.classList.contains('go')) return;
     intro.classList.add('go');                 // centre dissolves, door starts to split
     setTimeout(function () { root.classList.remove('intro-lock'); body.classList.add('entered'); if (main) main.inert = false; }, 700); // the page pushes in as the light spills
-    setTimeout(finish, 2200);
+    setTimeout(finish, window.__tapinNext ? 1100 : 2200);   // in the app the home page is already waiting, so go on sooner
   }
   function quick() {                            // Skip / Escape: no ceremony
     if (done) return;

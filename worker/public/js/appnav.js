@@ -1,4 +1,4 @@
-// The phone app's bottom tabs: Events (the home page), Organiser, Passes, Account. They appear only inside the app, so the
+// The phone app's bottom tabs: Events (the home page), Organiser, Gate, Passes, Account. They appear only inside the app, so the
 // website looks exactly as it always did. Each tab is a page; moving between tabs replaces the page, so the Back button
 // does not fill up with tab changes. Passes and Account are two views of /app/ and switch without reloading.
 (function () {
@@ -8,6 +8,7 @@
   var path = location.pathname;
   var area = /^\/(play|e)\/(index\.html)?$/.test(path) ? 'events'
     : /^\/organiser\/(index\.html)?$/.test(path) ? 'organiser'
+    : /^\/gate\/(index\.html)?$/.test(path) ? 'gate'
     : /^\/app\/(index\.html)?$/.test(path) ? (/^#(me|custom|delete)$/.test(location.hash) ? 'account' : 'passes')
     : null;
   // Tap In's logo takes you to the events home, not the marketing site. Every page, including ones drawn later.
@@ -21,6 +22,7 @@
   var TABS = [
     { id: 'events', label: 'Events', href: '/play/', d: 'M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM8 13h3' },
     { id: 'organiser', label: 'Organiser', href: '/organiser/', d: 'M3 11l14-6v14L3 13zM7 14l1.2 5h3L10 14.5' },
+    { id: 'gate', label: 'Gate', href: '/gate/', d: 'M5 20V9a7 7 0 0 1 14 0v11M9 20v-8a3 3 0 0 1 6 0v8M3 20h18' },
     { id: 'passes', label: 'Passes', href: '/app/#passes', d: 'M4 7h16v10H4zM4 11h16' },
     { id: 'account', label: 'Account', href: '/app/#me', d: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 20a7 7 0 0 1 14 0' }
   ];

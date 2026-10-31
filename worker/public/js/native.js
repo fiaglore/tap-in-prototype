@@ -11,7 +11,13 @@
 
   call('StatusBar', 'setStyle', { style: 'DARK' });                      // light icons on the plum bar
   call('StatusBar', 'setBackgroundColor', { color: '#2B1B2D' });
-  window.addEventListener('load', function () { setTimeout(function () { call('SplashScreen', 'hide', { fadeOutDuration: 250 }); }, 50); });
+  // The splash goes as soon as the page has drawn its first frame, not after every font and image has arrived. A timer
+  // makes sure it can never stay up if a page is slow.
+  var hidden = false;
+  function hideSplash() { if (hidden) return; hidden = true; call('SplashScreen', 'hide', { fadeOutDuration: 200 }); }
+  function firstFrame() { requestAnimationFrame(function () { requestAnimationFrame(hideSplash); }); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', firstFrame); else firstFrame();
+  setTimeout(hideSplash, 2500);
 
   // for pages that want the phone's own share sheet or the app's version
   window.TapInNative = {
