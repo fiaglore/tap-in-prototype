@@ -7,6 +7,7 @@
   'use strict';
   var body = document.body;
   if (!body || !body.classList.contains('fx')) return;
+  if (document.documentElement.classList.contains('is-native')) return;   // the phone app skips the moving background
   var calm = body.getAttribute('data-fx') === 'calm';
   var baseHue = parseFloat(body.getAttribute('data-hue')) || 0;
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;

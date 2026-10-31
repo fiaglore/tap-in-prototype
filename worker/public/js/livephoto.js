@@ -42,12 +42,7 @@
     '  c+=c*lit*(.2*pulse+.34*(tw-.5));',                                             // only the hottest stage lights twinkle
     '  c*=1.+.07*pulse;',                                                             // the whole room breathes a little on the beat
     '  vec2 p=vec2((v.x-.5)*ca,1.-v.y);',
-    '  c+=beam(p,-.55*ca,.34,.28,.43,0.,vec3(.66,.33,.97))*.34;',
-    '  c+=beam(p,.02,.0,.34,.31,2.1,vec3(.36,.55,1.))*.30;',
-    '  c+=beam(p,.55*ca,-.34,.26,.52,4.2,vec3(1.,.31,.85))*.32;',
-    '  c+=vec3(.7,.6,.95)*.09*pulse*smoothstep(.9,.0,length(p-vec2(0.,.35)));',
     '  vec3 col=clamp(f.rgb+c*(1.-f.a),0.,1.);',
-    '  col=mix(col,col*col*(3.-2.*col),.34);',                                         // a gentle S-curve: deeper darks, cleaner lights
     '  col*=1.-.2*smoothstep(.55,1.15,length((v-.5)*vec2(1.2,1.)));',                  // a soft dark edge
     '  gl_FragColor=vec4(col,1.);}'
   ].join('\n');

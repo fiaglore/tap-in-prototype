@@ -6,7 +6,7 @@
   try {
     var path = location.pathname, q = location.search;
     if ((path === '/' || path === '/index.html' || path === '/enter/') && !location.hash && !/[?&]intro=0/.test(q)) {
-      var rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var rm = path !== '/enter/' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;   // the app's front door always shows: Android's "remove animations" setting must not hide it
       var seen = false;
       try { seen = !!sessionStorage.getItem('tapin-intro'); } catch (e) {}
       if (!rm && (!seen || /[?&]intro=1/.test(q))) {

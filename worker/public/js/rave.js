@@ -4,7 +4,7 @@
 (function () {
   'use strict';
   var rave = document.getElementById('rave'), cv = document.getElementById('sparks');
-  if (!rave) return;
+  if (!rave || document.documentElement.classList.contains('is-native')) return;   // the phone app skips the sparks and beams
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var rand = function (a, b) { return a + Math.random() * (b - a); };
 
