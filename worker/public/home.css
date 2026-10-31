@@ -362,3 +362,24 @@ body.entered .hero2{animation:push 1.7s cubic-bezier(.2,.7,.2,1) both}
 .door h3{font-size:20px;margin:0}.door .more{padding-top:10px}
 .door:hover{transform:translateY(-4px);box-shadow:0 24px 60px -26px var(--glow)}
 @media(max-width:760px){.tiles,.strip,.doors{grid-template-columns:1fr}.strip li:not(:last-child)::after{display:none}.sec{padding-top:36px}}
+
+/* ===== Photos: real people, recoloured into the Tap In palette (see img/) ===== */
+.herobg{position:absolute;left:0;right:0;top:0;height:min(112svh,920px);z-index:-1;overflow:hidden;pointer-events:none;
+  mask:linear-gradient(180deg,#000 55%,transparent);-webkit-mask:linear-gradient(180deg,#000 55%,transparent)}
+.herobg img{width:100%;height:100%;object-fit:cover;object-position:50% 38%;opacity:.5;transform-origin:50% 60%;animation:drift 28s ease-in-out infinite alternate}
+.herobg::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,color-mix(in srgb,var(--ink) 82%,transparent),color-mix(in srgb,var(--ink) 35%,transparent) 55%,transparent)}
+@keyframes drift{from{transform:scale(1.04)}to{transform:scale(1.14) translateY(-1.5%)}}
+:root[data-mode="light"] .herobg img{opacity:.32}
+:root[data-mode="light"] .herobg::after{background:linear-gradient(90deg,color-mix(in srgb,var(--ink) 88%,transparent),color-mix(in srgb,var(--ink) 40%,transparent) 55%,transparent)}
+.moments{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:14px}
+.shot{position:relative;margin:0;border-radius:26px;overflow:hidden;min-height:340px;border:1px solid var(--line);background:#120912;isolation:isolate}
+.shot picture,.shot img{display:block;width:100%;height:100%}
+.shot img{object-fit:cover;transition:transform 1.2s cubic-bezier(.2,.7,.2,1)}
+.shot:hover img{transform:scale(1.05)}
+.shot.tall img{object-position:50% 70%}
+.shot::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 45%,rgba(18,9,18,.82));pointer-events:none;z-index:0}
+.shot figcaption{position:absolute;left:0;right:0;bottom:0;z-index:1;padding:20px 22px;display:grid;gap:3px;color:#fff}
+.shot figcaption b{font:700 clamp(18px,2.4vw,26px) var(--display);line-height:1.1}
+.shot figcaption span{font-size:14px;color:#e4d9ee}
+@media(max-width:760px){.moments{grid-template-columns:1fr}.shot{min-height:0;aspect-ratio:4/3}.shot.tall{aspect-ratio:4/3}.shot.tall img{object-position:50% 55%}.herobg{height:min(100svh,720px)}.herobg img{object-position:62% 30%}}
+@media(prefers-reduced-motion:reduce){.herobg img{animation:none;transform:scale(1.04)}.shot img{transition:none}}
