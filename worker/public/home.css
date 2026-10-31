@@ -306,18 +306,18 @@ body.entered .hero2{animation:push 1.7s cubic-bezier(.2,.7,.2,1) both}
 
 /* ===== The rave behind the page: beams, a pulse on the beat, a swaying crowd with phones up ===== */
 .rave{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;--beat:.968s}
-.rave .beam{position:absolute;top:-14vh;left:var(--x);width:40vmax;height:130vh;margin-left:-20vmax;transform-origin:50% 0;clip-path:polygon(48% 0,52% 0,100% 100%,0 100%);background:linear-gradient(180deg,color-mix(in srgb,var(--c) 85%,transparent),transparent 72%);filter:blur(9px);opacity:.3;mix-blend-mode:screen;animation:sweep var(--d) ease-in-out infinite alternate;animation-delay:var(--dl)}
+.rave .stagebeam{position:absolute;top:-14vh;left:var(--x);width:40vmax;height:130vh;margin-left:-20vmax;transform-origin:50% 0;clip-path:polygon(48% 0,52% 0,100% 100%,0 100%);background:linear-gradient(180deg,color-mix(in srgb,var(--c) 85%,transparent),transparent 72%);filter:blur(9px);opacity:.3;mix-blend-mode:screen;animation:sweep var(--d) ease-in-out infinite alternate;animation-delay:var(--dl)}
 .rave .b1{--x:6%;--c:#a855f7;--a:24deg;--d:7.5s;--dl:-1s}
 .rave .b2{--x:30%;--c:#ff4fd8;--a:30deg;--d:9s;--dl:-4s}
 .rave .b3{--x:52%;--c:#5b8cff;--a:22deg;--d:6.5s;--dl:-2s}
 .rave .b4{--x:75%;--c:#2dd4bf;--a:28deg;--d:8.5s;--dl:-6s}
 .rave .b5{--x:96%;--c:#ffb347;--a:26deg;--d:7s;--dl:-3s}
 @keyframes sweep{from{transform:rotate(calc(var(--a)*-1))}to{transform:rotate(var(--a))}}
-:root[data-mode="light"] .rave .beam{mix-blend-mode:multiply;opacity:.16}
+:root[data-mode="light"] .rave .stagebeam{mix-blend-mode:multiply;opacity:.16}
 /* a soft glow that breathes about once a second: gentle on purpose, never a strobe */
 .rave .pulse{position:absolute;inset:auto 0 0 0;height:60vh;background:radial-gradient(70% 90% at 50% 100%,color-mix(in srgb,var(--signal) 55%,transparent),transparent 70%);opacity:0;animation:beat var(--beat) ease-out infinite}
 @keyframes beat{0%{opacity:.34}100%{opacity:.04}}
-.rave.cheer .beam{opacity:.55;animation-duration:2.4s}
+.rave.cheer .stagebeam{opacity:.55;animation-duration:2.4s}
 .rave.cheer .pulse{animation-duration:.48s}
 .crowd{position:absolute;left:0;right:0;bottom:-6px;height:120px;display:flex;align-items:flex-end;justify-content:space-around;padding:0 2vw;
   mask:linear-gradient(180deg,transparent,#000 40%)}
@@ -333,7 +333,7 @@ body.entered .hero2{animation:push 1.7s cubic-bezier(.2,.7,.2,1) both}
 :root[data-mode="light"] .fig{color:color-mix(in srgb,var(--plum) 55%,var(--ink));opacity:.4}
 .sparks{position:fixed;inset:0;width:100%;height:100%;z-index:101;pointer-events:none}
 @media(max-width:700px){.rave .b4,.rave .b5{display:none}.crowd{height:84px}.fig{height:calc(var(--h)*.72)}}
-@media(prefers-reduced-motion:reduce){.rave .beam,.rave .pulse,.fig,.fig .arm{animation:none!important}.rave .pulse{opacity:.1}.sparks{display:none}}
+@media(prefers-reduced-motion:reduce){.rave .stagebeam,.rave .pulse,.fig,.fig .arm{animation:none!important}.rave .pulse{opacity:.1}.sparks{display:none}}
 
 /* ===== Compartments: each part of the page is one tidy panel with short text ===== */
 .panel{border:1px solid var(--line);border-radius:28px;padding:clamp(18px,3vw,32px);background:var(--card);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);box-shadow:0 30px 70px -44px rgba(0,0,0,.6)}
@@ -357,11 +357,11 @@ body.entered .hero2{animation:push 1.7s cubic-bezier(.2,.7,.2,1) both}
 .acc details[open] summary::after{transform:rotate(45deg)}
 .acc p{margin:0 0 14px;font-size:14.5px;max-width:62ch}
 .acc summary:focus-visible{outline:2px solid var(--signal);outline-offset:3px;border-radius:8px}
-.doors{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-.door{display:flex;flex-direction:column;gap:4px;padding:18px 20px;border:1px solid var(--line);border-radius:22px;background:var(--card);backdrop-filter:blur(12px);text-decoration:none;color:inherit}
-.door h3{font-size:20px;margin:0}.door .more{padding-top:10px}
-.door:hover{transform:translateY(-4px);box-shadow:0 24px 60px -26px var(--glow)}
-@media(max-width:760px){.tiles,.strip,.doors{grid-template-columns:1fr}.strip li:not(:last-child)::after{display:none}.sec{padding-top:36px}}
+.portals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.portal{display:flex;flex-direction:column;gap:4px;padding:18px 20px;border:1px solid var(--line);border-radius:22px;background:var(--card);backdrop-filter:blur(12px);text-decoration:none;color:inherit}
+.portal h3{font-size:20px;margin:0}.portal .more{padding-top:10px}
+.portal:hover{transform:translateY(-4px);box-shadow:0 24px 60px -26px var(--glow)}
+@media(max-width:760px){.tiles,.strip,.portals{grid-template-columns:1fr}.strip li:not(:last-child)::after{display:none}.sec{padding-top:36px}}
 
 /* ===== Photos: real people, recoloured into the Tap In palette (see img/) ===== */
 .herobg{position:absolute;left:0;right:0;top:0;height:min(112svh,920px);z-index:-1;overflow:hidden;pointer-events:none;
