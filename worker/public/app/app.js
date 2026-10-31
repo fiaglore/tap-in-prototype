@@ -1,5 +1,5 @@
 import { h, wordmarkText, mount, toast, copy, when, ago } from '/js/dom.js';
-import { get, post, patch, put, del } from '/js/api.js';
+import { api, get, post, patch, put, del } from '/js/api.js';
 import { selfieModal } from '/js/selfie.js';
 import { signInFlow } from '/js/auth-ui.js?v=2';
 import { cardEl, cardNumber, loadCard, saveCard, sanitise, PRESETS, SWATCHES, FINISHES, PATTERNS, TYPES } from '/js/card.js';
@@ -7,10 +7,19 @@ import { orbitSvg, nextIndex, daysTo } from '/app/orbit.js';
 import { qrSvg } from '/js/qr.js';
 import { rollingToken, secondsLeft, LIVE_STEP } from '/js/offline.js';
 
+// DELETE with a body (the shared helper sends none): the server wants the word DELETE.
+const del2 = (path, body) => api('DELETE', path, body);
 const root = document.getElementById('app');
 const state = { user: null, passes: [], waiting: [], history: [], wallet: null, tab: 'around', config: {}, sel: null, ctx: [] };
 const ONB = 'tapin-onboarded';
 const flag = (v) => { try { if (v === undefined) return localStorage.getItem(ONB) === '1'; v ? localStorage.setItem(ONB, '1') : localStorage.removeItem(ONB); } catch { return false; } };
+
+// Inside the phone app the bottom tabs (js/appnav.js) are Events, Organiser, Passes and Account. This page is the last two:
+// Passes holds Passes, Around me, Add and History (and Wallet when payments are on); Account holds Me, Customise and Delete.
+const NATIVE = document.documentElement.classList.contains('is-native');
+const PASSES_GROUP = ['passes', 'around', 'add', 'history', 'wallet'];
+const ACCOUNT_GROUP = ['me', 'custom', 'delete'];
+const tabFromHash = () => { const t = location.hash.replace('#', ''); return PASSES_GROUP.includes(t) || t === 'me' ? t : null; };
 
 const NS = 'http://www.w3.org/2000/svg';
 const icons = {
@@ -65,12 +74,19 @@ const cardInfo = (status = 'Active') => ({ name: (loadCard().name || (state.user
 // ---- Shell with bottom tabs ----------------------------------------------------------------------
 function shell(content, { tabs = true, title } = {}) {
   const head = h('div', { class: 'head' },
-    h('a', { class: 'wordmark', href: '/' }, wordmarkText()),
+    h('a', { class: 'wordmark', href: NATIVE ? '/play/' : '/' }, wordmarkText()),
     window.TapTheme.button());
   const offline = state.offline && h('div', { class: 'notice warn', role: 'status', style: 'margin-bottom:12px' }, 'No connection. Your saved passes still work at the gate; everything else updates when you are back online.');
-  mount(root, head, h('main', { class: 'page' }, offline, content), tabs && tabBar());
+  mount(root, head, h('main', { class: 'page' }, offline, NATIVE && subTabs(), content), !NATIVE && tabs && tabBar());
   if (title) document.title = title + ' · Tap In';
   window.scrollTo(0, 0);
+}
+// The phone app's Passes tab: its four views as pills at the top of the page.
+function subTabs() {
+  if (!PASSES_GROUP.includes(state.tab)) return null;
+  const items = [['passes', 'Passes'], ['around', 'Around me'], ['add', 'Add'], ['history', 'History'], ...(state.config.payments === false ? [] : [['wallet', 'Wallet']])];
+  return h('div', { class: 'subtabs', role: 'group', 'aria-label': 'Passes' },
+    items.map(([k, label]) => h('button', { type: 'button', 'aria-current': state.tab === k ? 'page' : null, onclick: () => go(k) }, label)));
 }
 function tabBar() {
   // The wallet tab only exists while payments are switched on (PAYMENTS_MODE is not "off").
@@ -87,7 +103,11 @@ async function go(tab) {
   render();
 }
 function render() {
-  ({ around: viewAround, passes: viewPasses, add: viewAdd, history: viewHistory, wallet: viewWallet, me: viewMe, custom: viewCustom })[state.tab]();
+  ({ around: viewAround, passes: viewPasses, add: viewAdd, history: viewHistory, wallet: viewWallet, me: viewMe, custom: viewCustom, delete: viewDelete })[state.tab]();
+  if (NATIVE) {
+    try { history.replaceState(null, '', '#' + (ACCOUNT_GROUP.includes(state.tab) ? 'me' : state.tab)); } catch {}
+    window.dispatchEvent(new CustomEvent('tapin:tab', { detail: { area: ACCOUNT_GROUP.includes(state.tab) ? 'account' : 'passes' } }));
+  }
 }
 
 // ---- Onboarding ----------------------------------------------------------------------------------
@@ -97,7 +117,7 @@ const STEPS = ['ctx', 'signin', 'passes', 'protect', 'practice'];
 function onbShell(step, ...kids) {
   const n = STEPS.indexOf(step) + 1;
   const head = h('div', { class: 'head' },
-    n > 1 ? h('button', { class: 'btn ghost small', type: 'button', onclick: () => onboarding(prevStep(step)) }, 'Back') : h('a', { class: 'wordmark', href: '/' }, wordmarkText()),
+    n > 1 ? h('button', { class: 'btn ghost small', type: 'button', onclick: () => onboarding(prevStep(step)) }, 'Back') : h('a', { class: 'wordmark', href: NATIVE ? '/play/' : '/' }, wordmarkText()),
     window.TapTheme.button());
   mount(root, head, h('main', { class: 'page onb' },
     n > 0 && h('div', { class: 'seg3', 'aria-hidden': 'true' }, STEPS.map((_, i) => h('i', { class: i < n ? 'on' : '' }))),
@@ -522,7 +542,7 @@ function viewHistory() {
 // ---- Me ------------------------------------------------------------------------------------------
 function viewMe() {
   const name = h('input', { class: 'input', id: 'nm', value: state.user.name || '', maxlength: '80', autocomplete: 'name' });
-  shell(h('div', { class: 'stack' }, h('h2', {}, 'Me'),
+  shell(h('div', { class: 'stack' }, h('h2', {}, NATIVE ? 'Account' : 'Me'),
     h('div', { class: 'cardwrap' }, cardEl(loadCard(), cardInfo())),
     h('button', { class: 'btn ghost block', type: 'button', onclick: () => { state.tab = 'custom'; render(); } }, 'Customise card'),
     h('form', { class: 'card', onsubmit: async (e) => { e.preventDefault(); try { state.user = (await patch('/me', { name: name.value })).user; toast('Saved'); } catch (ex) { toast(ex.message); } } },
@@ -533,12 +553,13 @@ function viewMe() {
     installCard(),
     state.config.otp_mode === 'demo' && h('div', { class: 'notice warn' }, 'Demo mode: sign-in codes are shown on screen instead of being texted. This is for trying Tap In out.'),
     h('div', { class: 'row' },
-      h('a', { class: 'btn ghost', href: '/organiser/' }, 'Organiser console'),
+      !NATIVE && h('a', { class: 'btn ghost', href: '/organiser/' }, 'Organiser console'),
       h('a', { class: 'btn ghost', href: '/business/' }, 'Tap In for Business'),
       h('button', { class: 'btn ghost', type: 'button', onclick: () => { flag(false); onboarding('ctx'); } }, 'Replay intro'),
       h('a', { class: 'btn ghost', href: '/privacy/' }, 'Privacy'),
       h('a', { class: 'btn ghost', href: '/terms/' }, 'Terms'),
-      h('button', { class: 'btn ghost', type: 'button', onclick: async () => { await post('/auth/logout').catch(() => {}); forgetCache(); state.user = null; state.passes = []; state.waiting = []; flag(false); onboarding('welcome'); } }, 'Sign out'))), { title: 'Me' });
+      h('button', { class: 'btn ghost', type: 'button', onclick: async () => { await post('/auth/logout').catch(() => {}); forgetCache(); state.user = null; state.passes = []; state.waiting = []; flag(false); onboarding('welcome'); } }, 'Sign out')),
+    NATIVE && accountExtras()), { title: 'Me' });
 }
 
 // ---- Install (in a browser only): Tap In on the home screen --------------------------------------------
@@ -556,6 +577,49 @@ function installCard() {
   }
   if (onIphone) return h('div', { class: 'card' }, h('h3', {}, 'Put Tap In on your home screen'), h('p', { class: 'hint', style: 'margin-top:6px' }, 'In Safari, tap Share, then Add to Home Screen.'), copy);
   return null;
+}
+
+// ---- Inside the phone app: help, the app's version, and deleting the account -------------------------------
+function accountExtras() {
+  const version = h('p', { class: 'hint' }, '');
+  if (window.TapInNative) window.TapInNative.version().then((v) => { if (v) version.textContent = 'Tap In app ' + v; });
+  return h('div', { class: 'stack', style: 'margin-top:8px' },
+    h('div', { class: 'card' }, h('h3', {}, 'Need help?'),
+      h('p', { class: 'hint', style: 'margin-top:6px' }, 'Write to us and a person answers.'),
+      h('a', { class: 'btn ghost small', style: 'margin-top:12px', href: 'mailto:hello@tap-in.world?subject=Tap%20In%20app' }, 'hello@tap-in.world')),
+    version,
+    h('div', { class: 'card' }, h('h3', {}, 'Delete my account'),
+      h('p', { class: 'hint', style: 'margin-top:6px' }, 'Removes your name, email and photo and cancels your passes. This cannot be undone.'),
+      h('button', { class: 'btn danger small', style: 'margin-top:12px', type: 'button', onclick: () => { state.tab = 'delete'; render(); } }, 'Delete my account')));
+}
+function viewDelete(err = '') {
+  const input = h('input', { class: 'input', id: 'dc', autocomplete: 'off', autocapitalize: 'characters', placeholder: 'DELETE', 'aria-label': 'Type DELETE to confirm' });
+  const btn = h('button', { class: 'btn danger block', type: 'submit' }, 'Delete my account for good');
+  const form = h('form', {
+    onsubmit: async (e) => {
+      e.preventDefault();
+      btn.disabled = true;
+      try {
+        await del2('/me', { confirm: input.value.trim() });
+        forgetCache();
+        try { Object.keys(localStorage).filter((k) => k.startsWith('tapin') && k !== 'tapin-mode').forEach((k) => localStorage.removeItem(k)); } catch {}
+        state.user = null; state.passes = []; state.waiting = []; state.history = []; state.wallet = null;
+        try { history.replaceState(null, '', location.pathname); } catch {}
+        mount(root, h('main', { class: 'page hero' }, h('h1', {}, 'Your account is deleted'),
+          h('p', { class: 'muted', style: 'margin-top:12px' }, 'We removed your details and cancelled your passes. You can sign up again any time.'),
+          h('button', { class: 'btn primary block', style: 'margin-top:20px', type: 'button', onclick: () => onboarding('welcome') }, 'Done')));
+      } catch (ex) { viewDelete(ex.message); }
+    }
+  },
+    h('div', { class: 'field' }, h('label', { for: 'dc' }, 'Type DELETE to confirm'), input),
+    err && h('div', { class: 'error', role: 'alert' }, err),
+    h('div', { style: 'margin-top:16px' }, btn));
+  shell(h('div', { class: 'stack' },
+    h('button', { class: 'btn ghost small', type: 'button', style: 'justify-self:start', onclick: () => { state.tab = 'me'; render(); } }, 'Back'),
+    h('h2', {}, 'Delete your account?'),
+    h('p', { class: 'muted' }, 'This removes your name, email and photo, cancels every pass you hold, and signs you out everywhere. Tickets you have already used stay in the organiser’s attendance record, but nothing in it points to you any more.'),
+    h('p', { class: 'muted' }, 'If you run events or vendors on Tap In, or your wallet still holds money, we will ask you to sort that out first.'),
+    form), { title: 'Delete account' });
 }
 
 // ---- My photo (shown to door staff only at events that ask for it) -----------------------------------
@@ -611,7 +675,12 @@ function viewCustom() {
   // Keep the app itself on the phone so it opens with no signal.
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/app/sw.js', { scope: '/app/' }).catch(() => {});
   const splash = document.getElementById('splash');
-  if (splash) setTimeout(() => splash.remove(), 3300);
+  if (splash) { if (NATIVE) splash.remove(); else setTimeout(() => splash.remove(), 3300); }
+  // The bottom tabs switch Passes <-> Account by changing the address; follow it without reloading.
+  if (NATIVE) window.addEventListener('hashchange', () => {
+    const t = tabFromHash();
+    if (t && state.user && t !== state.tab && !(t === 'me' && ACCOUNT_GROUP.includes(state.tab))) go(t);
+  });
   state.config = await get('/config').catch(() => ({}));
   if (state.config.configured === false) {
     mount(root, h('main', { class: 'page hero' }, h('h1', {}, 'Almost there'), h('p', { class: 'muted', style: 'margin-top:12px' }, 'The server is running but its SECRET_PEPPER secret is not set yet. See the README, "Set the secret".')));
@@ -619,7 +688,8 @@ function viewCustom() {
   }
   try {
     await refresh();
-    if (flag() || state.passes.length) { state.tab = state.passes.length ? 'around' : 'add'; render(); } else onboarding('passes');
+    const want = NATIVE ? tabFromHash() : null;
+    if (flag() || state.passes.length) { state.tab = want || (state.passes.length ? (NATIVE ? 'passes' : 'around') : 'add'); render(); } else onboarding('passes');
   } catch {
     flag() ? onboarding('signin') : onboarding('welcome');
   }

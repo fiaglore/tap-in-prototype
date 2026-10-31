@@ -28,10 +28,33 @@ function card(e) {
       h('div', { class: 'meta' }, state(e), e.from_kobo !== null && e.from_kobo !== undefined ? h('span', { class: 'chip' }, naira(e.from_kobo)) : null, h('span', { class: 'go' }, 'Tickets →'))));
 }
 
+// Inside the phone app: a search box and a few filters above the list.
+function nativeList(events) {
+  const FILTERS = [['all', 'All'], ['on', 'On sale'], ['free', 'Free']];
+  let filter = 'all';
+  const input = h('input', { class: 'input', id: 'evq', type: 'search', placeholder: 'Search events, venues, cities', 'aria-label': 'Search events', autocomplete: 'off', enterkeyhint: 'search' });
+  const chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Filter events' });
+  const count = h('p', { class: 'muted evcount', role: 'status' });
+  const list = h('div', { role: 'list' });
+  const onSale = (e) => !e.sold_out && e.sales !== 'upcoming' && e.sales !== 'closed';
+  const paint = () => {
+    const term = input.value.trim().toLowerCase();
+    const rows = events.filter((e) => (!term || [e.name, e.venue, e.city].filter(Boolean).join(' ').toLowerCase().includes(term))
+      && (filter === 'all' || (filter === 'on' && onSale(e)) || (filter === 'free' && e.from_kobo === 0)));
+    mount(chips, FILTERS.map(([k, label]) => h('button', { type: 'button', class: 'chip', 'aria-pressed': filter === k ? 'true' : 'false', onclick: () => { filter = k; paint(); } }, label)));
+    count.textContent = rows.length === events.length ? events.length + (events.length === 1 ? ' event' : ' events') : rows.length + ' of ' + events.length;
+    mount(list, rows.length ? rows.map(card) : h('div', { class: 'emptybox' }, h('h3', {}, 'Nothing matches'), h('p', { class: 'muted', style: 'margin-top:6px' }, 'Try a different search or filter.')));
+  };
+  input.addEventListener('input', paint);
+  mount(box, h('div', { class: 'evtools' }, input, chips), count, list);
+  paint();
+}
+
 get('/public/events').then((r) => {
   if (!r.events.length) {
     return mount(box, h('div', { class: 'emptybox' }, h('h3', {}, 'No upcoming events yet'), h('p', { class: 'muted', style: 'margin-top:6px' }, 'Check back soon, or run your own.'),
       h('a', { class: 'btn primary', style: 'margin-top:16px', href: '/organiser/' }, 'Organiser sign in')));
   }
-  mount(box, r.events.map(card));
+  if (document.documentElement.classList.contains('is-native')) nativeList(r.events);
+  else mount(box, r.events.map(card));
 }).catch((ex) => mount(box, h('div', { class: 'error' }, ex.message || 'Could not load events. Try again.')));

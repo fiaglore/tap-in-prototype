@@ -28,6 +28,7 @@
 
   function finish() {
     if (done) return; done = true;
+    if (window.__tapinNext) { location.replace(window.__tapinNext); return; }   // the phone app's front door: on to the events home
     if (main) main.inert = false;
     root.classList.remove('intro-lock');
     intro.remove();

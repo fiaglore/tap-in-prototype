@@ -32,6 +32,7 @@ const ROUTES = [
 
   ['GET', '/api/me', 'user', me.me],
   ['PATCH', '/api/me', 'user', auth.patchMe],
+  ['DELETE', '/api/me', 'user', auth.deleteMe],
   ['GET', '/api/me/history', 'user', me.history],
   ['GET', '/api/me/photo', 'user', photo.getPhoto],
   ['PUT', '/api/me/photo', 'user', photo.putPhoto],

@@ -194,6 +194,45 @@ export async function patchMe({ request, env, user }) {
   return json({ user: publicUser({ ...user, name }) });
 }
 
+// DELETE /api/me  { confirm: "DELETE" }
+// Deletes the account: the person's name, email, phone and photo go, every pass they hold is cancelled, and they are
+// signed out everywhere. Rows that other people's records point at (attendance, invites, ledger) stay, but now point at an
+// anonymous placeholder. Someone who runs events or vendors, or holds wallet money, is asked to settle that first, because
+// deleting them would break other people's tickets and money.
+export async function deleteMe({ request, env, user }) {
+  const body = await readJson(request);
+  if (body.confirm !== 'DELETE') throw new HttpError(400, 'confirm_required', 'Type DELETE to confirm.');
+  const owns = await env.DB.prepare(
+    'SELECT (SELECT COUNT(*) FROM events WHERE owner_id = ?1) AS events, (SELECT COUNT(*) FROM vendors WHERE owner_id = ?1) AS vendors'
+  )
+    .bind(user.id)
+    .first();
+  if (owns.events > 0 || owns.vendors > 0) {
+    throw new HttpError(409, 'runs_events', 'You run events or vendors on Tap In. Email hello@tap-in.world and we will close them with you first, then delete your account.');
+  }
+  const wallet = await env.DB.prepare('SELECT balance_kobo FROM wallets WHERE user_id = ?1').bind(user.id).first();
+  if (wallet && wallet.balance_kobo > 0) {
+    throw new HttpError(409, 'wallet_balance', 'Your wallet still holds money. Spend or withdraw it first.');
+  }
+
+  const clearCookie = await endSession(env, request);
+  const email = user.email || null;
+  const phone = user.phone || null;
+  await env.DB.batch([
+    env.DB.prepare("UPDATE passes SET status = 'revoked' WHERE user_id = ?1").bind(user.id),
+    // An invite made for this email or phone must not turn into one that anybody holding the code can use.
+    env.DB.prepare("UPDATE invites SET bound_identifier = 'deleted:' || ?1 WHERE bound_identifier IN (?2, ?3)").bind(user.id, email, phone),
+    env.DB.prepare('DELETE FROM user_photos WHERE user_id = ?1').bind(user.id),
+    env.DB.prepare('DELETE FROM wallets WHERE user_id = ?1').bind(user.id),
+    env.DB.prepare('DELETE FROM app_logins WHERE user_id = ?1').bind(user.id),
+    env.DB.prepare('DELETE FROM otps WHERE identifier IN (?1, ?2)').bind(email, phone),
+    env.DB.prepare('DELETE FROM sessions WHERE user_id = ?1').bind(user.id),
+    // The row stays so records that point at it keep working; nothing in it identifies anyone, and the address can sign up afresh.
+    env.DB.prepare("UPDATE users SET email = 'deleted-' || id || '@deleted.invalid', phone = NULL, name = NULL WHERE id = ?1").bind(user.id)
+  ]);
+  return json({ ok: true }, 200, { 'Set-Cookie': clearCookie });
+}
+
 // Used by claim and gate routes to count a failure against a bucket.
 export const noteFailure = (db, bucket) => record(db, bucket);
 export const tooManyFailures = (db, bucket, limit, windowSec) => isFull(db, bucket, limit, windowSec);

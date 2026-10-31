@@ -1,6 +1,6 @@
 // Public ticket sales page (demo). Anyone can see prices; buying needs a signed-in session so the
 // ticket has somewhere to land. No real payment runs here — this stands in for a checkout step.
-import { h, mount, when } from '/js/dom.js';
+import { h, mount, toast, when } from '/js/dom.js';
 import { get, post, put } from '/js/api.js';
 import { selfieModal } from '/js/selfie.js';
 import { signInFlow } from '/js/auth-ui.js';
@@ -66,6 +66,13 @@ function buyFlow(ev, tier, qty, btn) {
 const MAX_QTY = 8;
 const maxQty = (t) => Math.max(1, Math.min(MAX_QTY, t.left === null || t.left === undefined ? MAX_QTY : t.left));
 
+// Inside the phone app: the phone's own share sheet; anywhere else (or if it fails) the link is copied.
+async function shareEvent(e) {
+  const url = location.origin + '/e/?id=' + encodeURIComponent(eventId);
+  if (window.TapInNative && (await window.TapInNative.share({ title: e.name, text: 'Tickets for ' + e.name + ' on Tap In', url }))) return;
+  try { await navigator.clipboard.writeText(url); toast('Link copied'); } catch { toast(url); }
+}
+
 function tierPage(ev, notice = null) {
   document.title = ev.event.name + ' · Tap In';
   const when_ = [ev.event.venue, ev.event.city, ev.event.starts_at && when(ev.event.starts_at)].filter(Boolean).join(' · ');
@@ -73,6 +80,7 @@ function tierPage(ev, notice = null) {
     h('p', { class: 'eyebrow' }, 'Demo checkout — no real payment is taken'),
     h('h1', { style: 'font-size:30px;margin-top:4px' }, ev.event.name),
     when_ && h('p', { class: 'muted', style: 'margin-top:4px' }, when_),
+    window.TapInNative && h('button', { class: 'btn ghost small sharebtn', type: 'button', onclick: () => shareEvent(ev.event) }, 'Share this event'),
     ev.event.sales === 'upcoming' && h('div', { class: 'notice warn', style: 'margin-top:14px' }, 'Tickets are not on sale yet' + (ev.event.sales_start ? '. Sales open ' + when(ev.event.sales_start) + '.' : '.')),
     ev.event.sales === 'closed' && h('div', { class: 'notice warn', style: 'margin-top:14px' }, 'Ticket sales for this event have closed.'),
     h('div', { class: 'stack', style: 'margin-top:20px' }, ev.tiers.map((t) => {
