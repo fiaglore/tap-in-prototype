@@ -177,6 +177,17 @@ signature made with WebCrypto; `test/wallet.mjs` verifies it with openssl using 
 2. Secrets: `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_SERVICE_ACCOUNT` (the whole JSON key).
 The link is a signed "save to wallet" JWT that carries a generic class and object; no other API call is needed.
 
+## Printed wristbands
+
+A physical way in instead of a phone or a paper ticket, **made only for confirmed guests**. Console tab **Guest list**, card **Wristbands**.
+- **Who is confirmed.** People who replied **Yes** to an invitation (as many wristbands as they said are coming), holders of a **Tap In pass**, and holders of an **imported ticket**. Everyone else (replied No, no reply, nobody in particular) is refused (`not_confirmed`). There is no way to make anonymous wristbands. Someone already inside is refused (`already_entered`). Events only, not offices.
+- **One per person.** A party of 3 gets 3 wristbands, each with its own code, scanned separately, so the arrivals are people, not parties. The sheet shows name, table, ticket type, "2 of 3", QR and the readable code `WB-XXXXX-XXXXX`; "Download codes (CSV)" gives the same for a wristband printer.
+- **The original stops admitting.** Once someone has wristbands, their phone invitation, pass or old imported code is refused at the gate with "Wristbands were made for this ticket" (`use_wristband`), so nobody gets in twice. This is also sent to offline scanners (`wristbanded` in `/api/gate/list`).
+- **Reprint and replace.** Codes are worked out from the event key, the person, their seat and a generation (`wristbandCode` in `src/lib/codes.js`), so a sheet can be reprinted at any time; only hashes are stored. A lost wristband is cancelled in the guest list (its code stops working); making wristbands for that person again gives that seat a new code.
+- **At the gate** a wristband is an imported-ticket row pointing at the original (`guests.wristband_of`), so the scanner, offline mode and the once-per-area rule work unchanged, and each person still gets the ticket type's areas. Selfie checks do not apply to wristbands (the scanner says "check ID").
+- **Counts.** A ticket with wristbands is counted through its wristbands, never twice, in the overview and the report (`wristbands` in the report's guest list).
+- API: `GET /api/events/:id/wristbands` lists the confirmed people and how many wristbands each has; `POST /api/events/:id/wristbands { people: [{ kind: 'guest' | 'pass', id }] }` makes whatever is missing and returns every active wristband for them (so it also reprints). Migration `0011_wristbands.sql` adds the columns; apply it with `npm run db:migrate:remote` before deploying. Tests: `node test/wristbands.mjs`.
+
 ## Gate team and the event report
 
 - **Gate team** (console tab; "Door staff" for offices): the organiser adds each steward by name and gets a one-time

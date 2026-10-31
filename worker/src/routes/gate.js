@@ -19,7 +19,8 @@ const MESSAGES = {
   expired: 'This pass has expired.',
   stale_code: 'This pass code is out of date. Ask them to reopen their pass.',
   static_pass: 'This event needs the live code from the app. Screenshots and printed codes do not work.',
-  outside_hours: 'This pass is not valid at this time.'
+  outside_hours: 'This pass is not valid at this time.',
+  use_wristband: 'Wristbands were made for this ticket. Scan their wristband instead.'
 };
 
 async function gateEvent(request, env) {
@@ -95,7 +96,7 @@ export async function gateScan({ request, env }) {
   // Guests (invitations and tickets imported from another ticketer) have no Tap In account.
   // An invitation code carries its own check; any other code is looked up in this event's imported list.
   const loadGuest = (where, val) => env.DB.prepare(
-    `SELECT g.id, g.event_id, g.tier_id, g.kind, g.name AS holder, g.party_size, g.attending, g.rsvp, g.table_label, g.status, g.host, g.valid_from, g.valid_until, t.name AS tier, t.days_mask, t.from_min, t.to_min
+    `SELECT g.id, g.event_id, g.tier_id, g.kind, g.name AS holder, g.party_size, g.attending, g.rsvp, g.table_label, g.status, g.host, g.valid_from, g.valid_until, g.wristbanded, t.name AS tier, t.days_mask, t.from_min, t.to_min
      FROM guests g JOIN tiers t ON t.id = g.tier_id WHERE ${where}`
   ).bind(...val).first();
   if (guestTok && safeEqual(await guestMac(env.SECRET_PEPPER, guestTok.id), guestTok.mac)) {
@@ -107,7 +108,7 @@ export async function gateScan({ request, env }) {
     if (macOk && live && !liveWindowFresh(live.win, now)) reason = 'stale_code';
     else if (macOk) {
       pass = await env.DB.prepare(
-        `SELECT p.id, p.status, p.event_id, p.tier_id, p.expires_at, p.user_id, u.name AS holder, t.name AS tier, t.days_mask, t.from_min, t.to_min
+        `SELECT p.id, p.status, p.event_id, p.tier_id, p.expires_at, p.user_id, p.wristbanded, u.name AS holder, t.name AS tier, t.days_mask, t.from_min, t.to_min
          FROM passes p JOIN users u ON u.id = p.user_id JOIN tiers t ON t.id = p.tier_id WHERE p.id = ?1`
       )
         .bind(parsed.id)
@@ -124,6 +125,7 @@ export async function gateScan({ request, env }) {
     if (!holder) reason = 'invalid_token';
     else if (holder.event_id !== ev.id) reason = 'wrong_event';
     else if (holder.status !== 'active') reason = 'revoked';
+    else if (holder.wristbanded) reason = 'use_wristband'; // their wristbands are the way in now
     else if (pass && ev.secure_qr && !live) reason = 'static_pass';
     else if (pass && pass.expires_at && pass.expires_at <= now) reason = 'expired';
     // Visitors: only inside their visit window.
@@ -215,8 +217,8 @@ export async function gateList({ request, env }) {
     q('SELECT id, name FROM zones WHERE event_id = ?1 ORDER BY sort, name').all(),
     q('SELECT id, name, days_mask, from_min, to_min FROM tiers WHERE event_id = ?1').all(),
     q('SELECT tz.tier_id, tz.zone_id FROM tier_zones tz JOIN tiers t ON t.id = tz.tier_id WHERE t.event_id = ?1').all(),
-    q('SELECT p.id, p.tier_id, p.status, p.expires_at, u.name FROM passes p JOIN users u ON u.id = p.user_id WHERE p.event_id = ?1').all(),
-    q('SELECT id, kind, tier_id, name, party_size, attending, rsvp, table_label, status, code_hash, host, valid_from, valid_until FROM guests WHERE event_id = ?1').all(),
+    q('SELECT p.id, p.tier_id, p.status, p.expires_at, p.wristbanded, u.name FROM passes p JOIN users u ON u.id = p.user_id WHERE p.event_id = ?1').all(),
+    q('SELECT id, kind, tier_id, name, party_size, attending, rsvp, table_label, status, code_hash, host, valid_from, valid_until, wristbanded FROM guests WHERE event_id = ?1').all(),
     q("SELECT pass_id, guest_id, zone_id, MIN(at) AS at FROM scans WHERE event_id = ?1 AND result = 'granted' GROUP BY pass_id, guest_id, zone_id").all()
   ]);
   const zonesOf = {};
@@ -225,8 +227,8 @@ export async function gateList({ request, env }) {
     event: { id: ev.id, name: ev.name, allow_reentry: !!ev.allow_reentry, secure_qr: !!ev.secure_qr, require_photo: !!ev.require_photo, tz_offset_min: ev.tz_offset_min },
     zones: zones.results,
     tiers: tiers.results.map((t) => ({ ...t, zones: zonesOf[t.id] || [] })),
-    passes: passes.results.map((p) => ({ id: p.id, tier_id: p.tier_id, status: p.status, expires_at: p.expires_at, holder: displayName(p.name) })),
-    guests: guests.results.map((g) => ({ id: g.id, kind: g.kind, tier_id: g.tier_id, holder: displayName(g.name), party: g.rsvp === 'yes' && g.attending ? g.attending : g.party_size, table: g.table_label, rsvp: g.kind === 'invite' ? g.rsvp : null, status: g.status, code_hash: g.code_hash, host: g.host, valid_from: g.valid_from, valid_until: g.valid_until })),
+    passes: passes.results.map((p) => ({ id: p.id, tier_id: p.tier_id, status: p.status, expires_at: p.expires_at, wristbanded: !!p.wristbanded, holder: displayName(p.name) })),
+    guests: guests.results.map((g) => ({ id: g.id, kind: g.kind, tier_id: g.tier_id, holder: displayName(g.name), party: g.rsvp === 'yes' && g.attending ? g.attending : g.party_size, table: g.table_label, rsvp: g.kind === 'invite' ? g.rsvp : null, status: g.status, code_hash: g.code_hash, host: g.host, valid_from: g.valid_from, valid_until: g.valid_until, wristbanded: !!g.wristbanded })),
     entries: entries.results.map((e) => ({ ref: e.pass_id ? 'p:' + e.pass_id : 'g:' + e.guest_id, zone_id: e.zone_id, at: e.at })),
     key: await eventOfflineKey(env.SECRET_PEPPER, ev.id),
     steward: ev.steward_id ? { name: ev.steward_name } : null,
