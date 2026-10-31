@@ -248,6 +248,25 @@ Both live in the `guests` table (migration 0009) and need no Tap In account. Con
 - `/privacy/` and `/terms/` are plain pages linked from the footers, every sign-in form and the app's Me tab.
   They describe what the code actually stores; update them whenever that changes. Contact: hello@tap-in.world.
 
+## Support console (Tap In team only)
+
+`/admin/` is a console for the Tap In team to solve people's problems: find a person, see their passes, invites and recent entries, and fix things.
+
+**Who gets in.** The team list is the Worker secret `STAFF_IDENTIFIERS` (comma-separated emails or phone numbers). Nothing is in the repository. It fails closed: with no list, in `demo` sign-in mode, signed out, or not on the list, every `/api/admin/*` route answers a plain 404, so the console's existence is not revealed. Team members sign in with the normal verified sign-in (Firebase email link or live code). Console sessions last 8 hours, then ask again.
+
+```
+cd worker
+npx wrangler d1 migrations apply tap-in-db --remote   # 0013 first
+npx wrangler secret put STAFF_IDENTIFIERS          # e.g. ola@tap-in.world, ada@tap-in.world
+npx wrangler deploy
+```
+
+**What the team can do.** Search people, passes, invites and events. Email a person a sign-in link, sign them out everywhere, clear their sign-in limits, fix their name, suspend or restore them, export their data, delete their account (same rules as self-deletion: events they run must be settled first), revoke or restore a pass, revoke an unused invite, and take an event off the public list or put it back.
+
+**What it deliberately cannot do.** Change a person's email or phone, sign in as them, read secrets, invite codes or sign-in codes, or act on other team members (no suspending or deleting each other or yourself).
+
+**Accountability.** Every change needs a written reason and is added to an append-only audit log (who, when, what, why). Opening a person's page is logged too. The log can be read in the console but no route edits or removes entries. For one more layer, put Cloudflare Access in front of `/admin/*`.
+
 ## Deploy
 
 The database `tap-in-db` already exists and has the schema applied (migration `0001_init.sql`). To put the Worker and site live:

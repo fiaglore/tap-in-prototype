@@ -1,11 +1,11 @@
 // Classic script loaded in <head> so the right colours apply before first paint.
 (function () {
   document.documentElement.classList.add('js'); // lets pages hide things for scroll reveals only when scripts run
-  // The home page opens with a short "tap to enter" intro, once per visit. It is skipped for reduced motion,
+  // The home page (and the phone app's /enter/ front door) opens with a short "tap to enter" intro, once per visit. It is skipped for reduced motion,
   // deep links (#...), ?intro=0, and a repeat visit in the same tab; ?intro=1 plays it again.
   try {
     var path = location.pathname, q = location.search;
-    if ((path === '/' || path === '/index.html') && !location.hash && !/[?&]intro=0/.test(q)) {
+    if ((path === '/' || path === '/index.html' || path === '/enter/') && !location.hash && !/[?&]intro=0/.test(q)) {
       var rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       var seen = false;
       try { seen = !!sessionStorage.getItem('tapin-intro'); } catch (e) {}

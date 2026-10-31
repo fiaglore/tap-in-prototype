@@ -29,15 +29,23 @@ export async function endSession(env, request) {
   return cookie(request, '', 0);
 }
 
-export async function currentUser(env, request) {
+// The session and who it belongs to, or null. A suspended account has no usable session.
+export async function currentSession(env, request) {
   const token = readCookies(request)[COOKIE];
   if (!token || token.length > 100) return null;
   const hash = await hmacHex(env.SECRET_PEPPER, 'session|' + token);
   return env.DB.prepare(
-    'SELECT u.id, u.phone, u.email, u.name FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?1 AND s.expires_at > ?2'
+    'SELECT u.id, u.phone, u.email, u.name, s.created_at AS session_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?1 AND s.expires_at > ?2 AND u.suspended_at IS NULL'
   )
     .bind(hash, nowSec())
     .first();
+}
+
+export async function currentUser(env, request) {
+  const row = await currentSession(env, request);
+  if (!row) return null;
+  const { session_at, ...user } = row; // eslint-disable-line no-unused-vars
+  return user;
 }
 
 export const publicUser = (u) => ({

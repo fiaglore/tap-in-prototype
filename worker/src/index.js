@@ -20,6 +20,8 @@ import * as till from './routes/till.js';
 import { PAYMENT_API, PAYMENT_PAGES, paymentsOff } from './lib/money.js';
 import * as photo from './routes/photo.js';
 import { routeByHost } from './lib/hosts.js';
+import { requireStaff } from './lib/staff.js';
+import * as admin from './routes/admin.js';
 
 // [method, path, auth, handler]. auth "user" needs a signed-in session; gate routes check their own key.
 const ROUTES = [
@@ -32,6 +34,7 @@ const ROUTES = [
 
   ['GET', '/api/me', 'user', me.me],
   ['PATCH', '/api/me', 'user', auth.patchMe],
+  ['DELETE', '/api/me', 'user', auth.deleteMe],
   ['GET', '/api/me/history', 'user', me.history],
   ['GET', '/api/me/photo', 'user', photo.getPhoto],
   ['PUT', '/api/me/photo', 'user', photo.putPhoto],
@@ -101,7 +104,30 @@ const ROUTES = [
   ['GET', '/api/public/vendors', 'none', vendors.publicVendors],
   ['GET', '/api/public/events', 'none', publicSale.listUpcoming],
   ['GET', '/api/public/events/:id', 'none', publicSale.getEvent],
-  ['POST', '/api/public/events/:id/buy', 'user', publicSale.buy]
+  ['POST', '/api/public/events/:id/buy', 'user', publicSale.buy],
+
+  // The team's support console. 'staff' means: on the STAFF_IDENTIFIERS list, signed in within 8 hours, otherwise "not found".
+  ['GET', '/api/admin/me', 'staff', admin.adminMe],
+  ['GET', '/api/admin/overview', 'staff', admin.overview],
+  ['GET', '/api/admin/users', 'staff', admin.searchUsers],
+  ['GET', '/api/admin/users/:id', 'staff', admin.getUser],
+  ['PATCH', '/api/admin/users/:id', 'staff', admin.renameUser],
+  ['GET', '/api/admin/users/:id/export', 'staff', admin.exportUser],
+  ['POST', '/api/admin/users/:id/sign-out', 'staff', admin.signOutUser],
+  ['POST', '/api/admin/users/:id/send-link', 'staff', admin.sendLink],
+  ['POST', '/api/admin/users/:id/clear-limits', 'staff', admin.clearLimits],
+  ['POST', '/api/admin/users/:id/suspend', 'staff', admin.suspendUser],
+  ['POST', '/api/admin/users/:id/restore', 'staff', admin.restoreUser],
+  ['POST', '/api/admin/users/:id/delete', 'staff', admin.deleteUser],
+  ['POST', '/api/admin/passes/:id/revoke', 'staff', admin.revokePass],
+  ['POST', '/api/admin/passes/:id/restore', 'staff', admin.restorePass],
+  ['GET', '/api/admin/passes/:id/scans', 'staff', admin.passScans],
+  ['POST', '/api/admin/invites/lookup', 'staff', admin.lookupInvite],
+  ['POST', '/api/admin/invites/:id/revoke', 'staff', admin.revokeInvite],
+  ['GET', '/api/admin/events', 'staff', admin.searchEvents],
+  ['GET', '/api/admin/events/:id', 'staff', admin.getEvent],
+  ['POST', '/api/admin/events/:id/listed', 'staff', admin.setListed],
+  ['GET', '/api/admin/audit', 'staff', admin.auditLog]
 ];
 
 const isConfigured = (env) => !!env.SECRET_PEPPER && env.SECRET_PEPPER.length >= 32;
@@ -123,6 +149,9 @@ function match(pattern, path) {
 async function handleApi(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, '') : url.pathname;
+
+  // Everything under /api/admin answers "not found" to anyone who is not signed-in staff, whatever they ask for.
+  const staff = path === '/api/admin' || path.startsWith('/api/admin/') ? await requireStaff(env, request) : null;
 
   let found = null;
   let pathExists = false;
@@ -152,6 +181,7 @@ async function handleApi(request, env) {
     user = await currentUser(env, request);
     if (!user) throw new HttpError(401, 'unauthorised', 'Sign in to continue.');
   }
+  if (found.authLevel === 'staff') user = staff;
   return found.fn({ request, env, url, params: found.params, user });
 }
 

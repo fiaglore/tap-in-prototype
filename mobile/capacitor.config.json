@@ -3,9 +3,13 @@
   "appName": "Tap In",
   "webDir": "www",
   "server": {
-    "url": "https://www.tap-in.world/app/?source=app",
+    "url": "https://www.tap-in.world/enter/?source=app",
     "cleartext": false,
-    "allowNavigation": ["www.tap-in.world", "tap-in.world", "business.tap-in.world"]
+    "allowNavigation": [
+      "www.tap-in.world",
+      "tap-in.world",
+      "business.tap-in.world"
+    ]
   },
   "ios": {
     "contentInset": "always",

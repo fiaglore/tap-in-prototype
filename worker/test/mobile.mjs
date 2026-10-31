@@ -36,8 +36,8 @@ await test('the app page links its own manifest and the phone-app script', () =>
 
 await test('the app keeps every file it now needs for working offline, and its saved copy is refreshed', () => {
   const sw = read('worker/public/app/sw.js');
-  for (const f of ['/js/auth-ui.js', '/js/applogin.js', '/js/native.js']) assert.ok(sw.includes("'" + f + "'"), f + ' must be in the offline list');
-  assert.match(sw, /tapin-app-v([2-9]|\d\d+)/, 'the saved copy must be renamed so phones fetch the new files');
+  for (const f of ['/js/auth-ui.js', '/js/applogin.js', '/js/native.js', '/js/appnav.js', '/css/appshell.css']) assert.ok(sw.includes("'" + f + "'"), f + ' must be in the offline list');
+  assert.match(sw, /tapin-app-v([3-9]|\d\d+)/, 'the saved copy must be renamed so phones fetch the new files');
 });
 
 console.log('\nnative.js (inside the phone app only)');
@@ -75,6 +75,64 @@ await test('in the app it marks the page, hides the splash, and keeps tap-in.wor
   assert.equal(loc.href, '', 'foreign and plain-http links must be ignored');
 });
 
+console.log('\nThe app\'s front door and tabs');
+function runScript(file, win) {
+  const ctx = vm.createContext({ window: win, location: win.location, document: win.document, URL, setTimeout: (fn) => { win.timers.push(fn); return 0; } });
+  vm.runInContext(read(file), ctx);
+}
+const lockDoc = (locked) => ({ documentElement: { classList: { contains: (c) => locked && c === 'intro-lock' } } });
+const enterWin = (search, locked) => { const w = { search, replaced: [], timers: [] }; return { location: { search, replace: (u) => w.replaced.push(u) }, document: lockDoc(locked), timers: w.timers, replaced: w.replaced, __tapinIntro: false }; };
+await test('/enter/ is the website\'s Tap to enter opening, and it moves on to the events home', () => {
+  const html = read('worker/public/enter/index.html');
+  assert.match(html, /id="introEnter"/); assert.match(html, /id="introSkip"/); assert.match(html, /id="rave"/);
+  assert.match(html, /\/js\/enter\.js/); assert.match(html, /\/js\/intro\.js/);
+  assert.doesNotMatch(html, /intro-photo|lp-stage|livephoto/, 'no photo on the opening screen');
+  assert.match(read('worker/public/js/theme.js'), /path === '\/enter\/'/, 'theme.js must lock the page for the opening on /enter/');
+  assert.match(read('worker/public/js/intro.js'), /__tapinNext\) \{ location\.replace\(window\.__tapinNext\)/, 'intro.js must carry on when the opening ends');
+});
+await test('enter.js: with the opening it waits and remembers where to go; without it, straight through', () => {
+  const w = enterWin('?source=app', true); runScript('worker/public/js/enter.js', w);
+  assert.equal(w.__tapinNext, '/play/'); assert.deepEqual(w.replaced, []); assert.equal(w.timers.length, 1, 'a safety timer in case the opening cannot run');
+  const skip = enterWin('?source=app', false); runScript('worker/public/js/enter.js', skip);
+  assert.deepEqual(skip.replaced, ['/play/']);
+  w.timers[0](); assert.deepEqual(w.replaced, ['/play/'], 'the safety timer moves on if the opening never started');
+});
+await test('enter.js only ever goes to our own app pages', () => {
+  const ok = enterWin('?next=/app/', false); runScript('worker/public/js/enter.js', ok); assert.deepEqual(ok.replaced, ['/app/']);
+  for (const bad of ['?next=//evil.example/', '?next=https://evil.example/', '?next=/privacy/', '?next=/play/x/../../evil']) {
+    const w = enterWin(bad, false); runScript('worker/public/js/enter.js', w); assert.deepEqual(w.replaced, ['/play/'], bad);
+  }
+});
+await test('the tabs and the app styles are on every app page, and nowhere on the website\'s own pages', () => {
+  for (const f of ['play', 'e', 'organiser', 'app']) {
+    const html = read(`worker/public/${f}/index.html`);
+    assert.match(html, /\/js\/native\.js\?v=2/, f); assert.match(html, /\/js\/appnav\.js/, f); assert.match(html, /\/css\/appshell\.css/, f);
+  }
+  for (const f of ['index.html', 'organisers/index.html', 'business/index.html']) assert.doesNotMatch(read('worker/public/' + f), /appnav|appshell/, f);
+  const css = read('worker/public/css/appshell.css');
+  for (const rule of css.split('}').map((r) => r.trim()).filter((r) => r && !r.startsWith('/*') && !r.startsWith('@'))) {
+    assert.match(rule, /(\.apptabs|\.has-apptabs|\.is-native|\.evtools|\.evcount|\.sharebtn)/, 'every rule is for the app only: ' + rule.slice(0, 50));
+  }
+});
+await test('appnav.js lists the four tabs, Events first, and does nothing in a browser', () => {
+  const src = read('worker/public/js/appnav.js');
+  const order = ['Events', 'Organiser', 'Passes', 'Account'].map((l) => src.indexOf("label: '" + l + "'"));
+  assert.ok(order.every((i) => i > 0) && order.every((v, i) => i === 0 || v > order[i - 1]), 'tab order: Events, Organiser, Passes, Account');
+  assert.match(src, /href: '\/play\/'/); assert.match(src, /href: '\/app\/#me'/);
+  const doc = { documentElement: { classList: { contains: () => false } }, addEventListener() { throw new Error('touched the page in a browser'); } };
+  runScript('worker/public/js/appnav.js', { document: doc, location: { pathname: '/play/', hash: '' }, addEventListener() { throw new Error('touched the window in a browser'); }, timers: [] });
+});
+await test('the share helper uses the phone\'s share sheet, and says so when it cannot', async () => {
+  const calls = [];
+  const mk = (Share) => { const w = { document: fakeDoc(), location: { href: '' }, addEventListener() {}, Capacitor: { isNativePlatform: () => true, getPlatform: () => 'android', Plugins: { Share, App: { addListener() {}, getInfo: async () => ({ version: '1.2.3', build: '45' }) } } }, timers: [] }; run(w); return w; };
+  const withShare = mk({ share: async (o) => { calls.push(o); } });
+  assert.equal(await withShare.TapInNative.share({ title: 'Fest', text: 'Tickets', url: 'https://www.tap-in.world/e/?id=1' }), true);
+  assert.equal(calls[0].url, 'https://www.tap-in.world/e/?id=1');
+  assert.equal(await mk(undefined).TapInNative.share({ title: 'x', url: 'y' }), false, 'no plugin: the page copies the link instead');
+  assert.equal(await mk({ share: async () => { throw new Error('cancelled'); } }).TapInNative.share({ title: 'x', url: 'y' }), false);
+  assert.equal(await withShare.TapInNative.version(), '1.2.3 (45)');
+});
+
 console.log('\nThe Capacitor shell (/mobile)');
 await test('the app id is valid for both stores and the shell loads the live app over https', () => {
   const c = JSON.parse(read('mobile/capacitor.config.json'));
@@ -83,7 +141,7 @@ await test('the app id is valid for both stores and the shell loads the live app
   const u = new URL(c.server.url);
   assert.equal(u.protocol, 'https:');
   assert.equal(u.hostname, 'www.tap-in.world');
-  assert.ok(u.pathname.startsWith('/app/'));
+  assert.equal(u.pathname, '/enter/', 'the app opens on its front door, then the events home');
   assert.equal(c.server.cleartext, false);
   for (const h of ['www.tap-in.world', 'tap-in.world', 'business.tap-in.world']) assert.ok(c.server.allowNavigation.includes(h), h);
   assert.ok(existsSync(join(root, 'mobile', c.webDir, 'index.html')), 'webDir needs an index.html');
