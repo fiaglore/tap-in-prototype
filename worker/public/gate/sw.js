@@ -1,8 +1,8 @@
 // Keeps the gate working with no signal: the page and its files are saved on the phone. Always tries the network
 // first (so updates arrive as soon as there is a connection) and falls back to the saved copy. API calls are never
 // cached here; the page keeps its own data.
-const CACHE = 'tapin-gate-v1';
-const SHELL = ['/gate/', '/gate/gate.js', '/gate/gate.css', '/js/offline.js', '/css/tapin.css', '/css/fx.css', '/js/theme.js', '/js/fx.js', '/js/liquid.js', '/js/dom.js', '/js/api.js', '/logo/tap-in-app-icon.svg'];
+const CACHE = 'tapin-gate-v2';
+const SHELL = ['/gate/', '/gate/gate.js', '/gate/gate.css', '/js/offline.js', '/js/native.js', '/css/tapin.css', '/css/fx.css', '/js/theme.js', '/js/fx.js', '/js/liquid.js', '/js/dom.js', '/js/api.js', '/logo/tap-in-app-icon.svg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -1,7 +1,7 @@
 import { h, wordmarkText, mount, toast, copy, when, ago } from '/js/dom.js';
 import { get, post, patch, put, del } from '/js/api.js';
 import { selfieModal } from '/js/selfie.js';
-import { signInFlow } from '/js/auth-ui.js';
+import { signInFlow } from '/js/auth-ui.js?v=2';
 import { cardEl, cardNumber, loadCard, saveCard, sanitise, PRESETS, SWATCHES, FINISHES, PATTERNS, TYPES } from '/js/card.js';
 import { orbitSvg, nextIndex, daysTo } from '/app/orbit.js';
 import { qrSvg } from '/js/qr.js';

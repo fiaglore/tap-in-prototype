@@ -1,6 +1,6 @@
 import { h, wordmarkText, mount, toast, copy, when, ago, download } from '/js/dom.js';
 import { get, post, patch, del } from '/js/api.js';
-import { signInFlow } from '/js/auth-ui.js';
+import { signInFlow } from '/js/auth-ui.js?v=2';
 import { qrSvg } from '/js/qr.js';
 
 const OFFICE = document.body.dataset.console === 'office';

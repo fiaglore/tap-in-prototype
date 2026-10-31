@@ -34,6 +34,12 @@ await test('the app page links its own manifest and the phone-app script', () =>
   assert.match(read('worker/public/gate/index.html'), /\/js\/native\.js/);
 });
 
+await test('the app keeps every file it now needs for working offline, and its saved copy is refreshed', () => {
+  const sw = read('worker/public/app/sw.js');
+  for (const f of ['/js/auth-ui.js', '/js/applogin.js', '/js/native.js']) assert.ok(sw.includes("'" + f + "'"), f + ' must be in the offline list');
+  assert.match(sw, /tapin-app-v([2-9]|\d\d+)/, 'the saved copy must be renamed so phones fetch the new files');
+});
+
 console.log('\nnative.js (inside the phone app only)');
 function run(window) {
   const ctx = vm.createContext({ window, location: window.location, URL, setTimeout, document: window.document });

@@ -3,7 +3,10 @@ import { h, mount } from '/js/dom.js';
 import { patch, post } from '/js/api.js';
 
 const root = document.getElementById('root');
-const oobCode = new URLSearchParams(location.search).get('oobCode');
+const query = new URLSearchParams(location.search);
+const oobCode = query.get('oobCode');
+// Present when the phone app asked for this link: the browser leaves a note the app collects (see js/applogin.js).
+const appChallenge = /^[A-Za-z0-9_-]{43}$/.test(query.get('ac') || '') ? query.get('ac') : null;
 let saved = {};
 try { saved = JSON.parse(localStorage.getItem('tapin-signin') || '{}'); } catch {}
 
@@ -14,6 +17,15 @@ const fail = (msg) => mount(root, h('h2', {}, 'That link did not work'), h('p', 
 function finish(user) {
   try { localStorage.removeItem('tapin-signin'); } catch {}
   location.replace(back());
+}
+
+// The sign-in was asked for from the app: tell the person to go back to it (it asks for a name itself the first time),
+// and let them carry on here if they would rather.
+function backToApp(user) {
+  mount(root, h('h2', {}, 'You are signed in'),
+    h('p', { class: 'muted', style: 'margin-top:6px' }, 'Go back to the Tap In app. It signs you in on its own within a few seconds.'),
+    h('p', { class: 'hint', style: 'margin-top:12px' }, 'Nothing happening? Open the app again and wait a moment.'),
+    h('button', { class: 'btn ghost block', type: 'button', style: 'margin-top:16px', onclick: () => { if (user.name) finish(user); else nameStep(user); } }, 'Continue in this browser instead'));
 }
 
 function nameStep(user, err = '') {
@@ -30,8 +42,9 @@ function nameStep(user, err = '') {
 async function complete(email) {
   mount(root, h('p', { class: 'muted' }, 'Signing you in…'));
   try {
-    const r = await post('/auth/email-link/complete', { email, oobCode });
-    if (r.is_new || !r.user.name) nameStep(r.user);
+    const r = await post('/auth/email-link/complete', appChallenge ? { email, oobCode, app_challenge: appChallenge } : { email, oobCode });
+    if (r.app_handoff === true) backToApp(r.user);
+    else if (r.is_new || !r.user.name) nameStep(r.user);
     else finish(r.user);
   } catch (ex) {
     fail(ex.message);

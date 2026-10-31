@@ -50,12 +50,26 @@ npm run ios:open        # opens Xcode (Mac only)
    Until then the app still works; links just open in the browser.
 5. **Store listing.** Privacy policy URL (`/privacy/`), screenshots, age rating, data-safety / privacy labels.
 
+## How sign-in works in the app
+The emailed sign-in link opens in the browser, and a browser cannot hand its session to an app. So the app and the
+browser meet through a one-time note (`app_logins`, migration `0012`):
+
+1. The app makes a random secret, keeps it on the device, and sends only its SHA-256 (the *challenge*) when it asks for the link. The
+   challenge rides in the emailed link as `?ac=`.
+2. The person opens the link. The browser signs in as usual, then leaves a note keyed to the challenge and says "go back to the app".
+3. The app, still waiting on its "Check your email" screen, shows the secret to `POST /api/auth/app/redeem`. If the note is there
+   it gets its own session; otherwise it is told "not yet" and asks again. The note works once and lasts 10 minutes.
+
+Why this is safe: the challenge is in the email, but only the app holds the secret behind it, so seeing the link is not enough to
+collect the sign-in. The first note for a challenge wins while it is valid, so another account cannot replace it. The wait
+survives the app being closed (the secret is kept in storage for about an hour, the life of the emailed link). The same flow
+serves an installed web app. Code: `worker/src/routes/auth.js` (`appRedeem`), `worker/public/js/applogin.js`,
+`worker/public/js/auth-ui.js`, `worker/public/signin/signin.js`; tests in `worker/test/applogin.mjs`.
+
+Deploying this needs the migration first: `npm run db:migrate:remote` in `worker/`, then `npx wrangler deploy`. The daily clean-up
+reads the new table, so the code must not go out before it exists.
+
 ## Known problems to decide before release
-- **Email sign-in link opens in the browser, not the app.** Sign-in is a link emailed through Firebase. Tapping it opens
-  Chrome or Safari, which has its own cookies, so the app is not signed in. Links verified for the app (step 4) help only if
-  the first hop of the email link is on tap-in.world. The robust fix is a code typed into the app (the server's `demo` and
-  `live` modes already work with codes) or a one-time hand-off from the browser back to the app. This is the main thing
-  to settle.
 - **Apple review.** A shell that only shows a website can be rejected (guideline 4.2). The native features under "Next"
   are what make it pass. Apple also requires an in-app "Delete my account" if people can create accounts here.
 - **Wallet passes cannot show Live QR** (the code changes every 30 seconds). The app can, and does, make its own code on the
