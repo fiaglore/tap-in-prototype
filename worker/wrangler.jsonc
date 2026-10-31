@@ -7,7 +7,8 @@
     "directory": "./public",
     "binding": "ASSETS",
     "not_found_handling": "404-page",
-    "run_worker_first": ["/api/*", "/vendor*", "/till*", "/e/*"]
+    // The pages that change by hostname must reach the Worker instead of being answered from assets.
+    "run_worker_first": ["/api/*", "/vendor*", "/till*", "/e/*", "/", "/business*", "/offices*", "/organiser*", "/play*"]
   },
   "d1_databases": [
     {
@@ -29,7 +30,11 @@
     // Firebase "Web API key" (Project settings > General). It is public by design, not a secret.
     "FIREBASE_API_KEY": "AIzaSyDDz7HRknsyGwJ_x0pX1iCUjZwUn4aSc_4",
     // Comma-separated phone numbers or emails allowed to create events. Empty = anyone who signs in.
-    "ORGANISER_IDENTIFIERS": ""
+    "ORGANISER_IDENTIFIERS": "",
+    // Tap In for Business lives on its own hostname (see src/lib/hosts.js). The business host must be attached to this
+    // Worker as a custom domain before these are deployed, or the /business/ and /offices/ links on the main site break.
+    "BUSINESS_HOST": "business.tap-in.world",
+    "MAIN_HOST": "www.tap-in.world"
   },
   "triggers": { "crons": ["17 3 * * *"] },
   "observability": { "enabled": true }

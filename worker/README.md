@@ -54,7 +54,7 @@ Cookie-authenticated unless noted. JSON in, JSON out. Errors look like `{"error"
 
 ## Tap In for Business (offices)
 
-Offices are sold as a separate product, **Tap In for Business**: the landing page is `/business/` and its console is `/offices/`. The homepage is about event ticketing and entry; it links to Business once, near the bottom.
+Offices are sold as a separate product, **Tap In for Business**, on its own hostname, **business.tap-in.world**: the landing page is its root (`/`) and its console is `/offices/`. See "Business subdomain" below. The homepage is about event ticketing and entry; it links to Business once, near the bottom.
 
 
 An office is an event with `kind = "workplace"`, so it reuses passes, doors (zones), the gate scanner and the scan log.
@@ -66,6 +66,18 @@ An office is an event with `kind = "workplace"`, so it reuses passes, doors (zon
 - Staff can enter again and again; offices ignore the event "re-entry" rule.
 
 Migration `0003_workplaces.sql` adds the columns. Apply it with `npm run db:migrate:remote` before deploying.
+
+### Business subdomain
+
+One Worker answers on both hostnames; `src/lib/hosts.js` decides what each one shows, driven by `BUSINESS_HOST` and `MAIN_HOST` in `wrangler.jsonc`.
+- **business.tap-in.world**: `/` is the Business landing page (served in place), `/offices/` is the console. `/business/` redirects to `/`, and event pages (`/organiser/`, `/play/`, `/e/`) redirect to www.
+- **www.tap-in.world** (and the bare domain): `/business/` and `/offices/` redirect (301) to the business host. The rest is unchanged.
+- Shared on both hosts: the API, `/app/`, `/gate/`, `/i/`, `/signin/`, `/privacy/`, `/terms/`. Existing visitor links, scanner links and passes keep working.
+- On `workers.dev`, `localhost` or with the two settings unset, nothing redirects, so there is always a way in.
+- The session cookie is **host-only**, so people sign in once on each host. Sign-in links are emailed for the host they were requested on.
+- `run_worker_first` lists the pages that vary by host (`/`, `/business*`, `/offices*`, `/organiser*`, `/play*`); without it they are answered from assets and never reach the Worker.
+
+To set it up, in this order: (1) attach `business.tap-in.world` to the `tap-in` Worker as a custom domain (Workers & Pages > tap-in > Settings > Domains & Routes; the zone is on the same account, so DNS and the certificate are automatic); (2) in Firebase, Authentication > Settings > Authorized domains, add `business.tap-in.world`, or email sign-in fails there; (3) deploy. Deploying first would send the `/business/` links on the main site to a hostname that does not exist yet. Tests: `node test/hosts.mjs`.
 
 ## Events and concerts (phase 2)
 
@@ -256,7 +268,7 @@ New migrations go in `migrations/` and are applied with `npm run db:migrate`.
 
 ## Going live with real sign-in codes
 
-**Email without a domain (Firebase).** Set `OTP_MODE` to `firebase` and `FIREBASE_API_KEY` to your Firebase Web API key. Firebase emails a sign-in link (not a 6-digit code); the link opens `/signin/`, and the Worker confirms it with Google. Phone numbers are refused in this mode. In Firebase: Authentication > Sign-in method > enable *Email link (passwordless)*, and add `www.tap-in.world` (and any other host you use) under Settings > Authorized domains.
+**Email without a domain (Firebase).** Set `OTP_MODE` to `firebase` and `FIREBASE_API_KEY` to your Firebase Web API key. Firebase emails a sign-in link (not a 6-digit code); the link opens `/signin/`, and the Worker confirms it with Google. Phone numbers are refused in this mode. In Firebase: Authentication > Sign-in method > enable *Email link (passwordless)*, and add `www.tap-in.world`, `business.tap-in.world` (and any other host you use) under Settings > Authorized domains.
 
 `OTP_MODE` is `demo` in `wrangler.jsonc`: no message is sent and the code is shown on screen. That is fine for trying the product, but anyone could then sign in as any phone number or email. Before real use, implement `sendSms` / `sendEmail` in `src/lib/otp-delivery.js` with a provider (for Nigeria, a local SMS aggregator or Termii/Twilio; Resend or Postmark for email), set `OTP_MODE` to `live`, and keep the secret keys as Worker secrets. In `live` mode the server refuses to send until a provider is wired in; it never falls back to demo.
 
