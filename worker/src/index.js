@@ -27,6 +27,7 @@ const ROUTES = [
   ['POST', '/api/auth/otp/request', 'none', auth.otpRequest],
   ['POST', '/api/auth/otp/verify', 'none', auth.otpVerify],
   ['POST', '/api/auth/email-link/complete', 'none', auth.emailLinkComplete],
+  ['POST', '/api/auth/app/redeem', 'none', auth.appRedeem],
   ['POST', '/api/auth/logout', 'none', auth.logout],
 
   ['GET', '/api/me', 'user', me.me],
@@ -160,6 +161,7 @@ export async function purge(env) {
   await env.DB.batch([
     env.DB.prepare('DELETE FROM otps WHERE expires_at < ?1').bind(now - 86400),
     env.DB.prepare('DELETE FROM sessions WHERE expires_at < ?1').bind(now),
+    env.DB.prepare('DELETE FROM app_logins WHERE expires_at < ?1').bind(now - 86400),
     env.DB.prepare('DELETE FROM rate_events WHERE at < ?1').bind(now - 86400),
     // Storage limitation: drop a selfie a month after it was last set unless its owner still needs it
     // (an active pass at an office, or at an event that is undated or recent).

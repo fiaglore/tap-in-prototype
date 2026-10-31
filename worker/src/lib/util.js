@@ -72,6 +72,11 @@ export function base64url(bytes) {
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+// SHA-256 of a string, base64url. The phone app turns its secret into a challenge this way, and so does the Worker.
+export async function sha256Base64url(text) {
+  return base64url(new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(text))));
+}
+
 // ---------- keyed hashing ----------
 // Every stored secret is HMAC-SHA-256(pepper, "<purpose>|<value>"). The pepper lives in a Worker
 // secret, not in the database, so a leaked database alone cannot be used to find a valid code.
