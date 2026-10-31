@@ -1,0 +1,14 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["REPLACE_WITH_APPLE_TEAM_ID.world.tapin.app"],
+        "components": [
+          { "/": "/app/*" },
+          { "/": "/signin/*" },
+          { "/": "/i/*" }
+        ]
+      }
+    ]
+  }
+}
