@@ -111,9 +111,10 @@ async function signInUser(env, request, id, now, appChallengeValue = null) {
   )
     .bind(newId(12), id.value, now)
     .run();
-  const user = await env.DB.prepare(`SELECT id, phone, email, name FROM users WHERE ${column} = ?1`)
+  const user = await env.DB.prepare(`SELECT id, phone, email, name, suspended_at FROM users WHERE ${column} = ?1`)
     .bind(id.value)
     .first();
+  if (user.suspended_at) throw new HttpError(403, 'account_suspended', 'This account is suspended. Write to hello@tap-in.world.');
 
   const setCookie = await startSession(env, request, user.id);
   const out = { user: publicUser(user), is_new: made.meta.changes === 1 };
@@ -172,7 +173,7 @@ export async function appRedeem({ request, env }) {
     .run();
   if (taken.meta.changes !== 1) return json({ pending: true });
   const user = await env.DB.prepare(
-    'SELECT u.id, u.phone, u.email, u.name FROM app_logins a JOIN users u ON u.id = a.user_id WHERE a.challenge_hash = ?1'
+    'SELECT u.id, u.phone, u.email, u.name FROM app_logins a JOIN users u ON u.id = a.user_id WHERE a.challenge_hash = ?1 AND u.suspended_at IS NULL'
   )
     .bind(hash)
     .first();
@@ -202,20 +203,30 @@ export async function patchMe({ request, env, user }) {
 export async function deleteMe({ request, env, user }) {
   const body = await readJson(request);
   if (body.confirm !== 'DELETE') throw new HttpError(400, 'confirm_required', 'Type DELETE to confirm.');
+  await assertCanDelete(env, user);
+  const clearCookie = await endSession(env, request);
+  await deleteAccountData(env, user);
+  return json({ ok: true }, 200, { 'Set-Cookie': clearCookie });
+}
+
+// Throws if deleting this person would break other people's tickets or money. Shared with the team's console.
+export async function assertCanDelete(env, user) {
   const owns = await env.DB.prepare(
     'SELECT (SELECT COUNT(*) FROM events WHERE owner_id = ?1) AS events, (SELECT COUNT(*) FROM vendors WHERE owner_id = ?1) AS vendors'
   )
     .bind(user.id)
     .first();
   if (owns.events > 0 || owns.vendors > 0) {
-    throw new HttpError(409, 'runs_events', 'You run events or vendors on Tap In. Email hello@tap-in.world and we will close them with you first, then delete your account.');
+    throw new HttpError(409, 'runs_events', 'You run events or vendors on Tap In. Email hello@tap-in.world and we will close them with you first, then delete your account.', { events: owns.events, vendors: owns.vendors });
   }
   const wallet = await env.DB.prepare('SELECT balance_kobo FROM wallets WHERE user_id = ?1').bind(user.id).first();
   if (wallet && wallet.balance_kobo > 0) {
     throw new HttpError(409, 'wallet_balance', 'Your wallet still holds money. Spend or withdraw it first.');
   }
+}
 
-  const clearCookie = await endSession(env, request);
+// The deletion itself: see deleteMe. Does not touch anyone's cookie.
+export async function deleteAccountData(env, user) {
   const email = user.email || null;
   const phone = user.phone || null;
   await env.DB.batch([
@@ -228,9 +239,8 @@ export async function deleteMe({ request, env, user }) {
     env.DB.prepare('DELETE FROM otps WHERE identifier IN (?1, ?2)').bind(email, phone),
     env.DB.prepare('DELETE FROM sessions WHERE user_id = ?1').bind(user.id),
     // The row stays so records that point at it keep working; nothing in it identifies anyone, and the address can sign up afresh.
-    env.DB.prepare("UPDATE users SET email = 'deleted-' || id || '@deleted.invalid', phone = NULL, name = NULL WHERE id = ?1").bind(user.id)
+    env.DB.prepare("UPDATE users SET email = 'deleted-' || id || '@deleted.invalid', phone = NULL, name = NULL, suspended_at = NULL WHERE id = ?1").bind(user.id)
   ]);
-  return json({ ok: true }, 200, { 'Set-Cookie': clearCookie });
 }
 
 // Used by claim and gate routes to count a failure against a bucket.
