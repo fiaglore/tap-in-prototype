@@ -33,6 +33,7 @@ await test('/business/ redirects to the root; the office console and shared page
 });
 await test('event pages send people to the main site, keeping the query string', async () => {
   assert.equal(where(await get('https://business.tap-in.world/organiser/')), 'https://www.tap-in.world/organiser/');
+  assert.equal(where(await get('https://business.tap-in.world/organisers/')), 'https://www.tap-in.world/organisers/');
   assert.equal(where(await get('https://business.tap-in.world/play/')), 'https://www.tap-in.world/play/');
   assert.equal(where(await get('https://business.tap-in.world/e/?id=ABC123')), 'https://www.tap-in.world/e/?id=ABC123');
 });

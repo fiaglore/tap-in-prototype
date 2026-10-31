@@ -13,7 +13,7 @@
 const lower = (v) => String(v || '').trim().toLowerCase();
 
 const BUSINESS_PAGE = /^\/(?:business|offices)(?:\/index\.html)?\/?$/;
-const EVENT_PAGE = /^\/(?:organiser|play|e)(?:\/index\.html)?\/?$/;
+const EVENT_PAGE = /^\/(?:organisers?|play|e)(?:\/index\.html)?\/?$/;
 
 function redirect(host, pathname, url) {
   return new Response(null, { status: 301, headers: { Location: `https://${host}${pathname}${url.search}`, 'Cache-Control': 'public, max-age=300' } });
