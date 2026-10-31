@@ -10,6 +10,8 @@ Tap In replaces attendance wristbands, paper tickets and access cards with the p
 
 This repo holds the clickable first-run prototype, the logo files, and a working website and server in [`worker/`](worker/) (register with a phone number or email, organisers generate invite codes, attendees claim them, gate staff scan passes). The prototype at the repo root is a design prototype with simulated data.
 
+The phone app (a Capacitor shell around the web app, for Android and iPhone) is in [`mobile/`](mobile/); see its README to build it.
+
 **Live prototype:** https://fiaglore.github.io/tap-in-prototype/ (once GitHub Pages is on, see below)
 
 ## The first-run flow

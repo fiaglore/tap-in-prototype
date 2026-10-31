@@ -1,0 +1,30 @@
+{
+  "appId": "world.tapin.app",
+  "appName": "Tap In",
+  "webDir": "www",
+  "server": {
+    "url": "https://www.tap-in.world/app/?source=app",
+    "cleartext": false,
+    "allowNavigation": ["www.tap-in.world", "tap-in.world", "business.tap-in.world"]
+  },
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#2B1B2D"
+  },
+  "android": {
+    "backgroundColor": "#2B1B2D",
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "launchShowDuration": 0,
+      "backgroundColor": "#2B1B2D",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#2B1B2D"
+    }
+  }
+}

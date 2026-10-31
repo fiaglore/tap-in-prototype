@@ -1,0 +1,29 @@
+{
+  "name": "tap-in-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tap In phone app: a Capacitor shell around the Tap In web app (worker/public/app).",
+  "scripts": {
+    "assets": "capacitor-assets generate --android --ios --assetPath assets",
+    "sync": "cap sync",
+    "android:build": "cap sync android && cd android && ./gradlew assembleDebug",
+    "android:open": "cap open android",
+    "ios:open": "cap open ios"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/ios": "^8.6.0",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.4"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^4.0.0",
+    "@capacitor/cli": "^8.6.0"
+  }
+}

@@ -530,6 +530,7 @@ function viewMe() {
       h('p', { class: 'hint', style: 'margin-top:8px' }, 'Signed in as ' + state.user.identifier),
       h('button', { class: 'btn primary small', style: 'margin-top:12px', type: 'submit' }, 'Save name')),
     photoCard(),
+    installCard(),
     state.config.otp_mode === 'demo' && h('div', { class: 'notice warn' }, 'Demo mode: sign-in codes are shown on screen instead of being texted. This is for trying Tap In out.'),
     h('div', { class: 'row' },
       h('a', { class: 'btn ghost', href: '/organiser/' }, 'Organiser console'),
@@ -538,6 +539,23 @@ function viewMe() {
       h('a', { class: 'btn ghost', href: '/privacy/' }, 'Privacy'),
       h('a', { class: 'btn ghost', href: '/terms/' }, 'Terms'),
       h('button', { class: 'btn ghost', type: 'button', onclick: async () => { await post('/auth/logout').catch(() => {}); forgetCache(); state.user = null; state.passes = []; state.waiting = []; flag(false); onboarding('welcome'); } }, 'Sign out'))), { title: 'Me' });
+}
+
+// ---- Install (in a browser only): Tap In on the home screen --------------------------------------------
+let installEvent = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvent = e; if (state.user && state.tab === 'me') render(); });
+window.addEventListener('appinstalled', () => { installEvent = null; if (state.user && state.tab === 'me') render(); });
+const alreadyInstalled = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true || document.documentElement.classList.contains('is-native');
+function installCard() {
+  if (alreadyInstalled()) return null;
+  const onIphone = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const copy = h('p', { class: 'hint', style: 'margin-top:6px' }, 'Opens full screen like an app, and your pass is there with no signal.');
+  if (installEvent) {
+    return h('div', { class: 'card' }, h('h3', {}, 'Put Tap In on your home screen'), copy,
+      h('button', { class: 'btn primary small', style: 'margin-top:12px', type: 'button', onclick: async () => { try { installEvent.prompt(); await installEvent.userChoice; } catch {} installEvent = null; render(); } }, 'Install'));
+  }
+  if (onIphone) return h('div', { class: 'card' }, h('h3', {}, 'Put Tap In on your home screen'), h('p', { class: 'hint', style: 'margin-top:6px' }, 'In Safari, tap Share, then Add to Home Screen.'), copy);
+  return null;
 }
 
 // ---- My photo (shown to door staff only at events that ask for it) -----------------------------------
