@@ -23,15 +23,16 @@
 <meta name="apple-mobile-web-app-title" content="Tap In">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="/css/tapin.css">
-<link rel="stylesheet" href="/site.css">
-<link rel="stylesheet" href="/css/fx.css">
-<link rel="stylesheet" href="/home.css">
-<script src="/js/theme.js"></script>
-<script src="/js/site.js" defer></script>
-<script src="/js/fx.js" defer></script>
-<script src="/js/liquid.js" defer></script>
-<script src="/js/home.js" defer></script>
+<link rel="stylesheet" href="/css/tapin.css?v=7">
+<link rel="stylesheet" href="/site.css?v=7">
+<link rel="stylesheet" href="/css/fx.css?v=7">
+<link rel="stylesheet" href="/home.css?v=7">
+<script src="/js/theme.js?v=7"></script>
+<script src="/js/site.js?v=7" defer></script>
+<script src="/js/fx.js?v=7" defer></script>
+<script src="/js/liquid.js?v=7" defer></script>
+<script src="/js/home.js?v=7" defer></script>
+<script src="/js/livephoto.js?v=7" defer></script>
 </head>
 <body class="home fx">
 <div class="progress" id="progress" aria-hidden="true"><i></i></div>
@@ -50,8 +51,8 @@
 </header>
 
 <main>
-  <section class="lp photo-hero" style="--pos:50% 40%;--pos-m:44% 40%">
-    <div class="lp-stage"><img class="bg" src="/img/beams-bg.webp" width="2000" height="1333" alt="" fetchpriority="high" decoding="async"><img class="fg" src="/img/beams-fg.webp" width="2000" height="1333" alt="A crowd facing a DJ on stage, with beams of light crossing above them" fetchpriority="high" decoding="async"></div>
+  <section class="lp photo-hero" data-live style="--pos:50% 40%;--pos-m:44% 40%">
+    <div class="lp-stage"><img class="bg" src="/img/beams-bg.webp?v=7" width="2000" height="1333" alt="" fetchpriority="high" decoding="async"><img class="fg" src="/img/beams-fg.webp?v=7" width="2000" height="1333" alt="A crowd facing a DJ on stage, with beams of light crossing above them" fetchpriority="high" decoding="async"></div>
     <i class="lp-beam b1"></i><i class="lp-beam b2"></i><i class="lp-beam b3"></i><i class="lp-pulse"></i>
     <div class="lp-copy wrap hero-copy">
       <h1><span class="hl">Tap in.</span> We&rsquo;ve got the gate.</h1>
@@ -74,8 +75,8 @@
     </div>
   </section>
 
-  <section class="lp band" style="--pos:50% 30%" aria-label="Create, share, scan">
-    <div class="lp-stage"><img class="bg" src="/img/hands-bg.webp" width="2000" height="1235" alt="" loading="lazy" decoding="async"><img class="fg" src="/img/hands-fg.webp" width="2000" height="1235" alt="A crowd at a night show with hands raised towards the stage lights" loading="lazy" decoding="async"></div>
+  <section class="lp band" data-live style="--pos:50% 30%" aria-label="Create, share, scan">
+    <div class="lp-stage"><img class="bg" src="/img/hands-bg.webp?v=7" width="2000" height="1235" alt="" loading="lazy" decoding="async"><img class="fg" src="/img/hands-fg.webp?v=7" width="2000" height="1235" alt="A crowd at a night show with hands raised towards the stage lights" loading="lazy" decoding="async"></div>
     <i class="lp-beam b1"></i><i class="lp-beam b2"></i><i class="lp-beam b3"></i><i class="lp-pulse"></i>
     <div class="lp-copy wrap">
       <ol class="words long">
@@ -107,9 +108,9 @@
 
   <section class="wrap sec rv">
     <div class="portals">
-      <a class="portal spot" href="/organiser/"><p class="eyebrow">Ready?</p><h3>Organiser console</h3><span class="more">Sign in or start &rarr;</span></a>
-      <a class="portal spot" href="/play/"><p class="eyebrow">Going out?</p><h3>Find an event</h3><span class="more">Upcoming events &rarr;</span></a>
-      <a class="portal spot" href="/business/"><p class="eyebrow">Offices</p><h3>Tap In for Business</h3><span class="more">Staff and visitor check-in &rarr;</span></a>
+      <a class="portal spot" href="/organiser/"><h3>Organiser console</h3><span class="more">Sign in or start &rarr;</span></a>
+      <a class="portal spot" href="/play/"><h3>Find an event</h3><span class="more">Upcoming events &rarr;</span></a>
+      <a class="portal spot" href="/business/"><h3>Tap In for Business</h3><span class="more">Staff and visitor check-in &rarr;</span></a>
     </div>
   </section>
 
