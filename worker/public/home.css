@@ -345,6 +345,8 @@ body.entered .photo-hero{animation:push 1.7s cubic-bezier(.2,.7,.2,1) both}
 .lp-copy{position:absolute;left:0;right:0;bottom:0;z-index:2;padding-block:clamp(26px,6vh,72px);display:grid;gap:clamp(14px,2.6vh,26px)}
 .lp-copy h1,.lp-copy h2{margin:0;color:#fff;text-wrap:balance;text-shadow:0 2px 30px rgba(13,7,15,.55)}
 .lp-copy h1{font-size:clamp(40px,7.4vw,104px);line-height:.96}
+.lp-copy h1.steps{display:block;font-size:clamp(30px,5.6vw,84px);line-height:1.04}
+.lp-copy h1.steps .ln{display:block;white-space:nowrap}
 .lp-copy .hl{background:linear-gradient(90deg,#e0d4f5,#9db8ff);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;text-shadow:none}
 .lp-copy .lede{color:#e4d9ee;font-size:clamp(17px,2.2vw,22px);margin:0}
 .lp-copy .btn.ghost{color:#fff;border-color:rgba(255,255,255,.42);background:rgba(18,9,18,.36);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
