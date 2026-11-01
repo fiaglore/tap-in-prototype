@@ -341,7 +341,7 @@ body.entered .photo-hero{animation:push 1.7s cubic-bezier(.2,.7,.2,1) both}
 .lp-pulse{position:absolute;inset:0;pointer-events:none;background:radial-gradient(60% 70% at 50% 35%,color-mix(in srgb,#b5a0cc 55%,transparent),transparent 70%);mix-blend-mode:screen;opacity:0;animation:lpbeat 1.936s ease-in-out infinite}
 @keyframes lpbeat{0%,100%{opacity:.04}12%{opacity:.3}40%{opacity:.08}}
 .lp::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(90deg,rgba(0,0,0,.7),rgba(0,0,0,.12) 58%,transparent),linear-gradient(0deg,rgba(0,0,0,.68),transparent 48%)}
-.lp.tall::after{background:linear-gradient(0deg,rgba(13,7,15,.45),transparent 40%)}
+.lp.tall::after{background:linear-gradient(0deg,rgba(0,0,0,.45),transparent 40%)}
 .lp-copy{position:absolute;left:0;right:0;bottom:0;z-index:2;padding-block:clamp(26px,6vh,72px);display:grid;gap:clamp(14px,2.6vh,26px)}
 .lp-copy h1,.lp-copy h2{margin:0;color:#fff;text-wrap:balance;text-shadow:0 2px 30px rgba(13,7,15,.55)}
 .lp-copy h1{font-size:clamp(40px,7.4vw,104px);line-height:.96}
@@ -377,6 +377,8 @@ body.entered .photo-hero{animation:push 1.7s cubic-bezier(.2,.7,.2,1) both}
 .fine{font-size:13px;color:var(--muted);max-width:72ch;margin:12px 0 0}
 @media(max-width:760px){.split,.six,.portals{grid-template-columns:1fr}.lp.tall{aspect-ratio:4/5}.photo-hero{height:clamp(520px,calc(100svh - 64px),760px)}.lp-stage img{object-position:var(--pos-m,var(--pos,50% 40%))}.sec{padding-top:36px}}
 @media(max-width:560px){.words.long b{font-size:5.5vw}}
+.words.kinds b{font-size:clamp(22px,3vw,46px)}.words.kinds span{white-space:nowrap}
+@media(max-width:760px){.words.kinds{grid-template-columns:1fr;gap:14px}.words.kinds b{font-size:clamp(22px,6.2vw,34px)}.words.kinds li{grid-template-columns:auto auto;justify-content:start;align-items:baseline;gap:10px}}
 @media(prefers-reduced-motion:reduce){.lp-stage,.lp-stage .bg,.lp-stage .fg,.lp-beam,.lp-pulse{animation:none!important}.lp-pulse{opacity:.06}}
 
 /* photos show as shot: no coloured beams or glow laid over them */
