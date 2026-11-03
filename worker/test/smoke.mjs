@@ -2,6 +2,8 @@
 // Run with: node test/smoke.mjs
 import assert from 'node:assert/strict';
 import { PEPPER, client, makeEnv, signIn } from './harness.mjs';
+// The sample event starts 60 days from now, and invite codes carry its two-digit year, so the expected year moves with the calendar.
+const EVENT_YY = String(new Date(Date.now() + 60 * 86400e3).getUTCFullYear()).slice(-2);
 import { makeInviteCode, makeOtp, parsePassToken, passToken } from '../src/lib/codes.js';
 
 let passed = 0;
@@ -198,7 +200,7 @@ await test('invite codes have the expected shape, are unique, and never appear i
   vipCodes = r.body.codes;
   assert.equal(vipCodes.length, 40);
   assert.equal(new Set(vipCodes).size, 40);
-  for (const c of vipCodes) assert.match(c, /^PGF-26-VIP-[0-9A-Z]{4}-[0-9A-Z]{4}$/);
+  for (const c of vipCodes) assert.match(c, new RegExp('^PGF-' + EVENT_YY + '-VIP-[0-9A-Z]{4}-[0-9A-Z]{4}$'));
   const db = dump();
   for (const c of vipCodes) {
     assert.ok(!db.includes(c), 'plain code found in database');
@@ -221,7 +223,7 @@ await test('a 500-code batch is created in one statement', async () => {
   const r = await org.post('/api/events/' + eventId + '/invites', { tier_id: tiers['General Admission'].id, count: 500 });
   assert.equal(r.status, 201);
   assert.equal(new Set(r.body.codes).size, 500);
-  assert.match(r.body.codes[0], /^PGF-26-GA-/);
+  assert.match(r.body.codes[0], new RegExp('^PGF-' + EVENT_YY + '-GA-'));
 });
 await test('code generation: 5,000 codes, no repeats, all 40 random bits in play', async () => {
   const seen = new Set();
