@@ -20,6 +20,7 @@ export function makeEnv(extra = {}) {
     SECRET_PEPPER: PEPPER,
     OTP_MODE: 'demo',
     PAYMENTS_MODE: 'demo',
+    TICKET_CHECKOUT: 'demo',
     ORGANISER_IDENTIFIERS: '',
     ASSETS: { fetch: async () => new Response('asset', { status: 200 }) },
     ...extra

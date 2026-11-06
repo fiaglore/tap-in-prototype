@@ -1,6 +1,7 @@
 // Public sales page: anyone can see an event's ticket types and prices; buying needs a signed-in
-// session so the ticket can be attached to someone. This is a demo checkout — no real payment is
-// taken, it just mints an invite and claims it straight to the buyer's account.
+// session so the ticket can be attached to someone. Free ticket types are claimed straight to the buyer's
+// account. Paid ones are refused (402) until a payment provider confirms payment; TICKET_CHECKOUT=demo
+// (development and tests only) lets them through without taking money.
 
 import { HttpError, newId, nowSec } from '../lib/util.js';
 import { json, readJson } from '../lib/http.js';
@@ -58,8 +59,13 @@ export async function buy({ request, env, user, params }) {
   const state = salesState(ev, nowSec());
   if (state === 'upcoming') throw new HttpError(409, 'sales_not_open', 'Ticket sales have not opened yet.');
   if (state === 'closed') throw new HttpError(409, 'sales_closed', 'Ticket sales for this event have closed.');
-  const tier = await env.DB.prepare('SELECT id, name, capacity FROM tiers WHERE id = ?1 AND event_id = ?2').bind(b.tier_id, ev.id).first();
+  const tier = await env.DB.prepare('SELECT id, name, capacity, price_kobo FROM tiers WHERE id = ?1 AND event_id = ?2').bind(b.tier_id, ev.id).first();
   if (!tier) throw new HttpError(400, 'invalid_tier', 'Choose a ticket type.');
+  // A paid ticket is never issued without a verified payment. Until a payment provider is connected (Phase 1),
+  // only free ticket types can be taken here. TICKET_CHECKOUT=demo is for local development and tests only.
+  if (tier.price_kobo > 0 && String(env.TICKET_CHECKOUT || 'off').toLowerCase() !== 'demo') {
+    throw new HttpError(402, 'payment_not_connected', 'Online payment is not open yet, so this paid ticket cannot be bought here. Ask the organiser for an invite code.');
+  }
 
   const qty = b.qty === undefined ? 1 : Number.parseInt(b.qty, 10);
   if (!Number.isInteger(qty) || qty < 1 || qty > MAX_QTY) {
