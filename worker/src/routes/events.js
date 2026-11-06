@@ -75,6 +75,25 @@ async function saveDiscoveryFields(env, eventId, fields) {
   await env.DB.prepare(`UPDATE events SET ${keys.map((k, i) => `${k} = ?${i + 1}`).join(', ')} WHERE id = ?${keys.length + 1}`).bind(...keys.map((k) => fields[k]), eventId).run();
 }
 
+// The owner, or someone the owner added as a team member with at least one of `roles`. Returns the event plus `role`
+// ("owner", "viewer" or "security"). Anyone else gets "not found". Owner-only actions keep using ownedEvent.
+export async function accessibleEvent(env, user, id, roles = ['viewer', 'security']) {
+  const owned = await env.DB.prepare(`SELECT id FROM events WHERE id = ?1 AND owner_id = ?2`).bind(String(id).slice(0, 40), user.id).first();
+  if (owned) return { ...(await ownedEvent(env, user, id)), role: 'owner' };
+  const ids = [user.email, user.phone].filter(Boolean);
+  if (ids.length) {
+    const m = await env.DB.prepare(
+      `SELECT e.id, e.owner_id, m.role FROM event_members m JOIN events e ON e.id = m.event_id
+       WHERE e.id = ?1 AND m.identifier IN (${ids.map((_, i) => '?' + (i + 2)).join(',')})`
+    ).bind(String(id).slice(0, 40), ...ids).first();
+    if (m && roles.includes(m.role)) {
+      const ev = await ownedEvent(env, { id: m.owner_id }, id);
+      return { ...ev, gate_key_hint: null, role: m.role };
+    }
+  }
+  throw new HttpError(404, 'not_found', 'Event not found.');
+}
+
 const publicEvent = (e) => ({
   id: e.id,
   name: e.name,
@@ -272,7 +291,17 @@ export async function listEvents({ env, user, url }) {
     )
       .bind(user.id, kind === 'event' || kind === 'workplace' ? kind : null)
       .all()
-  ).results;
+  ).results.map((r) => ({ ...r, role: 'owner' }));
+  // Offices where the owner added this person to the team.
+  const ids = [user.email, user.phone].filter(Boolean);
+  if (ids.length) {
+    const shared = (await env.DB.prepare(
+      `SELECT e.id, e.name, e.kind, e.venue, e.city, e.starts_at, e.created_at, m.role
+       FROM event_members m JOIN events e ON e.id = m.event_id
+       WHERE m.identifier IN (${ids.map((_, i) => '?' + (i + 2)).join(',')}) AND (?1 IS NULL OR e.kind = ?1) ORDER BY e.created_at DESC`
+    ).bind(kind === 'event' || kind === 'workplace' ? kind : null, ...ids).all()).results;
+    for (const r of shared) if (!rows.some((x) => x.id === r.id)) rows.push({ ...r, registered: 0, checked_in: 0, invites_open: 0 });
+  }
   return json({ events: rows });
 }
 
@@ -339,8 +368,9 @@ async function stats(env, eventId) {
 
 // GET /api/events/:id
 export async function getEvent({ env, user, params }) {
-  const ev = await ownedEvent(env, user, params.id);
+  const ev = await accessibleEvent(env, user, params.id);
   return json({
+    role: ev.role,
     event: publicEvent(ev),
     ...(await structure(env, ev.id)),
     stats: await stats(env, ev.id),
@@ -528,7 +558,7 @@ export async function deleteZone({ env, user, params }) {
 
 // GET /api/events/:id/scans?limit=
 export async function listScans({ env, user, params, url }) {
-  const ev = await ownedEvent(env, user, params.id);
+  const ev = await accessibleEvent(env, user, params.id);
   return json({ scans: await recentScans(env, ev.id, clamp(url.searchParams.get('limit'), 1, 100, 25)) });
 }
 
@@ -642,13 +672,14 @@ export async function revokeInvite({ env, user, params }) {
 
 // GET /api/events/:id/attendees
 export async function listAttendees({ env, user, params }) {
-  const ev = await ownedEvent(env, user, params.id);
+  const ev = await accessibleEvent(env, user, params.id);
   const rows = (
     await env.DB.prepare(
-      `SELECT p.id, p.status, p.created_at, p.expires_at, t.name AS tier, u.name, u.phone, u.email,
+      `SELECT p.id, p.status, p.created_at, p.expires_at, t.name AS tier, u.name, u.phone, u.email, d.name AS department, i.employee_ref, i.department_id,
         (SELECT MIN(s.at) FROM scans s WHERE s.pass_id = p.id AND s.result = 'granted') AS first_entry,
         EXISTS (SELECT 1 FROM user_photos ph WHERE ph.user_id = p.user_id) AS has_photo
        FROM passes p JOIN users u ON u.id = p.user_id JOIN tiers t ON t.id = p.tier_id
+       LEFT JOIN invites i ON i.id = p.invite_id LEFT JOIN departments d ON d.id = i.department_id
        WHERE p.event_id = ?1 ORDER BY p.created_at DESC LIMIT 500`
     )
       .bind(ev.id)
@@ -664,6 +695,9 @@ export async function listAttendees({ env, user, params }) {
       registered_at: r.created_at,
       expires_at: r.expires_at,
       has_photo: !!r.has_photo, // whether one exists; the picture itself is never listed
+      department: r.department || null,
+      department_id: r.department_id || null,
+      employee_ref: r.employee_ref || null,
       first_entry: r.first_entry
     }))
   });
@@ -728,7 +762,14 @@ export async function addPeople({ request, env, user, params }) {
       continue;
     }
     const label = cleanText(p?.name, 'name', { optional: true, max: 60 });
-    await mintInvites(env, ev, tier, 1, { label, bound: id.value, accessUntil });
+    const dept = p?.department_id || b.department_id || null;
+    if (dept && !(await env.DB.prepare('SELECT 1 AS x FROM departments WHERE id = ?1 AND event_id = ?2').bind(String(dept), ev.id).first())) {
+      skipped.push({ contact: id.value, reason: 'That department does not exist.' });
+      continue;
+    }
+    const ref = cleanText(p?.employee_ref, 'employee ID', { optional: true, max: 40 });
+    const made = await mintInvites(env, ev, tier, 1, { label, bound: id.value, accessUntil });
+    if (dept || ref) await env.DB.prepare('UPDATE invites SET department_id = ?2, employee_ref = ?3 WHERE id = ?1').bind(made.ids[0], dept, ref).run();
     added.push({ contact: id.value, name: label });
   }
   return json({ tier: tier.name, added, skipped }, 201);

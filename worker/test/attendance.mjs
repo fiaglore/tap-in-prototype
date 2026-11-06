@@ -109,12 +109,12 @@ await test('CSV exports: daily rows, one row per person, and the visitor log', a
   assert.equal(daily.status, 200);
   assert.match(daily.headers.get('content-disposition'), /attachment; filename="tap-in-.*-daily-2026-10-12-to-2026-10-18\.csv"/);
   const lines = daily.body.trim().split('\r\n');
-  assert.equal(lines[0], 'Date,Day,Name,Phone or email,Group,First scan,Last seen,Scans,Late,First door');
+  assert.equal(lines[0], 'Date,Day,Name,Phone or email,Group,First scan,Last seen,Scans,Late,First door,Employee ID,Department');
   assert.equal(lines.length, 1 + 5, 'Ada 3 days, Bola 1, Sam 1');
-  assert.ok(lines.includes('2026-10-13,Tue,Ada Obi,ada@attend.test,Staff,07:20,07:20,1,Yes,Front door'));
+  assert.ok(lines.includes('2026-10-13,Tue,Ada Obi,ada@attend.test,Staff,07:20,07:20,1,Yes,Front door,,'));
   const summary = (await get('summary')).body.trim().split('\r\n');
-  assert.equal(summary[0], 'Name,Phone or email,Group,Group starts,Days in,Days expected,Attendance %,Late days,Average arrival,Access');
-  assert.ok(summary.includes('Ada Obi,ada@attend.test,Staff,07:00,3,5,60,1,07:08,Active'));
+  assert.equal(summary[0], 'Name,Phone or email,Group,Group starts,Days in,Days expected,Attendance %,Late days,Average arrival,Access,Employee ID,Department');
+  assert.ok(summary.includes('Ada Obi,ada@attend.test,Staff,07:00,3,5,60,1,07:08,Active,,'));
   const vis = (await get('visitors')).body.split('\r\n')[0];
   assert.equal(vis, 'Date,Visitor,Phone or email,Visiting,Reason,How,Arrived,Door,Group');
 });

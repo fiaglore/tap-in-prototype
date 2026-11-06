@@ -4,7 +4,7 @@
 
 import { HttpError } from '../lib/util.js';
 import { json } from '../lib/http.js';
-import { ownedEvent } from './events.js';
+import { accessibleEvent } from './events.js';
 
 const MAX_DAYS = 92;
 const MAX_SCANS = 200_000;
@@ -55,7 +55,7 @@ export function buildAttendance({ fromDay, toDay, tz, grace, people, visitors, s
       perDay[dateOfDay(d)] = { first: hhmm(first), last: hhmm(minuteOf(v.last)), scans: v.scans, late: isLate, door: v.door, scheduled };
     }
     return {
-      id: p.id, name: p.name || 'Guest', contact: p.contact, group: p.group, starts: always(p) ? null : hhmm(p.from_min), status: p.status,
+      id: p.id, name: p.name || 'Guest', contact: p.contact, group: p.group, department: p.department || null, employee_ref: p.employee_ref || null, starts: always(p) ? null : hhmm(p.from_min), status: p.status,
       days_present: present, expected_days: expected, attendance_pct: expected ? Math.round((Math.min(present, expected) / expected) * 1000) / 10 : null,
       late_days: late, avg_arrival: present ? hhmm(Math.round(arrivalSum / present)) : null, days: perDay
     };
@@ -98,7 +98,7 @@ export function buildAttendance({ fromDay, toDay, tz, grace, people, visitors, s
 }
 
 async function load(env, user, params, url) {
-  const ev = await ownedEvent(env, user, params.id);
+  const ev = await accessibleEvent(env, user, params.id);
   if (ev.kind !== 'workplace') throw new HttpError(400, 'not_an_office', 'Attendance is for Tap In for Business offices.');
   const { tz_offset_min: tz } = await env.DB.prepare('SELECT tz_offset_min FROM events WHERE id = ?1').bind(ev.id).first();
   const today = Math.floor((Date.now() / 1000 + tz * 60) / 86400);
@@ -112,8 +112,9 @@ async function load(env, user, params, url) {
   const end = (toDay + 1) * 86400 - tz * 60;
   const [people, visitors, scans, waiting] = await Promise.all([
     env.DB.prepare(
-      `SELECT p.id, p.status, u.name, COALESCE(u.phone, u.email) AS contact, t.name AS "group", t.days_mask, t.from_min, t.to_min
-       FROM passes p JOIN users u ON u.id = p.user_id JOIN tiers t ON t.id = p.tier_id WHERE p.event_id = ?1`
+      `SELECT p.id, p.status, u.name, COALESCE(u.phone, u.email) AS contact, t.name AS "group", t.days_mask, t.from_min, t.to_min, d.name AS department, i.employee_ref
+       FROM passes p JOIN users u ON u.id = p.user_id JOIN tiers t ON t.id = p.tier_id
+       LEFT JOIN invites i ON i.id = p.invite_id LEFT JOIN departments d ON d.id = i.department_id WHERE p.event_id = ?1`
     ).bind(ev.id).all(),
     env.DB.prepare(
       `SELECT g.id, g.name, g.contact, g.host, g.purpose, g.walk_in, g.valid_from, g.status, t.name AS "group"
@@ -126,7 +127,19 @@ async function load(env, user, params, url) {
     // People given access by phone or email who have not added their pass yet.
     env.DB.prepare("SELECT COUNT(*) AS n FROM invites WHERE event_id = ?1 AND status = 'unused' AND bound_identifier IS NOT NULL").bind(ev.id).first()
   ]);
-  const report = buildAttendance({ fromDay, toDay, tz, grace, people: people.results, visitors: visitors.results, scans: scans.results });
+  const dept = (url.searchParams.get('department') || '').trim().slice(0, 60);
+  const rows = dept ? people.results.filter((p) => (dept === '(none)' ? !p.department : p.department === dept)) : people.results;
+  const report = buildAttendance({ fromDay, toDay, tz, grace, people: rows, visitors: visitors.results, scans: scans.results });
+  // A roll-up per department over the whole range, so a manager can compare teams.
+  const roll = new Map();
+  for (const p of report.people) {
+    const k = p.department || '(none)';
+    const r = roll.get(k) || { department: k, people: 0, days_present: 0, expected_days: 0, late_days: 0 };
+    r.people++; r.days_present += p.days_present; r.expected_days += p.expected_days; r.late_days += p.late_days;
+    roll.set(k, r);
+  }
+  report.by_department = [...roll.values()].map((r) => ({ ...r, attendance_pct: r.expected_days ? Math.round((Math.min(r.days_present, r.expected_days) / r.expected_days) * 1000) / 10 : null })).sort((a, b) => a.department.localeCompare(b.department));
+  report.department_filter = dept || null;
   report.summary.not_set_up = waiting.n;
   return { ev, report };
 }
@@ -147,14 +160,14 @@ export async function attendanceCsv({ env, user, params, url }) {
   const type = ['daily', 'summary', 'visitors'].includes(url.searchParams.get('type')) ? url.searchParams.get('type') : 'daily';
   let rows;
   if (type === 'summary') {
-    rows = [['Name', 'Phone or email', 'Group', 'Group starts', 'Days in', 'Days expected', 'Attendance %', 'Late days', 'Average arrival', 'Access']]
-      .concat(r.people.map((p) => [p.name, p.contact, p.group, p.starts || 'Any time', p.days_present, p.expected_days, p.attendance_pct ?? '', p.late_days, p.avg_arrival || '', p.status === 'active' ? 'Active' : 'Removed']));
+    rows = [['Name', 'Phone or email', 'Group', 'Group starts', 'Days in', 'Days expected', 'Attendance %', 'Late days', 'Average arrival', 'Access', 'Employee ID', 'Department']]
+      .concat(r.people.map((p) => [p.name, p.contact, p.group, p.starts || 'Any time', p.days_present, p.expected_days, p.attendance_pct ?? '', p.late_days, p.avg_arrival || '', p.status === 'active' ? 'Active' : 'Removed', p.employee_ref, p.department]));
   } else if (type === 'visitors') {
     rows = [['Date', 'Visitor', 'Phone or email', 'Visiting', 'Reason', 'How', 'Arrived', 'Door', 'Group']]
       .concat(r.visitors.map((v) => [v.date, v.name, v.contact, v.host, v.purpose, v.walk_in ? 'Walk-in' : 'Invited', v.arrived || 'Did not arrive', v.door, v.group]));
   } else {
-    rows = [['Date', 'Day', 'Name', 'Phone or email', 'Group', 'First scan', 'Last seen', 'Scans', 'Late', 'First door']];
-    for (const d of r.days) for (const p of r.people) { const x = p.days[d.date]; if (x) rows.push([d.date, d.weekday, p.name, p.contact, p.group, x.first, x.last, x.scans, x.late ? 'Yes' : 'No', x.door]); }
+    rows = [['Date', 'Day', 'Name', 'Phone or email', 'Group', 'First scan', 'Last seen', 'Scans', 'Late', 'First door', 'Employee ID', 'Department']];
+    for (const d of r.days) for (const p of r.people) { const x = p.days[d.date]; if (x) rows.push([d.date, d.weekday, p.name, p.contact, p.group, x.first, x.last, x.scans, x.late ? 'Yes' : 'No', x.door, p.employee_ref, p.department]); }
   }
   const file = `tap-in-${(ev.prefix || 'office').toLowerCase()}-${type}-${r.range.from}-to-${r.range.to}.csv`;
   return new Response(rows.map((row) => row.map(cell).join(',')).join('\r\n') + '\r\n', {

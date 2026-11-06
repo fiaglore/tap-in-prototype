@@ -3,6 +3,7 @@ import { get, post, patch, del } from '/js/api.js';
 import { signInFlow } from '/js/auth-ui.js?v=2';
 import { qrSvg } from '/js/qr.js';
 import { mfaVerify } from '/js/mfa-ui.js';
+import { developersPage, tabDepartments, tabIncidents, tabOnSite, tabPeopleReadOnly, tabTeamAccess } from './business.js';
 
 const OFFICE = document.body.dataset.console === 'office';
 const CONSOLE = OFFICE ? 'Offices' : 'Organiser';
@@ -77,6 +78,7 @@ function route() {
   const parts = (location.hash.replace(/^#\/?/, '') || '').split('/').filter(Boolean);
   if (!parts.length) return viewEvents();
   if (parts[0] === 'new') return viewNew('', undefined, OFFICE);
+  if (parts[0] === 'developers') return viewDevelopers();
   if (parts[0] === 'e' && parts[1]) return viewEvent(parts[1], parts[2] || 'overview');
   viewEvents();
 }
@@ -90,7 +92,7 @@ function layout(items, content) {
       : h('a', { href: i.href, 'aria-current': i.on ? 'page' : null }, i.text))),
     h('div', { class: 'main' }, content));
 }
-const listNav = (on) => [{ href: '#/', text: OFFICE ? 'Your offices' : 'Your events', on: on === 'list' }, { href: '#/new', text: OFFICE ? 'New office' : 'New event', on: on === 'new' }, { href: '/gate/', text: 'Open scanner' }];
+const listNav = (on) => [{ href: '#/', text: OFFICE ? 'Your offices' : 'Your events', on: on === 'list' }, { href: '#/new', text: OFFICE ? 'New office' : 'New event', on: on === 'new' }, { href: '#/developers', text: 'Developers', on: on === 'dev' }, { href: '/gate/', text: 'Open scanner' }];
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const fail = (ex) => {
@@ -113,6 +115,14 @@ async function viewEvents() {
             h('div', { class: 'row', style: 'margin-top:12px' }, h('span', { class: 'chip' }, e.registered + (e.kind === 'workplace' ? ' people' : ' registered')), h('span', { class: 'chip ok' }, e.checked_in + (e.kind === 'workplace' ? ' seen' : ' checked in')), h('span', { class: 'chip' }, e.invites_open + (e.kind === 'workplace' ? ' waiting to join' : ' invites open'))))))
         : h('div', { class: 'card', style: 'margin-top:18px;text-align:center;padding:40px' }, h('p', {}, OFFICE ? 'No offices yet.' : 'No events yet.'), h('a', { class: 'btn primary', style: 'margin-top:14px', href: '#/new' }, OFFICE ? 'Set up your first office' : 'Create your first event')))));
   } catch (ex) { fail(ex); }
+}
+
+// ---- Developers: API keys and webhook addresses ---------------------------------------------------------------
+function viewDevelopers() {
+  document.title = 'Developers · Tap In';
+  const box = h('div', {});
+  mount(main, layout(listNav('dev'), h('div', {}, h('h1', { style: 'font-size:34px' }, 'Developers'), h('p', { class: 'muted', style: 'margin:4px 0 16px' }, 'Connect your own systems to Tap In. Keys belong to the account you are signed in with.'), box)));
+  developersPage(box);
 }
 
 // ---- Create event -------------------------------------------------------------------------------------
@@ -246,9 +256,13 @@ async function viewEvent(id, tab) {
     document.title = data.event.name + ' · Tap In';
     const office = data.event.kind === 'workplace';
     if (office !== OFFICE) { location.replace((office ? '/offices/' : '/organiser/') + '#/e/' + id); return; }
-    const tabs = office
-      ? [['overview', 'Overview'], ['edit', 'Edit details'], ['visitors', 'Visitors'], ['attendance', 'Attendance'], ['people', 'Add people'], ['attendees', 'Who has access'], ['team', 'Door staff'], ['report', 'Report'], ['gate', 'Doors & key']]
+    const owner = !data.role || data.role === 'owner';
+    // Team members added by the owner see a smaller console: reports, and for security staff the on-site list and incidents.
+    const memberTabs = [['attendance', 'Attendance'], ['people', 'Who has access'], ...(data.role === 'security' ? [['onsite', 'On site now']] : []), ['incidents', 'Incidents']];
+    const tabs = !owner ? memberTabs : office
+      ? [['overview', 'Overview'], ['edit', 'Edit details'], ['visitors', 'Visitors'], ['onsite', 'On site now'], ['attendance', 'Attendance'], ['people', 'Add people'], ['departments', 'Departments'], ['attendees', 'Who has access'], ['incidents', 'Incidents'], ['team', 'Door staff'], ['access', 'Team access'], ['report', 'Report'], ['gate', 'Doors & key']]
       : [['overview', 'Overview'], ['edit', 'Edit details'], ['tickets', 'Tickets'], ['sales', 'Sales & discounts'], ['guests', 'Guest list'], ['invites', 'Invite codes'], ['attendees', 'Attendees'], ['team', 'Gate team'], ['report', 'Report'], ['gate', 'Gate key & rules']];
+    if (!tabs.some(([k]) => k === tab)) { location.replace(`#/e/${id}/${tabs[0][0]}`); return; }
     const items = [{ href: '#/', text: OFFICE ? '\u2190 All offices' : '\u2190 All events' }, { label: data.event.name }]
       .concat(tabs.map(([k, label]) => ({ href: `#/e/${id}/${k}`, text: label, on: tab === k })))
       .concat([{ href: '/gate/', text: 'Open scanner' }]);
@@ -259,7 +273,7 @@ async function viewEvent(id, tab) {
         // A private event with only free tickets has no sales page worth sharing: guests come in by invitation.
         !office && (data.event.listed || data.tiers.some((t) => t.price_kobo > 0)) && h('button', { class: 'btn ghost small', type: 'button', onclick: () => copy(location.origin + '/e/?id=' + id, 'Sales page link copied') }, 'Copy sales page link')),
       body)));
-    ({ overview: tabOverview, tickets: tabTickets, sales: tabSales, invites: tabInvites, people: tabPeople, attendees: tabAttendees, team: tabTeam, report: tabReport, guests: tabGuests, edit: tabEdit, visitors: tabVisitors, attendance: tabAttendance, gate: tabGate }[tab] || tabOverview)(body, data);
+    ({ overview: tabOverview, onsite: tabOnSite, departments: tabDepartments, incidents: tabIncidents, access: tabTeamAccess, tickets: tabTickets, sales: tabSales, invites: tabInvites, people: owner ? tabPeople : tabPeopleReadOnly, attendees: tabAttendees, team: tabTeam, report: tabReport, guests: tabGuests, edit: tabEdit, visitors: tabVisitors, attendance: tabAttendance, gate: tabGate }[tab] || tabOverview)(body, data);
   } catch (ex) { fail(ex); }
 }
 
@@ -309,6 +323,9 @@ async function tabPeople(body, data) {
   const group = h('select', { class: 'input', id: 'grp' }, data.tiers.map((t) => h('option', { value: t.id }, `${t.name} (${schedText(t.schedule)})`)));
   const lines = h('textarea', { class: 'input', id: 'ppl', rows: '7', placeholder: 'tolu@company.com, Tolu Adeyemi\n0803 412 7790, Chidi\nngozi@company.com' });
   const until = h('input', { class: 'input', id: 'unt', type: 'datetime-local' });
+  let deps = [];
+  try { deps = (await get(`/events/${id}/departments`)).departments; } catch { deps = []; }
+  const dept = h('select', { class: 'input', id: 'dep' }, h('option', { value: '' }, 'No department'), deps.map((d) => h('option', { value: d.id }, d.name)));
   const out = h('div', {});
   const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Give access');
   body.append(h('form', { class: 'card', onsubmit: async (e) => {
@@ -316,7 +333,7 @@ async function tabPeople(body, data) {
     btn.disabled = true;
     const people = lines.value.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => { const i = l.search(/[,;\t]/); return i < 0 ? { contact: l } : { contact: l.slice(0, i).trim(), name: l.slice(i + 1).trim() || undefined }; });
     try {
-      const r = await post(`/events/${id}/people`, { tier_id: group.value, people, access_until: until.value ? new Date(until.value).toISOString() : undefined });
+      const r = await post(`/events/${id}/people`, { tier_id: group.value, people, department_id: dept.value || undefined, access_until: until.value ? new Date(until.value).toISOString() : undefined });
       mount(out, h('div', { class: 'card', style: 'margin-top:14px;border-color:var(--signal)' },
         h('h3', {}, `${r.added.length} ${r.added.length === 1 ? 'person' : 'people'} added to ${r.tier}`),
         h('p', { class: 'muted', style: 'margin-top:6px' }, 'They will see the invite in their Tap In app once they sign in with that phone number or email. Nothing to send.'),
@@ -329,6 +346,7 @@ async function tabPeople(body, data) {
   } },
     h('h3', {}, 'Give people access'),
     h('div', { class: 'field' }, h('label', { for: 'grp' }, 'Access group'), group),
+    deps.length > 0 && h('div', { class: 'field' }, h('label', { for: 'dep' }, 'Department (optional)'), dept),
     h('div', { class: 'field' }, h('label', { for: 'ppl' }, 'People (one per line: phone or email, then a name if you like)'), lines),
     h('div', { class: 'field' }, h('label', { for: 'unt' }, 'Access ends (optional, for visitors and contractors)'), until),
     h('p', { class: 'hint' }, 'Up to 200 at a time. Remove someone later from \u201cWho has access\u201d and their pass stops working at once.'),
@@ -1158,7 +1176,10 @@ async function tabAttendance(body, data) {
   const graceIn = h('input', { class: 'input', type: 'number', min: '0', max: '240', value: String(grace), style: 'width:90px', 'aria-label': 'Grace minutes' });
   const presets = h('div', { class: 'row noprint' });
   const out = h('div', {});
-  const qs = () => `from=${from}&to=${to}&grace=${grace}`;
+  let dept = '';
+  const deptSel = h('select', { class: 'input', style: 'width:auto', 'aria-label': 'Department', onchange: (e) => { dept = e.target.value; load(); } }, h('option', { value: '' }, 'All departments'));
+  let deptsKnown = false;
+  const qs = () => `from=${from}&to=${to}&grace=${grace}${dept ? '&department=' + encodeURIComponent(dept) : ''}`;
 
   function drawPresets() {
     mount(presets, [['week', 'This week'], ['last7', 'Last 7 days'], ['lastweek', 'Last week'], ['month', 'This month'], ['lastmonth', 'Last month']].map(([k, l]) =>
@@ -1169,6 +1190,10 @@ async function tabAttendance(body, data) {
     mount(out, h('p', { class: 'muted', style: 'margin-top:14px' }, 'Working it out…'));
     let r;
     try { r = await get(`/events/${id}/attendance?${qs()}`); } catch (ex) { return mount(out, h('div', { class: 'error', style: 'margin-top:14px' }, ex.message)); }
+    if (!deptsKnown && r.by_department.some((d) => d.department !== '(none)')) {
+      deptsKnown = true;
+      for (const d of r.by_department) deptSel.append(h('option', { value: d.department }, d.department === '(none)' ? 'No department' : d.department));
+    }
     const s = r.summary;
     const showGrid = r.days.length <= 14;
     const dmax = Math.max(1, ...r.days.map((d) => d.expected || d.present));
@@ -1182,12 +1207,16 @@ async function tabAttendance(body, data) {
         h('div', { class: 'scroll-x' }, h('table', { style: 'margin-top:8px' },
           h('thead', {}, h('tr', {}, ['Day', 'Expected', 'In', 'Late', 'Visitors'].map((c) => h('th', {}, c)))),
           h('tbody', {}, r.days.map((d) => h('tr', { class: d.expected ? '' : 'muted' }, h('td', {}, `${d.weekday} ${d.date.slice(5)}`), h('td', { class: 'mono' }, String(d.expected)), h('td', { class: 'mono' }, String(d.present)), h('td', { class: 'mono' }, String(d.late)), h('td', { class: 'mono' }, String(d.visitors)))))))),
+      r.by_department.some((d) => d.department !== '(none)') && !dept && h('div', { class: 'card', style: 'margin-top:14px' }, h('h3', {}, 'By department'),
+        h('div', { class: 'scroll-x' }, h('table', { style: 'margin-top:8px' }, h('thead', {}, h('tr', {}, ['Department', 'People', 'Days in', 'Attendance', 'Late days'].map((c) => h('th', {}, c)))),
+          h('tbody', {}, r.by_department.map((d) => h('tr', {}, h('td', {}, h('strong', {}, d.department === '(none)' ? 'No department' : d.department)), h('td', { class: 'mono' }, String(d.people)), h('td', { class: 'mono' }, `${d.days_present}/${d.expected_days}`), h('td', { class: 'mono' }, d.attendance_pct === null ? '—' : d.attendance_pct + '%'), h('td', { class: 'mono' }, String(d.late_days)))))))),
       h('div', { class: 'card', style: 'margin-top:14px' }, h('h3', {}, 'People'),
         h('p', { class: 'hint', style: 'margin-top:4px' }, 'First scan of the day is the arrival time. There is no exit scan, so "last seen" is the last time they used a door, not when they left.' + (showGrid ? '' : ' Pick 14 days or fewer to see arrival times day by day.')),
         r.people.length ? h('div', { class: 'scroll-x' }, h('table', { class: 'att-table' },
-          h('thead', {}, h('tr', {}, ['Name', 'Group', 'Days in', 'Late', 'Avg arrival', ...(showGrid ? r.days.map((d) => `${d.weekday} ${d.date.slice(8)}`) : [])].map((c) => h('th', {}, c)))),
+          h('thead', {}, h('tr', {}, ['Name', 'Department', 'Group', 'Days in', 'Late', 'Avg arrival', ...(showGrid ? r.days.map((d) => `${d.weekday} ${d.date.slice(8)}`) : [])].map((c) => h('th', {}, c)))),
           h('tbody', {}, r.people.map((p) => h('tr', { class: p.status === 'active' ? '' : 'muted' },
             h('td', {}, h('strong', {}, p.name), p.status !== 'active' && h('div', { class: 'hint' }, 'access removed')),
+            h('td', {}, p.department || '—', p.employee_ref && h('div', { class: 'hint' }, p.employee_ref)),
             h('td', {}, p.group, p.starts && h('div', { class: 'hint' }, 'starts ' + p.starts)),
             h('td', { class: 'mono' }, `${p.days_present}/${p.expected_days}`, p.attendance_pct !== null && h('div', { class: 'hint' }, p.attendance_pct + '%')),
             h('td', { class: 'mono' }, String(p.late_days)),
@@ -1209,7 +1238,7 @@ async function tabAttendance(body, data) {
       h('div', { style: 'margin-top:10px' }, presets),
       h('form', { class: 'row', style: 'margin-top:10px;flex-wrap:wrap', onsubmit: (e) => { e.preventDefault(); from = fromIn.value; to = toIn.value; grace = Math.max(0, Math.min(240, parseInt(graceIn.value, 10) || 0)); preset = ''; drawPresets(); load(); } },
         h('span', { class: 'hint' }, 'From'), fromIn, h('span', { class: 'hint' }, 'to'), toIn,
-        h('span', { class: 'hint' }, 'Late after start time +'), graceIn, h('span', { class: 'hint' }, 'min'),
+        h('span', { class: 'hint' }, 'Late after start time +'), graceIn, h('span', { class: 'hint' }, 'min'), deptSel,
         h('button', { class: 'btn primary small', type: 'submit' }, 'Show')),
       h('div', { class: 'row', style: 'margin-top:12px' }, h('span', { class: 'hint' }, 'Download (CSV):'), csv('daily', 'Daily attendance'), csv('summary', 'Summary per person'), csv('visitors', 'Visitor log'))),
     h('h2', { class: 'printonly' }, data.event.name + ' · Attendance'),
