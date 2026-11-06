@@ -23,7 +23,7 @@ Decisions (from the owner): neutral payment layer first, no provider chosen yet;
 | Real provider adapter (Paystack or Flutterwave) | live payment | Blocked: provider account and keys |
 | Provider split/subaccount creation per organiser | settlement | Blocked: provider account |
 | Checkout screens on the sales page (discount code, quote, redirect, wait for confirmation) | 1 | Done (needs a real provider to test end to end) |
-| Partial refunds, disputes/chargebacks, payout statements | 12 | Todo |
+| Partial refunds (per ticket, books stay balanced to the kobo) and chargebacks (open blocks refunds; lost reverses the books) | 12 | Done, tested. Payout statements wait on the provider |
 | SMS (OTP, ticket confirmation) | 14 | Blocked: SMS provider |
 | Tests run in CI (`.github/workflows/worker-tests.yml`) | n/a | Done |
 | MFA (authenticator app, recovery codes): mandatory for staff, required for organiser refunds if turned on (mandatory with `REQUIRE_ORGANISER_MFA=1`) | 13, 15 | Done, tested |
@@ -46,6 +46,21 @@ Open business decisions: who bears the provider's processing fee (currently reco
 4. Legal and data-protection adviser (NDPA 2023, refund and cookie policies, data-processing agreements); penetration test.
 5. Apple Developer and Google Play accounts.
 6. Cloudflare: confirm production secrets, create the staging database, confirm D1 Time Travel, practise one restore.
+
+## Phase 3 items
+| Item | Status |
+|---|---|
+| Public API v1: keys with scopes, sandbox vs live, rate limit, events, attendance, payments (`docs/API.md`) | Done, tested |
+| Outbound webhooks: signed, retried, `order.fulfilled` / `order.refunded` / `order.disputed` | Done, tested (cron every 15 minutes retries) |
+| API key and webhook screens in the app/console | Todo (API works; keys are created by API call today) |
+| Hosted OpenAPI file, per-key limits UI, creating orders via API | Todo |
+| Business: employee and department records, check-out, incident reports, admin roles | Todo (existing: offices, doors, visitors, attendance) |
+| Business subscriptions (Starter / Professional / Enterprise) | Blocked: needs the payment provider for billing and decisions on plan limits and prices |
+| NFC / hardware | Not started. Needs hardware choices and a security design; see below |
+| Tap In Identity | Not started on purpose: the dossier requires a separate privacy, consent and regulatory assessment first |
+| Multi-currency, time zones, other countries | Not started: Phase 4, and a market must not open before payments, legal and support are ready |
+
+NFC note: reading a plain NFC tag ID is not safe (IDs can be copied). A safe design uses secure credentials (for example a signed, expiring credential in Apple/Google Wallet "smart tap" or a secure-element card) checked by the same gate logic. That needs a hardware pilot (which reader, which phones) before code.
 
 ## Later phases
 Phases 2 to 4 are listed in `docs/TECHNICAL_AUDIT.md` section 7 and are not started. Per the dossier, no phase starts until the previous one passes acceptance.

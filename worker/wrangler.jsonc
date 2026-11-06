@@ -43,7 +43,7 @@
     "BUSINESS_HOST": "business.tap-in.world",
     "MAIN_HOST": "www.tap-in.world"
   },
-  "triggers": { "crons": ["17 3 * * *"] },
+  "triggers": { "crons": ["17 3 * * *", "*/15 * * * *"] },
   "observability": { "enabled": true },
 
   // A separate copy for trying changes before production: its own Worker, its own empty database, test payments only.

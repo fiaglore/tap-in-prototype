@@ -8,6 +8,7 @@ import { mintInvites, ownedEvent } from './events.js';
 import { salesState } from './public.js';
 import * as limits from '../lib/limits.js';
 import { organiserMfaMandatory } from '../lib/mfa.js';
+import { emit, flush as flushWebhooks } from '../lib/outbound.js';
 import { requireSecondStep } from './mfa.js';
 
 const MAX_QTY = 8;
@@ -17,7 +18,7 @@ const PAID = ['paid', 'fulfilled', 'refunding', 'refund_due'];
 
 const publicOrder = (o) => ({
   id: o.id, event_id: o.event_id, tier_id: o.tier_id, qty: o.qty, status: o.status, currency: o.currency,
-  unit_kobo: o.unit_kobo, discount_kobo: o.discount_kobo, subtotal_kobo: o.subtotal_kobo, fee_kobo: o.buyer_fee_kobo, total_kobo: o.total_kobo,
+  unit_kobo: o.unit_kobo, discount_kobo: o.discount_kobo, refunded_kobo: o.refunded_kobo, refunded_qty: o.refunded_qty, dispute_status: o.dispute_status, subtotal_kobo: o.subtotal_kobo, fee_kobo: o.buyer_fee_kobo, total_kobo: o.total_kobo,
   created_at: o.created_at, expires_at: o.expires_at, paid_at: o.paid_at
 });
 
@@ -122,7 +123,7 @@ async function writeSaleLedger(env, order, processorFee) {
 }
 
 // POST /api/webhooks/payments/:provider  (no cookie; authenticated by the provider's signature over the raw body)
-export async function webhook({ request, env, params }) {
+export async function webhook({ request, env, params, ctx }) {
   const provider = getProvider(env, String(params.provider).toLowerCase());
   const raw = await request.text();
   if (raw.length > 100000) throw new HttpError(413, 'too_large', 'Too large.');
@@ -142,6 +143,36 @@ export async function webhook({ request, env, params }) {
     await env.DB.prepare(`UPDATE orders SET status = 'failed' WHERE id = ?1 AND status = 'pending'`).bind(order.id).run();
     return outcome('failed');
   }
+  if (evt.type === 'dispute.opened') {
+    await env.DB.prepare(`UPDATE orders SET dispute_status = 'open' WHERE id = ?1 AND dispute_status IS NULL AND status NOT IN ('pending', 'failed', 'expired')`).bind(order.id).run();
+    await notify(env, ctx, order, 'order.disputed');
+    return outcome('dispute_opened');
+  }
+  if (evt.type === 'dispute.won') {
+    await env.DB.prepare(`UPDATE orders SET dispute_status = 'won' WHERE id = ?1 AND dispute_status = 'open'`).bind(order.id).run();
+    await notify(env, ctx, order, 'order.disputed');
+    return outcome('dispute_won');
+  }
+  if (evt.type === 'dispute.lost') {
+    // The bank has taken the money back. Cancel what is left of the order and reverse the books; the provider is not asked to refund.
+    const cur = await env.DB.prepare('SELECT * FROM orders WHERE id = ?1').bind(order.id).first();
+    if (cur.status === 'refunded' && cur.dispute_status === 'lost') return outcome('already_lost');
+    const lock = await env.DB.prepare(`UPDATE orders SET dispute_status = 'lost', status = 'refunded', refunded_at = ?2 WHERE id = ?1 AND status IN ('fulfilled', 'paid', 'refund_due', 'refunding')`).bind(order.id, nowSec()).run();
+    if (lock.meta.changes !== 1) {
+      await env.DB.prepare(`UPDATE orders SET dispute_status = 'lost' WHERE id = ?1`).bind(order.id).run();
+    } else {
+      const remainingAmt = cur.total_kobo - cur.refunded_kobo;
+      const rows = await reversalRows(env, cur, remainingAmt, true);
+      await env.DB.batch([
+        env.DB.prepare(`UPDATE orders SET refunded_kobo = total_kobo, refunded_qty = qty WHERE id = ?1`).bind(order.id),
+        env.DB.prepare(`UPDATE invites SET status = 'revoked' WHERE id IN (SELECT invite_id FROM passes WHERE order_id = ?1)`).bind(order.id),
+        env.DB.prepare(`UPDATE passes SET status = 'revoked' WHERE order_id = ?1`).bind(order.id),
+        ...ledgerStmts(env, cur, rows, 'refund', nowSec())
+      ]);
+    }
+    await notify(env, ctx, order, 'order.disputed');
+    return outcome('dispute_lost');
+  }
   if (evt.type !== 'charge.success') return outcome('ignored');
 
   // Trust the money, not the message: the amount and currency the provider says it took must be what we asked for.
@@ -156,6 +187,7 @@ export async function webhook({ request, env, params }) {
     await writeSaleLedger(env, order, evt.processor_fee_kobo);
   }
   await ensureTickets(env, order.id);
+  if (flip.meta.changes === 1) await notify(env, ctx, order, 'order.fulfilled');
   return outcome(flip.meta.changes === 1 ? 'paid' : 'already_paid');
 }
 
@@ -172,37 +204,80 @@ export async function getOrder({ env, user, params }) {
   return json({ order: publicOrder(o), passes });
 }
 
-// POST /api/events/:id/orders/:orderId/refund  (the organiser). Full refund only. Refused once anyone has been let in.
-export async function refundOrder({ request, env, user, params }) {
+// Reverses part (or all) of an order's sale in the ledger. The reversal of the last remaining part is exact, so the rows always
+// sum to nothing after a full refund. Along the way gross = organiser_payable + commission keeps holding.
+async function reversalRows(env, o, amount, final) {
+  const rows = (await env.DB.prepare(`SELECT kind, reason, SUM(amount_kobo) AS n FROM order_ledger WHERE order_id = ?1 GROUP BY kind, reason`).bind(o.id).all()).results;
+  const left = (k) => rows.filter((r) => r.kind === k).reduce((t, r) => t + r.n, 0); // sale rows minus earlier reversals
+  if (final) return ['gross', 'organiser_payable', 'commission', 'processor_fee'].map((k) => [k, -left(k)]);
+  const sale = (k) => rows.find((r) => r.kind === k && r.reason === 'sale')?.n || 0;
+  const payable = Math.round((sale('organiser_payable') * amount) / o.total_kobo);
+  return [['gross', -amount], ['organiser_payable', -payable], ['commission', -(amount - payable)], ['processor_fee', -Math.round((sale('processor_fee') * amount) / o.total_kobo)]];
+}
+const ledgerStmts = (env, o, rows, reason, now) => rows.map(([kind, amt]) =>
+  env.DB.prepare(`INSERT INTO order_ledger (id, order_id, event_id, kind, amount_kobo, reason, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`).bind(newId(12), o.id, o.event_id, kind, amt, reason, now));
+
+async function notify(env, ctx, order, type, extra = {}) {
+  const ev = await env.DB.prepare('SELECT owner_id, sandbox FROM events WHERE id = ?1').bind(order.event_id).first();
+  const o = await env.DB.prepare('SELECT * FROM orders WHERE id = ?1').bind(order.id).first();
+  const queued = await emit(env, ev.owner_id, !!ev.sandbox, type, {
+    order_id: o.id, event_id: o.event_id, tier_id: o.tier_id, qty: o.qty, status: o.status, currency: o.currency, total_kobo: o.total_kobo,
+    refunded_kobo: o.refunded_kobo, refunded_qty: o.refunded_qty, dispute_status: o.dispute_status, ...extra
+  });
+  if (queued && ctx && ctx.waitUntil) ctx.waitUntil(flushWebhooks(env));
+}
+
+// POST /api/events/:id/orders/:orderId/refund  { pass_ids?: [...] }  (the organiser)
+// With no body the whole remaining order is refunded; with pass_ids only those tickets are, for a share of what was paid.
+// Refused once a ticket being refunded has been used, and while a chargeback is open.
+export async function refundOrder({ request, env, user, params, ctx }) {
   await requireSecondStep(env, request, user.id, { mandatory: organiserMfaMandatory(env) });
   const ev = await ownedEvent(env, user, params.id);
+  let b = {};
+  try { const t = await request.text(); if (t) b = JSON.parse(t); } catch { throw new HttpError(400, 'bad_json', 'The request body is not valid JSON.'); }
   const o = await env.DB.prepare('SELECT * FROM orders WHERE id = ?1 AND event_id = ?2').bind(String(params.orderId).slice(0, 40), ev.id).first();
   if (!o) throw new HttpError(404, 'not_found', 'Order not found.');
   if (o.status === 'refunded') return json({ order: publicOrder(o), already: true });
   if (!['fulfilled', 'refund_due'].includes(o.status)) throw new HttpError(409, 'not_refundable', 'This order cannot be refunded in its current state.');
-  const used = await env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM scans s JOIN passes p ON p.id = s.pass_id WHERE p.order_id = ?1 AND s.result = 'granted'`
-  ).bind(o.id).first();
-  if (used.n > 0) throw new HttpError(409, 'already_used', 'Someone has already entered with a ticket from this order, so it cannot be refunded here.');
+  if (o.dispute_status === 'open') throw new HttpError(409, 'disputed', 'The buyer has disputed this payment with their bank. It cannot be refunded here until the dispute is decided.');
 
-  const lock = await env.DB.prepare(`UPDATE orders SET status = 'refunding' WHERE id = ?1 AND status IN ('fulfilled', 'refund_due')`).bind(o.id).run();
+  const active = (await env.DB.prepare(`SELECT id, invite_id FROM passes WHERE order_id = ?1 AND status = 'active'`).bind(o.id).all()).results;
+  const remaining = o.qty - o.refunded_qty;
+  let chosen = active;
+  if (b.pass_ids !== undefined) {
+    if (!Array.isArray(b.pass_ids) || !b.pass_ids.length) throw new HttpError(400, 'invalid_pass_ids', 'Choose at least one ticket.');
+    chosen = [...new Set(b.pass_ids)].map((id) => active.find((p) => p.id === id));
+    if (chosen.some((p) => !p)) throw new HttpError(400, 'invalid_pass_ids', 'One of those tickets is not an active ticket from this order.');
+  }
+  const k = b.pass_ids !== undefined ? chosen.length : remaining;
+  if (k < 1 || k > remaining) throw new HttpError(400, 'invalid_pass_ids', 'Nothing to refund.');
+  if (chosen.length) {
+    const marks = chosen.map((_, i) => '?' + (i + 2)).join(',');
+    const used = await env.DB.prepare(`SELECT COUNT(*) AS n FROM scans WHERE result = 'granted' AND pass_id IN (${marks})`).bind(o.id, ...chosen.map((p) => p.id)).first();
+    if (used.n > 0) throw new HttpError(409, 'already_used', 'Someone has already entered with a ticket being refunded, so it cannot be refunded here.');
+  }
+  const final = k === remaining;
+  const amount = final ? o.total_kobo - o.refunded_kobo : Math.floor((o.total_kobo * k) / o.qty);
+
+  const lock = await env.DB.prepare(`UPDATE orders SET status = 'refunding' WHERE id = ?1 AND status IN ('fulfilled', 'refund_due') AND refunded_qty = ?2`).bind(o.id, o.refunded_qty).run();
   if (lock.meta.changes !== 1) throw new HttpError(409, 'not_refundable', 'This order is already being refunded.');
   try {
-    await getProvider(env, o.provider).refund(env, { provider_ref: o.provider_ref, amount_kobo: o.total_kobo, order_id: o.id });
+    await getProvider(env, o.provider).refund(env, { provider_ref: o.provider_ref, amount_kobo: amount, order_id: o.id });
   } catch (e) {
     await env.DB.prepare(`UPDATE orders SET status = ?2 WHERE id = ?1 AND status = 'refunding'`).bind(o.id, o.status).run();
     throw e;
   }
   const now = nowSec();
-  const sale = (await env.DB.prepare(`SELECT kind, amount_kobo FROM order_ledger WHERE order_id = ?1 AND reason = 'sale'`).bind(o.id).all()).results;
+  const rows = await reversalRows(env, o, amount, final);
   await env.DB.batch([
-    env.DB.prepare(`UPDATE orders SET status = 'refunded', refunded_at = ?2 WHERE id = ?1`).bind(o.id, now),
-    env.DB.prepare(`UPDATE passes SET status = 'revoked' WHERE order_id = ?1`).bind(o.id),
-    env.DB.prepare(`UPDATE invites SET status = 'revoked' WHERE order_id = ?1`).bind(o.id),
-    ...sale.map((r) => env.DB.prepare(`INSERT INTO order_ledger (id, order_id, event_id, kind, amount_kobo, reason, created_at) VALUES (?1, ?2, ?3, ?4, ?5, 'refund', ?6)`)
-      .bind(newId(12), o.id, o.event_id, r.kind, -r.amount_kobo, now))
+    env.DB.prepare(`UPDATE orders SET status = ?2, refunded_kobo = refunded_kobo + ?3, refunded_qty = refunded_qty + ?4, refunded_at = ?5 WHERE id = ?1`).bind(o.id, final ? 'refunded' : 'fulfilled', amount, k, now),
+    ...chosen.map((p) => env.DB.prepare(`UPDATE passes SET status = 'revoked' WHERE id = ?1`).bind(p.id)),
+    ...chosen.map((p) => env.DB.prepare(`UPDATE invites SET status = 'revoked' WHERE id = ?1`).bind(p.invite_id)),
+    ...ledgerStmts(env, o, rows, 'refund', now)
   ]);
-  return json({ order: publicOrder({ ...o, status: 'refunded' }) });
+  await notify(env, ctx, o, 'order.refunded', { refund_kobo: amount });
+  const fresh = await env.DB.prepare('SELECT * FROM orders WHERE id = ?1').bind(o.id).first();
+  return json({ order: publicOrder(fresh), refunded_kobo: amount, refunded_tickets: k });
 }
 
 // GET /api/events/:id/finance  (the organiser): what was sold, what they are owed, and a check that the books agree.

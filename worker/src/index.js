@@ -23,6 +23,10 @@ import * as orders from './routes/orders.js';
 import * as transfers from './routes/transfers.js';
 import * as discounts from './routes/discounts.js';
 import * as mfa from './routes/mfa.js';
+import * as apikeys from './routes/apikeys.js';
+import * as v1 from './routes/v1.js';
+import { authenticateKey } from './routes/apikeys.js';
+import { flush as flushWebhooks } from './lib/outbound.js';
 import { checkoutMode } from './lib/payments/provider.js';
 import { routeByHost } from './lib/hosts.js';
 import { requireStaff } from './lib/staff.js';
@@ -117,6 +121,22 @@ const ROUTES = [
   ['POST', '/api/me/mfa/enable', 'user', mfa.enable],
   ['POST', '/api/me/mfa/verify', 'user', mfa.verify],
   ['POST', '/api/me/mfa/disable', 'user', mfa.disable],
+  ['GET', '/api/me/api-keys', 'user', apikeys.listKeys],
+  ['POST', '/api/me/api-keys', 'user', apikeys.createKey],
+  ['POST', '/api/me/api-keys/:id/revoke', 'user', apikeys.revokeKey],
+  ['GET', '/api/me/webhook-endpoints', 'user', apikeys.listEndpoints],
+  ['POST', '/api/me/webhook-endpoints', 'user', apikeys.createEndpoint],
+  ['POST', '/api/me/webhook-endpoints/:id/revoke', 'user', apikeys.revokeEndpoint],
+  // The public API. Authenticated by API key, not by cookie.
+  ['GET', '/api/v1/ping', 'apikey', v1.ping],
+  ['GET', '/api/v1/events', 'apikey', v1.listEvents],
+  ['POST', '/api/v1/events', 'apikey', v1.createEvent],
+  ['GET', '/api/v1/events/:id', 'apikey', v1.getEvent],
+  ['GET', '/api/v1/events/:id/attendees', 'apikey', v1.attendees],
+  ['GET', '/api/v1/events/:id/scans', 'apikey', v1.scans],
+  ['GET', '/api/v1/events/:id/orders', 'apikey', v1.eventOrders],
+  ['GET', '/api/v1/events/:id/finance', 'apikey', v1.finance],
+  ['GET', '/api/v1/orders/:id', 'apikey', v1.getOrder],
   ['POST', '/api/me/passes/:id/transfer', 'user', transfers.transferPass],
   ['GET', '/api/me/transfers', 'user', transfers.myTransfers],
   ['GET', '/api/events/:id/discounts', 'user', discounts.listDiscounts],
@@ -168,7 +188,7 @@ function match(pattern, path) {
   return params;
 }
 
-async function handleApi(request, env) {
+async function handleApi(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, '') : url.pathname;
 
@@ -204,7 +224,10 @@ async function handleApi(request, env) {
     if (!user) throw new HttpError(401, 'unauthorised', 'Sign in to continue.');
   }
   if (found.authLevel === 'staff') user = staff;
-  return found.fn({ request, env, url, params: found.params, user });
+  let key = null;
+  // API keys are for programs, not browsers: no cookies, and cross-site checks do not apply (there is no ambient credential to abuse).
+  if (found.authLevel === 'apikey') ({ key, user } = await authenticateKey(env, request));
+  return found.fn({ request, env, url, params: found.params, user, key, ctx });
 }
 
 // Remove expired rows. Runs from the daily cron trigger in wrangler.jsonc.
@@ -226,7 +249,7 @@ export async function purge(env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/') && url.pathname !== '/api') {
       const hop = routeByHost(request, env, url);
@@ -237,7 +260,7 @@ export default {
       return env.ASSETS.fetch(request);
     }
     try {
-      return await handleApi(request, env);
+      return await handleApi(request, env, ctx);
     } catch (err) {
       if (err instanceof HttpError) {
         return json({ error: { code: err.code, message: err.message, ...(err.extra || {}) } }, err.status);
@@ -247,7 +270,8 @@ export default {
     }
   },
 
-  async scheduled(_event, env, ctx) {
-    ctx.waitUntil(purge(env));
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(flushWebhooks(env, { limit: 100 })); // every run: send webhooks that are due
+    if (event.cron !== '*/15 * * * *') ctx.waitUntil(purge(env)); // the daily run also clears expired rows
   }
 };

@@ -3,7 +3,7 @@
 //   initialize(env, { order, email, callbackUrl }) -> { checkout_url, provider_ref? }
 //   parseWebhook(env, rawBody, headers) -> { event_key, type, provider_ref, amount_kobo, currency, processor_fee_kobo }
 //        Must verify the provider's signature over the RAW body and throw HttpError(401) if it is wrong.
-//        type is one of 'charge.success' | 'charge.failed' | 'refund.processed' | 'other'.
+//        type is one of 'charge.success' | 'charge.failed' | 'refund.processed' | 'dispute.opened' | 'dispute.won' | 'dispute.lost' | 'other'.
 //   refund(env, { provider_ref, amount_kobo, order_id }) -> { refund_ref }
 //
 // A ticket is never issued from a browser redirect or an uploaded screenshot, only from a verified webhook.
@@ -25,7 +25,7 @@ const mock = {
     try { b = JSON.parse(raw); } catch { throw new HttpError(400, 'bad_json', 'Webhook body is not valid JSON.'); }
     return {
       event_key: String(b.id || ''),
-      type: ['charge.success', 'charge.failed', 'refund.processed'].includes(b.type) ? b.type : 'other',
+      type: ['charge.success', 'charge.failed', 'refund.processed', 'dispute.opened', 'dispute.won', 'dispute.lost'].includes(b.type) ? b.type : 'other',
       provider_ref: String(b.ref || ''),
       amount_kobo: Number.isInteger(b.amount_kobo) ? b.amount_kobo : null,
       currency: String(b.currency || 'NGN'),
