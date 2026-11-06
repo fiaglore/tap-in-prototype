@@ -314,7 +314,7 @@ async function tabPeople(body, data) {
 // Ticket types: price, limit and how many are issued; sales window; live QR.
 // ---- Sales, discounts, orders and refunds (events only) ------------------------------------------------
 const CATS = [['', 'Not set'], ['music', 'Music and concerts'], ['festival', 'Festivals'], ['nightlife', 'Nightlife'], ['sports', 'Sports'], ['conference', 'Conferences'], ['exhibition', 'Exhibitions'], ['education', 'Education'], ['networking', 'Business networking'], ['religious', 'Religious gatherings'], ['private', 'Private events'], ['other', 'Other']];
-const stat = (label, value) => h('div', { class: 'card stat' }, h('span', {}, label), h('b', { style: 'font-size:26px' }, value));
+const stat = (label, value) => h('div', { class: 'card stat' }, h('span', {}, label), h('b', { style: 'font-size:26px;font-family:var(--body)' }, value));
 const kobo = (k) => '₦' + (k / 100).toLocaleString('en-NG', { minimumFractionDigits: k % 100 ? 2 : 0 });
 const ORDER_LABEL = { pending: 'Waiting for payment', paid: 'Paid', fulfilled: 'Paid', failed: 'Failed', expired: 'Expired', review: 'Needs review', refund_due: 'Refund due', refunding: 'Refunding', refunded: 'Refunded' };
 

@@ -9,8 +9,10 @@ import { makeEnv } from './harness.mjs';
 
 const pub = join(fileURLToPath(new URL('..', import.meta.url)), 'public');
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.txt': 'text/plain' };
-const headerLines = readFileSync(join(pub, '_headers'), 'utf8').split('\n').slice(1).map((l) => l.trim()).filter(Boolean).map((l) => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 1).trim()]);
-const env = makeEnv();
+// Only the first "/*" block of _headers applies everywhere; later blocks (per-path) and comments are skipped here.
+const headerLines = (() => { const out = []; const lines = readFileSync(join(pub, '_headers'), 'utf8').split('\n'); for (const l of lines.slice(1)) { if (!l.startsWith('  ')) break; const t = l.trim(); out.push([t.slice(0, t.indexOf(':')), t.slice(t.indexOf(':') + 1).trim()]); } return out; })();
+// TICKET_CHECKOUT=mock node test/dev-server.mjs   tries the paid-ticket screens with the test payment provider.
+const env = makeEnv({ TICKET_CHECKOUT: process.env.TICKET_CHECKOUT || 'demo', PLATFORM_COMMISSION_BPS: '500', PLATFORM_FLAT_KOBO: '0', PAYMENT_WEBHOOK_SECRET: 'dev-webhook-secret-0123456789' });
 
 async function assets(request) {
   let p = decodeURIComponent(new URL(request.url).pathname);
