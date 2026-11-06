@@ -22,7 +22,7 @@ globalThis.fetch = async (url, init) => {
   return new Response(JSON.stringify({ error: { message: 'INVALID_OOB_CODE' } }), { status: 400 });
 };
 
-const env = makeEnv({ OTP_MODE: 'firebase', FIREBASE_API_KEY: 'k', STAFF_IDENTIFIERS: ' Support@Tap-In.test , lead@tap-in.test ' });
+const env = makeEnv({ OTP_MODE: 'firebase', FIREBASE_API_KEY: 'k', STAFF_IDENTIFIERS: ' Support@Tap-In.test , lead@tap-in.test ', STAFF_MFA: 'off' });
 let ipn = 0;
 const ip = () => '10.70.' + Math.floor(ipn / 250) + '.' + (ipn++ % 250 + 1);
 const fbSignIn = async (e, email, name) => {

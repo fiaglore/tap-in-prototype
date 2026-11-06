@@ -9,6 +9,8 @@ import { HttpError, newId, nowSec } from './util.js';
 import { currentSession } from './session.js';
 import { otpMode } from './otp-delivery.js';
 import { take } from './limits.js';
+import { staffMfaRequired } from './mfa.js';
+import { requireSecondStep } from '../routes/mfa.js';
 
 export const STAFF_SESSION_MAX = 8 * 3600; // staff sign in again after 8 hours
 
@@ -35,6 +37,8 @@ export async function requireStaff(env, request) {
   const s = await currentSession(env, request);
   if (!s || !isStaffUser(env, s)) throw nope;
   if (nowSec() - s.session_at > STAFF_SESSION_MAX) throw nope;
+  // Two-step sign-in is mandatory for staff. They are already on the allow-list here, so telling them why is not a leak.
+  if (staffMfaRequired(env)) await requireSecondStep(env, request, s.id, { mandatory: true });
   if (!(await take(env.DB, 'admin:' + s.id, 900, 900))) throw new HttpError(429, 'rate_limited', 'Slow down for a moment.');
   return s;
 }

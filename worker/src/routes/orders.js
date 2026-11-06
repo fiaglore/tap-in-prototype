@@ -3,10 +3,12 @@
 import { HttpError, newId, nowSec } from '../lib/util.js';
 import { json, readJson } from '../lib/http.js';
 import { checkoutMode, getProvider } from '../lib/payments/provider.js';
-import { priceOrder } from '../lib/fees.js';
+import { quote } from './discounts.js';
 import { mintInvites, ownedEvent } from './events.js';
 import { salesState } from './public.js';
 import * as limits from '../lib/limits.js';
+import { organiserMfaMandatory } from '../lib/mfa.js';
+import { requireSecondStep } from './mfa.js';
 
 const MAX_QTY = 8;
 const HOLD_SEC = 30 * 60; // a pending order holds its tickets for 30 minutes
@@ -15,7 +17,7 @@ const PAID = ['paid', 'fulfilled', 'refunding', 'refund_due'];
 
 const publicOrder = (o) => ({
   id: o.id, event_id: o.event_id, tier_id: o.tier_id, qty: o.qty, status: o.status, currency: o.currency,
-  unit_kobo: o.unit_kobo, subtotal_kobo: o.subtotal_kobo, fee_kobo: o.buyer_fee_kobo, total_kobo: o.total_kobo,
+  unit_kobo: o.unit_kobo, discount_kobo: o.discount_kobo, subtotal_kobo: o.subtotal_kobo, fee_kobo: o.buyer_fee_kobo, total_kobo: o.total_kobo,
   created_at: o.created_at, expires_at: o.expires_at, paid_at: o.paid_at
 });
 
@@ -41,20 +43,22 @@ export async function checkout({ request, env, user, params }) {
   if (!Number.isInteger(qty) || qty < 1 || qty > MAX_QTY) throw new HttpError(400, 'invalid_qty', `Buy between 1 and ${MAX_QTY} tickets at a time.`);
   if (await limits.isFull(env.DB, 'checkout:' + user.id, 10, 3600)) throw new HttpError(429, 'rate_limited', 'Too many checkouts. Try again later.');
 
-  const price = priceOrder(env, { unitKobo: tier.price_kobo, qty, feeMode: ev.fee_mode });
+  const price = await quote(env, { event: ev, tier, qty, codeText: b.discount_code });
+  const discId = price.disc ? price.disc.id : null;
   const now = nowSec();
   const id = newId(12);
   const ref = 'TI-' + newId(16);
 
   // Stock: issued tickets plus other buyers' unexpired pending orders must leave room. Re-checked at fulfilment too.
   const ins = await env.DB.prepare(
-    `INSERT INTO orders (id, event_id, tier_id, user_id, qty, unit_kobo, subtotal_kobo, commission_kobo, fee_mode, buyer_fee_kobo, total_kobo, status, provider, provider_ref, created_at, expires_at)
-     SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'pending', ?12, ?13, ?14, ?15
-     WHERE ?16 IS NULL OR (SELECT COUNT(*) FROM invites WHERE tier_id = ?3 AND status != 'revoked')
-       + (SELECT COALESCE(SUM(qty), 0) FROM orders WHERE tier_id = ?3 AND status = 'pending' AND expires_at > ?14) + ?5 <= ?16`
+    `INSERT INTO orders (id, event_id, tier_id, user_id, qty, unit_kobo, subtotal_kobo, commission_kobo, fee_mode, buyer_fee_kobo, total_kobo, status, provider, provider_ref, created_at, expires_at, discount_code_id, discount_kobo)
+     SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'pending', ?12, ?13, ?14, ?15, ?17, ?18
+     WHERE (?16 IS NULL OR (SELECT COUNT(*) FROM invites WHERE tier_id = ?3 AND status != 'revoked')
+       + (SELECT COALESCE(SUM(qty), 0) FROM orders WHERE tier_id = ?3 AND status = 'pending' AND expires_at > ?14) + ?5 <= ?16)
+       AND (?17 IS NULL OR (SELECT max_uses FROM discount_codes WHERE id = ?17) IS NULL OR (SELECT COUNT(*) FROM orders o WHERE o.discount_code_id = ?17 AND (o.status IN ('paid','fulfilled','refund_due','refunding') OR (o.status = 'pending' AND o.expires_at > ?14))) < (SELECT max_uses FROM discount_codes WHERE id = ?17))`
   ).bind(id, ev.id, tier.id, user.id, qty, tier.price_kobo, price.subtotal_kobo, price.commission_kobo, ev.fee_mode, price.buyer_fee_kobo, price.total_kobo,
-    provider.name, ref, now, now + HOLD_SEC, tier.capacity ?? null).run();
-  if (ins.meta.changes !== 1) throw new HttpError(409, 'sold_out', `Not enough "${tier.name}" tickets left.`);
+    provider.name, ref, now, now + HOLD_SEC, tier.capacity ?? null, discId, price.discountKobo).run();
+  if (ins.meta.changes !== 1) throw new HttpError(409, 'sold_out', `Not enough "${tier.name}" tickets left, or that discount code was just used up.`);
   await limits.record(env.DB, 'checkout:' + user.id);
 
   const order = await env.DB.prepare('SELECT * FROM orders WHERE id = ?1').bind(id).first();
@@ -169,7 +173,8 @@ export async function getOrder({ env, user, params }) {
 }
 
 // POST /api/events/:id/orders/:orderId/refund  (the organiser). Full refund only. Refused once anyone has been let in.
-export async function refundOrder({ env, user, params }) {
+export async function refundOrder({ request, env, user, params }) {
+  await requireSecondStep(env, request, user.id, { mandatory: organiserMfaMandatory(env) });
   const ev = await ownedEvent(env, user, params.id);
   const o = await env.DB.prepare('SELECT * FROM orders WHERE id = ?1 AND event_id = ?2').bind(String(params.orderId).slice(0, 40), ev.id).first();
   if (!o) throw new HttpError(404, 'not_found', 'Order not found.');

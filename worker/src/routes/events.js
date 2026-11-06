@@ -33,13 +33,46 @@ function assertOrganiser(env, user) {
 
 export async function ownedEvent(env, user, id) {
   const ev = await env.DB.prepare(
-    `SELECT id, name, prefix, kind, venue, city, starts_at, allow_reentry, secure_qr, require_photo, listed, sales_start, sales_end, gate_key_hint, created_at
+    `SELECT id, name, prefix, kind, venue, city, starts_at, allow_reentry, secure_qr, require_photo, listed, sales_start, sales_end, gate_key_hint, created_at, category, country, region, allow_transfers, fee_mode
      FROM events WHERE id = ?1 AND owner_id = ?2`
   )
     .bind(String(id).slice(0, 40), user.id)
     .first();
   if (!ev) throw new HttpError(404, 'not_found', 'Event not found.');
   return ev;
+}
+
+// Dossier 4.2 categories. Stored as these keys so filters are exact.
+export const CATEGORIES = ['music', 'festival', 'nightlife', 'sports', 'conference', 'exhibition', 'education', 'networking', 'religious', 'private', 'other'];
+
+// Reads category, country, region, allow_transfers and fee_mode from a request body. Only fields present are returned.
+function parseDiscoveryFields(b) {
+  const out = {};
+  if ('category' in b) {
+    if (b.category === null || b.category === '') out.category = null;
+    else if (CATEGORIES.includes(b.category)) out.category = b.category;
+    else throw new HttpError(400, 'invalid_category', 'Choose one of: ' + CATEGORIES.join(', ') + '.');
+  }
+  if ('country' in b) {
+    const c = String(b.country || '').toUpperCase();
+    if (!/^[A-Z]{2}$/.test(c)) throw new HttpError(400, 'invalid_country', 'Use a two-letter country code such as NG.');
+    out.country = c;
+  }
+  if ('region' in b) out.region = cleanText(b.region, 'region', { optional: true, max: 60 });
+  if ('allow_transfers' in b) {
+    if (typeof b.allow_transfers !== 'boolean') throw new HttpError(400, 'invalid_allow_transfers', 'allow_transfers must be true or false.');
+    out.allow_transfers = b.allow_transfers ? 1 : 0;
+  }
+  if ('fee_mode' in b) {
+    if (!['pass', 'absorb'].includes(b.fee_mode)) throw new HttpError(400, 'invalid_fee_mode', 'fee_mode must be "pass" or "absorb".');
+    out.fee_mode = b.fee_mode;
+  }
+  return out;
+}
+async function saveDiscoveryFields(env, eventId, fields) {
+  const keys = Object.keys(fields);
+  if (!keys.length) return;
+  await env.DB.prepare(`UPDATE events SET ${keys.map((k, i) => `${k} = ?${i + 1}`).join(', ')} WHERE id = ?${keys.length + 1}`).bind(...keys.map((k) => fields[k]), eventId).run();
 }
 
 const publicEvent = (e) => ({
@@ -57,7 +90,12 @@ const publicEvent = (e) => ({
   sales_start: e.sales_start,
   sales_end: e.sales_end,
   gate_key_hint: e.gate_key_hint,
-  created_at: e.created_at
+  created_at: e.created_at,
+  category: e.category || null,
+  country: e.country || 'NG',
+  region: e.region || null,
+  allow_transfers: !!e.allow_transfers,
+  fee_mode: e.fee_mode || 'pass'
 });
 
 async function structure(env, eventId) {
@@ -165,6 +203,7 @@ export async function createEvent({ request, env, user }) {
     return p;
   });
 
+  const discoveryFields = parseDiscoveryFields(b);
   const owned = await env.DB.prepare('SELECT COUNT(*) AS n FROM events WHERE owner_id = ?1').bind(user.id).first();
   if (owned.n >= MAX_EVENTS_PER_USER) throw new HttpError(400, 'event_limit', `You can have up to ${MAX_EVENTS_PER_USER} events.`);
 
@@ -213,6 +252,7 @@ export async function createEvent({ request, env, user }) {
     ).bind(JSON.stringify(linkRows))
   ]);
 
+  await saveDiscoveryFields(env, id, discoveryFields);
   const ev = await ownedEvent(env, user, id);
   return json({ event: publicEvent(ev), ...(await structure(env, id)), gate_key: gateKey }, 201);
 }
@@ -345,6 +385,7 @@ export async function patchEvent({ request, env, user, params }) {
     if (start && end && end <= start) throw new HttpError(400, 'invalid_sales_window', 'Ticket sales must end after they start.');
     await env.DB.prepare('UPDATE events SET sales_start = ?1, sales_end = ?2 WHERE id = ?3').bind(start, end, ev.id).run();
   }
+  if (ev.kind === 'event') await saveDiscoveryFields(env, ev.id, parseDiscoveryFields(b));
   return json({ event: publicEvent(await ownedEvent(env, user, ev.id)) });
 }
 

@@ -20,6 +20,9 @@ import * as till from './routes/till.js';
 import { PAYMENT_API, PAYMENT_PAGES, paymentsOff } from './lib/money.js';
 import * as photo from './routes/photo.js';
 import * as orders from './routes/orders.js';
+import * as transfers from './routes/transfers.js';
+import * as discounts from './routes/discounts.js';
+import * as mfa from './routes/mfa.js';
 import { routeByHost } from './lib/hosts.js';
 import { requireStaff } from './lib/staff.js';
 import * as admin from './routes/admin.js';
@@ -107,6 +110,17 @@ const ROUTES = [
   ['GET', '/api/public/events/:id', 'none', publicSale.getEvent],
   ['POST', '/api/public/events/:id/buy', 'user', publicSale.buy],
   ['POST', '/api/public/events/:id/checkout', 'user', orders.checkout],
+  ['POST', '/api/public/events/:id/quote', 'none', discounts.quoteRoute],
+  ['GET', '/api/me/mfa', 'user', mfa.status],
+  ['POST', '/api/me/mfa/setup', 'user', mfa.setup],
+  ['POST', '/api/me/mfa/enable', 'user', mfa.enable],
+  ['POST', '/api/me/mfa/verify', 'user', mfa.verify],
+  ['POST', '/api/me/mfa/disable', 'user', mfa.disable],
+  ['POST', '/api/me/passes/:id/transfer', 'user', transfers.transferPass],
+  ['GET', '/api/me/transfers', 'user', transfers.myTransfers],
+  ['GET', '/api/events/:id/discounts', 'user', discounts.listDiscounts],
+  ['POST', '/api/events/:id/discounts', 'user', discounts.createDiscount],
+  ['POST', '/api/events/:id/discounts/:discountId/revoke', 'user', discounts.revokeDiscount],
   ['POST', '/api/webhooks/payments/:provider', 'none', orders.webhook],
   ['GET', '/api/orders/:id', 'user', orders.getOrder],
   ['POST', '/api/events/:id/orders/:orderId/refund', 'user', orders.refundOrder],

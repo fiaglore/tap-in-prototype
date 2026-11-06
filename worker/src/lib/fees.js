@@ -1,6 +1,6 @@
 // Who pays what on a ticket order (dossier 7.5, 16A). All integer kobo; no floating point reaches money.
 //
-//   subtotal   = unit price x qty
+//   subtotal   = unit price x qty - discount
 //   commission = round(subtotal x PLATFORM_COMMISSION_BPS / 10000) + PLATFORM_FLAT_KOBO x qty   (free tickets: 0)
 //   fee_mode "pass":   buyer pays subtotal + commission; organiser is owed the full subtotal.
 //   fee_mode "absorb": buyer pays subtotal; organiser is owed subtotal - commission.
@@ -18,10 +18,10 @@ export function feeConfig(env) {
   return { bps, flat };
 }
 
-export function priceOrder(env, { unitKobo, qty, feeMode }) {
+export function priceOrder(env, { unitKobo, qty, feeMode, discountKobo = 0 }) {
   const cfg = feeConfig(env);
   if (!cfg) throw new HttpError(503, 'fees_not_configured', 'Ticket fees have not been set up yet, so paid checkout is closed.');
-  const subtotal = unitKobo * qty;
+  const subtotal = unitKobo * qty - discountKobo; // the discount comes off the price; commission is worked out on what is left
   const commission = subtotal === 0 ? 0 : Math.round((subtotal * cfg.bps) / 10000) + cfg.flat * qty;
   const buyerFee = feeMode === 'pass' ? commission : 0;
   return {
