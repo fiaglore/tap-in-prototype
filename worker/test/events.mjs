@@ -227,6 +227,21 @@ await test('the secure setting can be switched on later', async () => {
   assert.equal(r.body.event.secure_qr, true);
 });
 
+await test('a paid ticket cannot be taken without payment unless demo checkout is switched on; free ones can', async () => {
+  const prod = makeEnv({ TICKET_CHECKOUT: 'off' });
+  const o = await signIn(prod, 'o5@example.com', '10.0.5.1', 'Org');
+  const f = await signIn(prod, 'f5@example.com', '10.0.5.2', 'Fan');
+  const r = await o.post('/api/events', { name: 'Paid Night', zones: ['Gate'], tiers: [{ name: 'GA', zones: ['Gate'], price_kobo: 500000 }, { name: 'Free', zones: ['Gate'], price_kobo: 0 }] });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const [paid, free] = r.body.tiers;
+  const bad = await f.post(`/api/public/events/${r.body.event.id}/buy`, { tier_id: paid.id });
+  assert.equal(bad.status, 402);
+  assert.equal(bad.body.error.code, 'payment_not_connected');
+  assert.equal(prod.DB.raw.prepare('SELECT COUNT(*) AS n FROM invites WHERE tier_id = ?').get(paid.id).n, 0);
+  assert.equal(prod.DB.raw.prepare('SELECT COUNT(*) AS n FROM passes WHERE tier_id = ?').get(paid.id).n, 0);
+  assert.equal((await f.post(`/api/public/events/${r.body.event.id}/buy`, { tier_id: free.id })).status, 201);
+});
+
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {
   console.log('Failed: ' + failures.join('; '));

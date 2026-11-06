@@ -27,6 +27,13 @@
     // "live": refuses top-ups and payouts until a payment provider is wired in (see README, Payments).
     // "off": the wallet, vendor console and till are withdrawn (pages 404, API 404) until a licensed partner is signed.
     "PAYMENTS_MODE": "off",
+    // "off": paid ticket types cannot be bought online (402) until a payment provider is connected; free ones can.
+    // "demo": paid tickets are issued WITHOUT taking money. Development and tests only. Never set this in production.
+    "TICKET_CHECKOUT": "off",
+    // Set these when going live with ticket payments (checkout stays closed until PLATFORM_COMMISSION_BPS is set):
+    //   "TICKET_CHECKOUT": "live", "PAYMENT_PROVIDER": "paystack", "PLATFORM_COMMISSION_BPS": "<basis points, 500 = 5%>", "PLATFORM_FLAT_KOBO": "<per ticket>"
+    // and the secrets PAYMENT_WEBHOOK_SECRET and the provider's secret key (wrangler secret put). STAFF_MFA defaults to on; REQUIRE_ORGANISER_MFA=1 makes
+    // two-step sign-in mandatory for organiser refunds.
     // Firebase "Web API key" (Project settings > General). It is public by design, not a secret.
     "FIREBASE_API_KEY": "AIzaSyDDz7HRknsyGwJ_x0pX1iCUjZwUn4aSc_4",
     // Comma-separated phone numbers or emails allowed to create events. Empty = anyone who signs in.
@@ -36,6 +43,32 @@
     "BUSINESS_HOST": "business.tap-in.world",
     "MAIN_HOST": "www.tap-in.world"
   },
-  "triggers": { "crons": ["17 3 * * *"] },
-  "observability": { "enabled": true }
+  "triggers": { "crons": ["17 3 * * *", "*/15 * * * *"] },
+  "observability": { "enabled": true },
+
+  // A separate copy for trying changes before production: its own Worker, its own empty database, test payments only.
+  // Setup (once): npx wrangler d1 create tap-in-staging, paste its id below, then
+  //   npx wrangler d1 migrations apply tap-in-staging --remote --env staging
+  //   npx wrangler secret put SECRET_PEPPER --env staging      (a different value from production)
+  //   npx wrangler secret put PAYMENT_WEBHOOK_SECRET --env staging
+  //   npx wrangler deploy --env staging
+  // Staging never holds real customer data and never uses live payment keys. See docs/RUNBOOK.md.
+  "env": {
+    "staging": {
+      "name": "tap-in-staging",
+      "d1_databases": [
+        { "binding": "DB", "database_name": "tap-in-staging", "database_id": "REPLACE_WITH_STAGING_DATABASE_ID", "migrations_dir": "migrations" }
+      ],
+      "vars": {
+        "OTP_MODE": "demo",
+        "PAYMENTS_MODE": "off",
+        "TICKET_CHECKOUT": "mock",
+        "PLATFORM_COMMISSION_BPS": "500",
+        "PLATFORM_FLAT_KOBO": "0",
+        "STAFF_MFA": "on",
+        "ORGANISER_IDENTIFIERS": ""
+      },
+      "triggers": { "crons": [] }
+    }
+  }
 }

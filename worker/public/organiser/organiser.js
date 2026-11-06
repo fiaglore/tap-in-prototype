@@ -2,6 +2,7 @@ import { h, wordmarkText, mount, toast, copy, when, ago, download } from '/js/do
 import { get, post, patch, del } from '/js/api.js';
 import { signInFlow } from '/js/auth-ui.js?v=2';
 import { qrSvg } from '/js/qr.js';
+import { mfaVerify } from '/js/mfa-ui.js';
 
 const OFFICE = document.body.dataset.console === 'office';
 const CONSOLE = OFFICE ? 'Offices' : 'Organiser';
@@ -223,7 +224,7 @@ async function viewEvent(id, tab) {
     if (office !== OFFICE) { location.replace((office ? '/offices/' : '/organiser/') + '#/e/' + id); return; }
     const tabs = office
       ? [['overview', 'Overview'], ['edit', 'Edit details'], ['visitors', 'Visitors'], ['attendance', 'Attendance'], ['people', 'Add people'], ['attendees', 'Who has access'], ['team', 'Door staff'], ['report', 'Report'], ['gate', 'Doors & key']]
-      : [['overview', 'Overview'], ['edit', 'Edit details'], ['tickets', 'Tickets'], ['guests', 'Guest list'], ['invites', 'Invite codes'], ['attendees', 'Attendees'], ['team', 'Gate team'], ['report', 'Report'], ['gate', 'Gate key & rules']];
+      : [['overview', 'Overview'], ['edit', 'Edit details'], ['tickets', 'Tickets'], ['sales', 'Sales & discounts'], ['guests', 'Guest list'], ['invites', 'Invite codes'], ['attendees', 'Attendees'], ['team', 'Gate team'], ['report', 'Report'], ['gate', 'Gate key & rules']];
     const items = [{ href: '#/', text: OFFICE ? '\u2190 All offices' : '\u2190 All events' }, { label: data.event.name }]
       .concat(tabs.map(([k, label]) => ({ href: `#/e/${id}/${k}`, text: label, on: tab === k })))
       .concat([{ href: '/gate/', text: 'Open scanner' }]);
@@ -234,7 +235,7 @@ async function viewEvent(id, tab) {
         // A private event with only free tickets has no sales page worth sharing: guests come in by invitation.
         !office && (data.event.listed || data.tiers.some((t) => t.price_kobo > 0)) && h('button', { class: 'btn ghost small', type: 'button', onclick: () => copy(location.origin + '/e/?id=' + id, 'Sales page link copied') }, 'Copy sales page link')),
       body)));
-    ({ overview: tabOverview, tickets: tabTickets, invites: tabInvites, people: tabPeople, attendees: tabAttendees, team: tabTeam, report: tabReport, guests: tabGuests, edit: tabEdit, visitors: tabVisitors, attendance: tabAttendance, gate: tabGate }[tab] || tabOverview)(body, data);
+    ({ overview: tabOverview, tickets: tabTickets, sales: tabSales, invites: tabInvites, people: tabPeople, attendees: tabAttendees, team: tabTeam, report: tabReport, guests: tabGuests, edit: tabEdit, visitors: tabVisitors, attendance: tabAttendance, gate: tabGate }[tab] || tabOverview)(body, data);
   } catch (ex) { fail(ex); }
 }
 
@@ -311,6 +312,81 @@ async function tabPeople(body, data) {
 }
 
 // Ticket types: price, limit and how many are issued; sales window; live QR.
+// ---- Sales, discounts, orders and refunds (events only) ------------------------------------------------
+const CATS = [['', 'Not set'], ['music', 'Music and concerts'], ['festival', 'Festivals'], ['nightlife', 'Nightlife'], ['sports', 'Sports'], ['conference', 'Conferences'], ['exhibition', 'Exhibitions'], ['education', 'Education'], ['networking', 'Business networking'], ['religious', 'Religious gatherings'], ['private', 'Private events'], ['other', 'Other']];
+const stat = (label, value) => h('div', { class: 'card stat' }, h('span', {}, label), h('b', { style: 'font-size:26px;font-family:var(--body)' }, value));
+const kobo = (k) => '₦' + (k / 100).toLocaleString('en-NG', { minimumFractionDigits: k % 100 ? 2 : 0 });
+const ORDER_LABEL = { pending: 'Waiting for payment', paid: 'Paid', fulfilled: 'Paid', failed: 'Failed', expired: 'Expired', review: 'Needs review', refund_due: 'Refund due', refunding: 'Refunding', refunded: 'Refunded' };
+
+async function tabSales(body, data) {
+  const id = data.event.id;
+  const e = data.event;
+  let fin = null, orders = [], discounts = [];
+  try { [fin, orders, discounts] = await Promise.all([get(`/events/${id}/finance`), get(`/events/${id}/orders`).then((r) => r.orders), get(`/events/${id}/discounts`).then((r) => r.discounts)]); } catch (ex) { return body.append(h('div', { class: 'error' }, ex.message)); }
+  const again = () => viewEvent(id, 'sales');
+  const gate = h('div', {});
+
+  // Money actions can ask for the two-step code first.
+  const withMfa = async (fn) => {
+    try { await fn(); } catch (ex) {
+      if (ex.code === 'mfa_required') { mount(gate, h('div', { class: 'card', style: 'margin-bottom:14px' })); mfaVerify(gate.firstChild, { title: 'Confirm it is you', onDone: () => { mount(gate); withMfa(fn); } }); return; }
+      toast(ex.code === 'mfa_setup_required' ? 'Turn on two-step sign-in in the app (Account > Two-step sign-in) to refund orders.' : ex.message);
+    }
+  };
+
+  const finCard = h('div', { class: 'card' }, h('h3', {}, 'Money'),
+    h('div', { class: 'grid cols', style: 'margin-top:8px' },
+      stat('Paid by buyers', kobo(fin.gross_kobo)), stat('You are owed', kobo(fin.organiser_payable_kobo)), stat('Tap In fees', kobo(fin.commission_kobo))),
+    h('p', { class: 'hint', style: 'margin-top:8px' }, fin.reconciled ? 'The books add up.' : 'The books do not add up. Contact support before paying out.'),
+    h('p', { class: 'hint' }, 'Payouts are made by the payment provider straight to your bank account once it is connected.'));
+
+  const cat = h('select', { class: 'input', 'aria-label': 'Category' }, CATS.map(([v, l]) => h('option', { value: v, selected: (e.category || '') === v }, l)));
+  const country = h('input', { class: 'input', maxlength: '2', value: e.country || 'NG', style: 'width:70px;text-transform:uppercase', 'aria-label': 'Country code' });
+  const region = h('input', { class: 'input', value: e.region || '', placeholder: 'State or region', 'aria-label': 'State or region' });
+  const feeMode = h('select', { class: 'input', 'aria-label': 'Who pays the Tap In fee' },
+    h('option', { value: 'pass', selected: e.fee_mode !== 'absorb' }, 'Buyers pay the fee on top of the ticket price'),
+    h('option', { value: 'absorb', selected: e.fee_mode === 'absorb' }, 'I absorb the fee (taken from what I am owed)'));
+  const transfers = h('input', { type: 'checkbox', checked: e.allow_transfers !== false });
+  const settings = h('form', { class: 'card', onsubmit: async (ev) => {
+    ev.preventDefault();
+    try { await patch('/events/' + id, { category: cat.value || null, country: country.value, region: region.value || null, fee_mode: feeMode.value, allow_transfers: transfers.checked }); toast('Saved'); } catch (ex) { toast(ex.message); }
+  } }, h('h3', {}, 'Listing and fees'),
+  h('div', { class: 'field' }, h('label', {}, 'Category (helps people find your event)'), cat),
+  h('div', { class: 'row', style: 'gap:8px' }, h('div', { class: 'field' }, h('label', {}, 'Country'), country), h('div', { class: 'field', style: 'flex:1' }, h('label', {}, 'State or region'), region)),
+  h('div', { class: 'field' }, h('label', {}, 'Tap In fee'), feeMode),
+  h('label', { class: 'row', style: 'gap:8px;margin-top:10px' }, transfers, 'Let ticket holders transfer their tickets to someone else'),
+  h('button', { class: 'btn primary small', style: 'margin-top:12px', type: 'submit' }, 'Save'));
+
+  const code = h('input', { class: 'input', placeholder: 'Code, e.g. EARLY20', maxlength: '20', style: 'text-transform:uppercase', 'aria-label': 'Discount code' });
+  const kind = h('select', { class: 'input', 'aria-label': 'Type' }, h('option', { value: 'pct' }, '% off'), h('option', { value: 'amt' }, '₦ off each ticket'));
+  const val = h('input', { class: 'input', inputmode: 'decimal', placeholder: 'Amount', style: 'width:100px', 'aria-label': 'Amount off' });
+  const uses = h('input', { class: 'input', inputmode: 'numeric', placeholder: 'No limit', style: 'width:100px', 'aria-label': 'How many times it can be used' });
+  const dcard = h('div', { class: 'card' }, h('h3', {}, 'Discount codes'),
+    discounts.length ? h('div', { class: 'scroll-x' }, h('table', {}, h('thead', {}, h('tr', {}, ['Code', 'Off', 'Used', 'Status', ''].map((c) => h('th', {}, c)))),
+      h('tbody', {}, discounts.map((d) => h('tr', {}, h('td', {}, h('strong', {}, d.code)), h('td', {}, d.percent_off ? d.percent_off + '%' : kobo(d.amount_off_kobo)),
+        h('td', {}, d.uses + (d.max_uses ? ' / ' + d.max_uses : '')), h('td', {}, d.status),
+        h('td', {}, d.status === 'active' && h('button', { class: 'btn small ghost', type: 'button', onclick: async () => { try { await post(`/events/${id}/discounts/${d.id}/revoke`); again(); } catch (ex) { toast(ex.message); } } }, 'Stop'))))))) : h('p', { class: 'hint', style: 'margin:6px 0' }, 'No discount codes yet.'),
+    h('form', { class: 'row', style: 'gap:8px;margin-top:12px;flex-wrap:wrap', onsubmit: async (ev) => {
+      ev.preventDefault();
+      try {
+        const n = parseFloat(val.value);
+        await post(`/events/${id}/discounts`, { code: code.value, ...(kind.value === 'pct' ? { percent_off: Math.round(n) } : { amount_off_kobo: Math.round(n * 100) }), ...(uses.value ? { max_uses: Number.parseInt(uses.value, 10) } : {}) });
+        toast('Code created'); again();
+      } catch (ex) { toast(ex.message); }
+    } }, code, kind, val, uses, h('button', { class: 'btn primary small', type: 'submit' }, 'Add code')));
+
+  const ocard = h('div', { class: 'card' }, h('h3', {}, 'Orders'),
+    orders.length ? h('div', { class: 'scroll-x' }, h('table', {}, h('thead', {}, h('tr', {}, ['When', 'Buyer', 'Ticket', 'Total', 'Status', ''].map((c) => h('th', {}, c)))),
+      h('tbody', {}, orders.map((o) => h('tr', {}, h('td', {}, when(o.created_at)), h('td', {}, (o.buyer || '') + ' ', h('span', { class: 'hint' }, o.contact || '')),
+        h('td', {}, o.qty + ' × ' + o.tier), h('td', {}, kobo(o.total_kobo)), h('td', {}, ORDER_LABEL[o.status] || o.status),
+        h('td', {}, ['fulfilled', 'refund_due'].includes(o.status) && h('button', { class: 'btn small ghost', type: 'button', onclick: () => {
+          if (!confirm('Refund this order in full? The tickets will stop working.')) return;
+          withMfa(async () => { await post(`/events/${id}/orders/${o.id}/refund`); toast('Refunded'); again(); });
+        } }, 'Refund'))))))) : h('p', { class: 'hint', style: 'margin:6px 0' }, 'No paid orders yet. Free tickets and invite codes are not listed here.'));
+
+  body.append(gate, finCard, h('div', { class: 'grid two', style: 'margin-top:14px' }, settings, dcard), h('div', { style: 'margin-top:14px' }, ocard));
+}
+
 async function tabTickets(body, data) {
   const id = data.event.id;
   const local = (sec) => { if (!sec) return ''; const d = new Date(sec * 1000); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };

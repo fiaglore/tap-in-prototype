@@ -19,13 +19,22 @@ import * as vendors from './routes/vendors.js';
 import * as till from './routes/till.js';
 import { PAYMENT_API, PAYMENT_PAGES, paymentsOff } from './lib/money.js';
 import * as photo from './routes/photo.js';
+import * as orders from './routes/orders.js';
+import * as transfers from './routes/transfers.js';
+import * as discounts from './routes/discounts.js';
+import * as mfa from './routes/mfa.js';
+import * as apikeys from './routes/apikeys.js';
+import * as v1 from './routes/v1.js';
+import { authenticateKey } from './routes/apikeys.js';
+import { flush as flushWebhooks } from './lib/outbound.js';
+import { checkoutMode } from './lib/payments/provider.js';
 import { routeByHost } from './lib/hosts.js';
 import { requireStaff } from './lib/staff.js';
 import * as admin from './routes/admin.js';
 
 // [method, path, auth, handler]. auth "user" needs a signed-in session; gate routes check their own key.
 const ROUTES = [
-  ['GET', '/api/config', 'none', ({ env }) => json({ otp_mode: otpMode(env), payments: !paymentsOff(env), wallet: walletConfig(env), configured: isConfigured(env), ...(otpMode(env) === 'firebase' && !env.FIREBASE_API_KEY ? { delivery_problem: 'FIREBASE_API_KEY is not set' } : {}), ...(isConfigured(env) ? {} : { problem: !env.SECRET_PEPPER ? 'SECRET_PEPPER is not set on the running Worker' : 'SECRET_PEPPER is set but shorter than 32 characters (length ' + String(env.SECRET_PEPPER).length + ')' }) })],
+  ['GET', '/api/config', 'none', ({ env }) => json({ otp_mode: otpMode(env), checkout: checkoutMode(env), payments: !paymentsOff(env), wallet: walletConfig(env), configured: isConfigured(env), ...(otpMode(env) === 'firebase' && !env.FIREBASE_API_KEY ? { delivery_problem: 'FIREBASE_API_KEY is not set' } : {}), ...(isConfigured(env) ? {} : { problem: !env.SECRET_PEPPER ? 'SECRET_PEPPER is not set on the running Worker' : 'SECRET_PEPPER is set but shorter than 32 characters (length ' + String(env.SECRET_PEPPER).length + ')' }) })],
   ['POST', '/api/auth/otp/request', 'none', auth.otpRequest],
   ['POST', '/api/auth/otp/verify', 'none', auth.otpVerify],
   ['POST', '/api/auth/email-link/complete', 'none', auth.emailLinkComplete],
@@ -105,6 +114,39 @@ const ROUTES = [
   ['GET', '/api/public/events', 'none', publicSale.listUpcoming],
   ['GET', '/api/public/events/:id', 'none', publicSale.getEvent],
   ['POST', '/api/public/events/:id/buy', 'user', publicSale.buy],
+  ['POST', '/api/public/events/:id/checkout', 'user', orders.checkout],
+  ['POST', '/api/public/events/:id/quote', 'none', discounts.quoteRoute],
+  ['GET', '/api/me/mfa', 'user', mfa.status],
+  ['POST', '/api/me/mfa/setup', 'user', mfa.setup],
+  ['POST', '/api/me/mfa/enable', 'user', mfa.enable],
+  ['POST', '/api/me/mfa/verify', 'user', mfa.verify],
+  ['POST', '/api/me/mfa/disable', 'user', mfa.disable],
+  ['GET', '/api/me/api-keys', 'user', apikeys.listKeys],
+  ['POST', '/api/me/api-keys', 'user', apikeys.createKey],
+  ['POST', '/api/me/api-keys/:id/revoke', 'user', apikeys.revokeKey],
+  ['GET', '/api/me/webhook-endpoints', 'user', apikeys.listEndpoints],
+  ['POST', '/api/me/webhook-endpoints', 'user', apikeys.createEndpoint],
+  ['POST', '/api/me/webhook-endpoints/:id/revoke', 'user', apikeys.revokeEndpoint],
+  // The public API. Authenticated by API key, not by cookie.
+  ['GET', '/api/v1/ping', 'apikey', v1.ping],
+  ['GET', '/api/v1/events', 'apikey', v1.listEvents],
+  ['POST', '/api/v1/events', 'apikey', v1.createEvent],
+  ['GET', '/api/v1/events/:id', 'apikey', v1.getEvent],
+  ['GET', '/api/v1/events/:id/attendees', 'apikey', v1.attendees],
+  ['GET', '/api/v1/events/:id/scans', 'apikey', v1.scans],
+  ['GET', '/api/v1/events/:id/orders', 'apikey', v1.eventOrders],
+  ['GET', '/api/v1/events/:id/finance', 'apikey', v1.finance],
+  ['GET', '/api/v1/orders/:id', 'apikey', v1.getOrder],
+  ['POST', '/api/me/passes/:id/transfer', 'user', transfers.transferPass],
+  ['GET', '/api/me/transfers', 'user', transfers.myTransfers],
+  ['GET', '/api/events/:id/discounts', 'user', discounts.listDiscounts],
+  ['POST', '/api/events/:id/discounts', 'user', discounts.createDiscount],
+  ['POST', '/api/events/:id/discounts/:discountId/revoke', 'user', discounts.revokeDiscount],
+  ['POST', '/api/webhooks/payments/:provider', 'none', orders.webhook],
+  ['GET', '/api/orders/:id', 'user', orders.getOrder],
+  ['POST', '/api/events/:id/orders/:orderId/refund', 'user', orders.refundOrder],
+  ['GET', '/api/events/:id/finance', 'user', orders.finance],
+  ['GET', '/api/events/:id/orders', 'user', orders.listOrders],
 
   // The team's support console. 'staff' means: on the STAFF_IDENTIFIERS list, signed in within 8 hours, otherwise "not found".
   ['GET', '/api/admin/me', 'staff', admin.adminMe],
@@ -146,7 +188,7 @@ function match(pattern, path) {
   return params;
 }
 
-async function handleApi(request, env) {
+async function handleApi(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, '') : url.pathname;
 
@@ -182,7 +224,10 @@ async function handleApi(request, env) {
     if (!user) throw new HttpError(401, 'unauthorised', 'Sign in to continue.');
   }
   if (found.authLevel === 'staff') user = staff;
-  return found.fn({ request, env, url, params: found.params, user });
+  let key = null;
+  // API keys are for programs, not browsers: no cookies, and cross-site checks do not apply (there is no ambient credential to abuse).
+  if (found.authLevel === 'apikey') ({ key, user } = await authenticateKey(env, request));
+  return found.fn({ request, env, url, params: found.params, user, key, ctx });
 }
 
 // Remove expired rows. Runs from the daily cron trigger in wrangler.jsonc.
@@ -204,7 +249,7 @@ export async function purge(env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/') && url.pathname !== '/api') {
       const hop = routeByHost(request, env, url);
@@ -215,7 +260,7 @@ export default {
       return env.ASSETS.fetch(request);
     }
     try {
-      return await handleApi(request, env);
+      return await handleApi(request, env, ctx);
     } catch (err) {
       if (err instanceof HttpError) {
         return json({ error: { code: err.code, message: err.message, ...(err.extra || {}) } }, err.status);
@@ -225,7 +270,8 @@ export default {
     }
   },
 
-  async scheduled(_event, env, ctx) {
-    ctx.waitUntil(purge(env));
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(flushWebhooks(env, { limit: 100 })); // every run: send webhooks that are due
+    if (event.cron !== '*/15 * * * *') ctx.waitUntil(purge(env)); // the daily run also clears expired rows
   }
 };

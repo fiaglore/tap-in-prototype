@@ -1,10 +1,11 @@
 // Public sales page: anyone can see an event's ticket types and prices; buying needs a signed-in
-// session so the ticket can be attached to someone. This is a demo checkout — no real payment is
-// taken, it just mints an invite and claims it straight to the buyer's account.
+// session so the ticket can be attached to someone. Free ticket types are claimed straight to the buyer's
+// account. Paid ones are refused (402) until a payment provider confirms payment; TICKET_CHECKOUT=demo
+// (development and tests only) lets them through without taking money.
 
 import { HttpError, newId, nowSec } from '../lib/util.js';
 import { json, readJson } from '../lib/http.js';
-import { MAX_INVITES_PER_EVENT, mintInvites } from './events.js';
+import { CATEGORIES, MAX_INVITES_PER_EVENT, mintInvites } from './events.js';
 
 const MAX_QTY = 8;
 
@@ -58,8 +59,13 @@ export async function buy({ request, env, user, params }) {
   const state = salesState(ev, nowSec());
   if (state === 'upcoming') throw new HttpError(409, 'sales_not_open', 'Ticket sales have not opened yet.');
   if (state === 'closed') throw new HttpError(409, 'sales_closed', 'Ticket sales for this event have closed.');
-  const tier = await env.DB.prepare('SELECT id, name, capacity FROM tiers WHERE id = ?1 AND event_id = ?2').bind(b.tier_id, ev.id).first();
+  const tier = await env.DB.prepare('SELECT id, name, capacity, price_kobo FROM tiers WHERE id = ?1 AND event_id = ?2').bind(b.tier_id, ev.id).first();
   if (!tier) throw new HttpError(400, 'invalid_tier', 'Choose a ticket type.');
+  // A paid ticket is never issued without a verified payment. Until a payment provider is connected (Phase 1),
+  // only free ticket types can be taken here. TICKET_CHECKOUT=demo is for local development and tests only.
+  if (tier.price_kobo > 0 && String(env.TICKET_CHECKOUT || 'off').toLowerCase() !== 'demo') {
+    throw new HttpError(402, 'payment_not_connected', 'Online payment is not open yet, so this paid ticket cannot be bought here. Ask the organiser for an invite code.');
+  }
 
   const qty = b.qty === undefined ? 1 : Number.parseInt(b.qty, 10);
   if (!Number.isInteger(qty) || qty < 1 || qty > MAX_QTY) {
@@ -89,35 +95,63 @@ export async function buy({ request, env, user, params }) {
 // GET /api/public/events  -> upcoming events the organiser chose to list (the public "Play" page)
 // An event is upcoming until about 12 hours after it starts; undated ("date to be announced") events stay listed.
 // Only what a visitor needs to choose an event: no codes, keys, counts or organiser details.
-export async function listUpcoming({ env }) {
+// Filters (all optional, combinable): q, country (NG), region, city, category, from / to (YYYY-MM-DD, Lagos dates),
+// min_price / max_price (naira, against the cheapest ticket), free=1, available=1 (hide sold out).
+export async function listUpcoming({ env, url }) {
   const now = nowSec();
+  const qs = url ? url.searchParams : new URLSearchParams();
+  const text = (k, n = 60) => { const v = (qs.get(k) || '').trim().slice(0, n); return v || null; };
+  const day = (k, endOfDay) => {
+    const v = qs.get(k);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v || '')) return null;
+    const t = Date.parse(v + 'T00:00:00+01:00'); // Lagos time
+    return Number.isFinite(t) ? Math.floor(t / 1000) + (endOfDay ? 86400 : 0) : null;
+  };
+  const naira = (k) => { const n = Number.parseFloat(qs.get(k)); return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) : null; };
+  const country = (text('country', 2) || '').toUpperCase() || null;
+  const like = (v) => (v ? '%' + v.replace(/[\\%_]/g, '\\$&').toLowerCase() + '%' : null);
+  const category = CATEGORIES.includes(qs.get('category')) ? qs.get('category') : null;
+  const base = `e.kind = 'event' AND e.listed = 1 AND (e.starts_at IS NULL OR e.starts_at >= ?1)`;
+
   const rows = (
     await env.DB.prepare(
-      `SELECT e.id, e.name, e.venue, e.city, e.starts_at, e.sales_start, e.sales_end,
+      `SELECT e.id, e.name, e.venue, e.city, e.starts_at, e.sales_start, e.sales_end, e.category, e.country, e.region,
         (SELECT MIN(t.price_kobo) FROM tiers t WHERE t.event_id = e.id) AS from_kobo,
         (SELECT COUNT(*) FROM tiers t WHERE t.event_id = e.id) AS tier_count,
         (SELECT COUNT(*) FROM tiers t WHERE t.event_id = e.id AND t.capacity IS NOT NULL
            AND (SELECT COUNT(*) FROM invites i WHERE i.tier_id = t.id AND i.status != 'revoked') >= t.capacity) AS full_tiers
        FROM events e
-       WHERE e.kind = 'event' AND e.listed = 1 AND (e.starts_at IS NULL OR e.starts_at >= ?1)
+       WHERE ${base}
+         AND (?2 IS NULL OR e.country = ?2)
+         AND (?3 IS NULL OR lower(e.region) = lower(?3))
+         AND (?4 IS NULL OR lower(e.city) = lower(?4))
+         AND (?5 IS NULL OR e.category = ?5)
+         AND (?6 IS NULL OR e.starts_at >= ?6)
+         AND (?7 IS NULL OR e.starts_at < ?7)
+         AND (?8 IS NULL OR lower(e.name || ' ' || COALESCE(e.venue, '') || ' ' || COALESCE(e.city, '')) LIKE ?8 ESCAPE '\\')
        ORDER BY e.starts_at IS NULL, e.starts_at ASC, e.created_at DESC
-       LIMIT 60`
+       LIMIT 200`
     )
-      .bind(now - 12 * 3600)
+      .bind(now - 12 * 3600, country, text('region'), text('city'), category, day('from', false), day('to', true), like(text('q', 80)))
       .all()
   ).results;
-  return json({
-    events: rows.map((e) => ({
-      id: e.id,
-      name: e.name,
-      venue: e.venue,
-      city: e.city,
-      starts_at: e.starts_at,
-      sales: salesState(e, now),
-      sold_out: e.tier_count > 0 && e.full_tiers === e.tier_count,
-      from_kobo: e.from_kobo
+
+  const min = naira('min_price');
+  const max = naira('max_price');
+  const free = qs.get('free') === '1';
+  const avail = qs.get('available') === '1';
+  const events = rows
+    .map((e) => ({
+      id: e.id, name: e.name, venue: e.venue, city: e.city, region: e.region, country: e.country, category: e.category, starts_at: e.starts_at,
+      sales: salesState(e, now), sold_out: e.tier_count > 0 && e.full_tiers === e.tier_count, from_kobo: e.from_kobo
     }))
-  });
+    .filter((e) => (min === null || (e.from_kobo ?? 0) >= min) && (max === null || (e.from_kobo ?? 0) <= max) && (!free || e.from_kobo === 0) && (!avail || !e.sold_out))
+    .slice(0, 60);
+
+  // Choices for the filter boxes, from everything currently listed.
+  const f = (await env.DB.prepare(`SELECT e.country, e.region, e.city, e.category FROM events e WHERE ${base} LIMIT 500`).bind(now - 12 * 3600).all()).results;
+  const uniq = (k) => [...new Set(f.map((x) => x[k]).filter(Boolean))].sort();
+  return json({ events, facets: { countries: uniq('country'), regions: uniq('region'), cities: uniq('city'), categories: uniq('category') } });
 }
 
 // GET /e/?id=…  The sales page itself is static, but link previews (WhatsApp, X, iMessage) only read the

@@ -52,7 +52,7 @@ await test('an event that started a few hours ago is still listed', async () => 
 });
 await test('each entry has just what a visitor needs to choose, and nothing private', async () => {
   const e = (await list()).find((x) => x.name === 'Next month');
-  assert.deepEqual(Object.keys(e).sort(), ['city', 'from_kobo', 'id', 'name', 'sales', 'sold_out', 'starts_at', 'venue']);
+  assert.deepEqual(Object.keys(e).sort(), ['category', 'city', 'country', 'from_kobo', 'id', 'name', 'region', 'sales', 'sold_out', 'starts_at', 'venue']);
   const raw = JSON.stringify(await list());
   for (const secret of ['gate_key', 'owner', 'prefix', 'hint', 'invite', 'capacity', 'issued']) assert.ok(!raw.includes(secret), secret + ' must not be public');
   assert.equal(e.from_kobo, 500000);
