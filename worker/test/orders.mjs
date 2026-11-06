@@ -203,5 +203,18 @@ await test('an order cannot be refunded after someone has entered, or by a diffe
   assert.equal((await fan.post(`/api/events/${e.event.id}/orders/${o.order.id}/refund`)).status, 404);
 });
 
+await test('the organiser can list orders with masked buyer contacts; others cannot', async () => {
+  const e = await mk();
+  const o = await start(e, 1);
+  await hook(paidEvt(o));
+  const r = await org.get(`/api/events/${e.event.id}/orders`);
+  assert.equal(r.status, 200);
+  const row = r.body.orders.find((x) => x.id === o.order.id);
+  assert.equal(row.status, 'fulfilled');
+  assert.ok(!/buyer\d+@/.test(row.contact), 'the full address is not shown');
+  assert.match(row.contact, /•••/);
+  assert.equal((await o.buyer.get(`/api/events/${e.event.id}/orders`)).status, 404);
+});
+
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) { console.log('Failed: ' + failures.join('; ')); process.exit(1); }

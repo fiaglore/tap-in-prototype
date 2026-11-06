@@ -23,13 +23,14 @@ import * as orders from './routes/orders.js';
 import * as transfers from './routes/transfers.js';
 import * as discounts from './routes/discounts.js';
 import * as mfa from './routes/mfa.js';
+import { checkoutMode } from './lib/payments/provider.js';
 import { routeByHost } from './lib/hosts.js';
 import { requireStaff } from './lib/staff.js';
 import * as admin from './routes/admin.js';
 
 // [method, path, auth, handler]. auth "user" needs a signed-in session; gate routes check their own key.
 const ROUTES = [
-  ['GET', '/api/config', 'none', ({ env }) => json({ otp_mode: otpMode(env), payments: !paymentsOff(env), wallet: walletConfig(env), configured: isConfigured(env), ...(otpMode(env) === 'firebase' && !env.FIREBASE_API_KEY ? { delivery_problem: 'FIREBASE_API_KEY is not set' } : {}), ...(isConfigured(env) ? {} : { problem: !env.SECRET_PEPPER ? 'SECRET_PEPPER is not set on the running Worker' : 'SECRET_PEPPER is set but shorter than 32 characters (length ' + String(env.SECRET_PEPPER).length + ')' }) })],
+  ['GET', '/api/config', 'none', ({ env }) => json({ otp_mode: otpMode(env), checkout: checkoutMode(env), payments: !paymentsOff(env), wallet: walletConfig(env), configured: isConfigured(env), ...(otpMode(env) === 'firebase' && !env.FIREBASE_API_KEY ? { delivery_problem: 'FIREBASE_API_KEY is not set' } : {}), ...(isConfigured(env) ? {} : { problem: !env.SECRET_PEPPER ? 'SECRET_PEPPER is not set on the running Worker' : 'SECRET_PEPPER is set but shorter than 32 characters (length ' + String(env.SECRET_PEPPER).length + ')' }) })],
   ['POST', '/api/auth/otp/request', 'none', auth.otpRequest],
   ['POST', '/api/auth/otp/verify', 'none', auth.otpVerify],
   ['POST', '/api/auth/email-link/complete', 'none', auth.emailLinkComplete],
@@ -125,6 +126,7 @@ const ROUTES = [
   ['GET', '/api/orders/:id', 'user', orders.getOrder],
   ['POST', '/api/events/:id/orders/:orderId/refund', 'user', orders.refundOrder],
   ['GET', '/api/events/:id/finance', 'user', orders.finance],
+  ['GET', '/api/events/:id/orders', 'user', orders.listOrders],
 
   // The team's support console. 'staff' means: on the STAFF_IDENTIFIERS list, signed in within 8 hours, otherwise "not found".
   ['GET', '/api/admin/me', 'staff', admin.adminMe],

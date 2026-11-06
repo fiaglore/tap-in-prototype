@@ -5,6 +5,7 @@ import { signInFlow } from '/js/auth-ui.js?v=2';
 import { cardEl, cardNumber, loadCard, saveCard, sanitise, PRESETS, SWATCHES, FINISHES, PATTERNS, TYPES } from '/js/card.js';
 import { orbitSvg, nextIndex, daysTo } from '/app/orbit.js';
 import { qrSvg } from '/js/qr.js';
+import { mfaCard } from '/js/mfa-ui.js';
 import { rollingToken, secondsLeft, LIVE_STEP } from '/js/offline.js';
 
 // DELETE with a body (the shared helper sends none): the server wants the word DELETE.
@@ -441,11 +442,33 @@ function showPass(p) {
       h('button', { class: 'btn small primary', style: 'margin-top:8px', type: 'button', onclick: async () => { try { if (await ensurePhoto()) { toast('Photo saved'); close(); render(); } } catch (ex) { toast(ex.message); } } }, 'Add my photo')),
     qrBox, countdown, tokenEl,
     h('div', { class: 'zones', style: 'margin-top:12px;justify-content:center' }, p.zones.map((z) => h('span', { class: 'chip' }, z))),
-    note, copyBtn, walletButtons(p));
+    note, copyBtn, walletButtons(p), p.event.kind === 'event' && transferBox(p, close));
   document.body.style.overflow = 'hidden';
   document.body.append(overlay);
   overlay.querySelector('button').focus();
   overlay.addEventListener('keydown', (e) => e.key === 'Escape' && close());
+}
+
+// Send this ticket to someone else. Their pass is new; yours stops working straight away.
+function transferBox(p, close) {
+  const box = h('div', { style: 'margin-top:14px;text-align:center;max-width:340px' });
+  const open = () => {
+    const to = h('input', { class: 'input', placeholder: 'Their phone number or email', 'aria-label': 'Who is this ticket for?', autocomplete: 'off' });
+    const err = h('div', { class: 'error', role: 'alert', hidden: true });
+    mount(box, h('p', { class: 'hint' }, 'Your ticket will stop working and they will get their own. This cannot be undone.'), to, err,
+      h('div', { class: 'row', style: 'justify-content:center;margin-top:8px' },
+        h('button', { class: 'btn ghost small', type: 'button', onclick: () => mount(box, h('button', { class: 'btn ghost small', type: 'button', onclick: open }, 'Send to someone else')) }, 'Cancel'),
+        h('button', { class: 'btn primary small', type: 'button', onclick: async (e) => {
+          e.currentTarget.disabled = true; err.hidden = true;
+          try {
+            const r = await post('/me/passes/' + encodeURIComponent(p.id) + '/transfer', { to: to.value });
+            toast(r.transfer.status === 'completed' ? 'Ticket sent' : 'Ticket held for them. It appears when they sign in.');
+            close(); await refresh(); render();
+          } catch (ex) { err.textContent = ex.message; err.hidden = false; e.target.disabled = false; }
+        } }, 'Send ticket')));
+  };
+  mount(box, h('button', { class: 'btn ghost small', type: 'button', onclick: open }, 'Send to someone else'));
+  return box;
 }
 
 // ---- Wallet --------------------------------------------------------------------------------------
@@ -550,6 +573,7 @@ function viewMe() {
       h('p', { class: 'hint', style: 'margin-top:8px' }, 'Signed in as ' + state.user.identifier),
       h('button', { class: 'btn primary small', style: 'margin-top:12px', type: 'submit' }, 'Save name')),
     photoCard(),
+    mfaCard(),
     installCard(),
     state.config.otp_mode === 'demo' && h('div', { class: 'notice warn' }, 'Demo mode: sign-in codes are shown on screen instead of being texted. This is for trying Tap In out.'),
     h('div', { class: 'row' },

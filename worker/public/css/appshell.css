@@ -35,3 +35,6 @@ html.is-native #app .head{position:sticky;top:0;z-index:5;margin:0 -20px;padding
 .evtools .chip[aria-pressed="true"]{color:var(--fg);background:var(--card-on);border-color:var(--signal)}
 .evcount{margin:0 0 10px;font-size:13px}
 .sharebtn{margin-top:10px}
+.evtools select.input,.evtools input.input[type=date],.evtools input.input[type=number]{width:auto;min-width:130px;flex:0 1 auto}
+.evtools .row{display:flex}
+.evcount{margin:0 0 10px;font-size:13px}

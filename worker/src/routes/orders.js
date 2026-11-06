@@ -64,7 +64,7 @@ export async function checkout({ request, env, user, params }) {
   const order = await env.DB.prepare('SELECT * FROM orders WHERE id = ?1').bind(id).first();
   let init;
   try {
-    init = await provider.initialize(env, { order, email: user.email || null, callbackUrl: new URL('/app/', request.url).toString() });
+    init = await provider.initialize(env, { order, email: user.email || null, callbackUrl: new URL(`/e/?id=${encodeURIComponent(ev.id)}&order=${encodeURIComponent(order.id)}`, request.url).toString() });
   } catch (e) {
     await env.DB.prepare(`UPDATE orders SET status = 'failed' WHERE id = ?1 AND status = 'pending'`).bind(id).run();
     throw e;
@@ -220,4 +220,18 @@ export async function finance({ env, user, params }) {
     reconciled: gross === payable + commission,
     orders: counts
   });
+}
+
+const mask = (s) => (s ? (s.includes('@') ? s.replace(/^(.).*(@.*)$/, '$1•••$2') : s.replace(/.(?=.{3}$)/g, '•')) : null);
+
+// GET /api/events/:id/orders  (the organiser): the latest 200 orders, buyers shown by name and a masked contact.
+export async function listOrders({ env, user, params }) {
+  const ev = await ownedEvent(env, user, params.id);
+  const rows = (await env.DB.prepare(
+    `SELECT o.id, o.qty, o.status, o.total_kobo, o.discount_kobo, o.created_at, o.paid_at, t.name AS tier_name, u.name AS buyer_name, u.email, u.phone
+     FROM orders o JOIN tiers t ON t.id = o.tier_id JOIN users u ON u.id = o.user_id
+     WHERE o.event_id = ?1 AND o.status != 'pending' OR (o.event_id = ?1 AND o.status = 'pending' AND o.expires_at > ?2)
+     ORDER BY o.created_at DESC LIMIT 200`
+  ).bind(ev.id, nowSec()).all()).results;
+  return json({ orders: rows.map((r) => ({ id: r.id, qty: r.qty, status: r.status, total_kobo: r.total_kobo, discount_kobo: r.discount_kobo, created_at: r.created_at, paid_at: r.paid_at, tier: r.tier_name, buyer: r.buyer_name || null, contact: mask(r.email || r.phone) })) });
 }

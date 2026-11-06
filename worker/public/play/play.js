@@ -28,33 +28,60 @@ function card(e) {
       h('div', { class: 'meta' }, state(e), e.from_kobo !== null && e.from_kobo !== undefined ? h('span', { class: 'chip' }, naira(e.from_kobo)) : null, h('span', { class: 'go' }, 'Tickets →'))));
 }
 
-// Inside the phone app: a search box and a few filters above the list.
-function nativeList(events) {
-  const FILTERS = [['all', 'All'], ['on', 'On sale'], ['free', 'Free']];
-  let filter = 'all';
-  const input = h('input', { class: 'input', id: 'evq', type: 'search', placeholder: 'Search events, venues, cities', 'aria-label': 'Search events', autocomplete: 'off', enterkeyhint: 'search' });
-  const chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Filter events' });
-  const count = h('p', { class: 'muted evcount', role: 'status' });
-  const list = h('div', { role: 'list' });
-  const onSale = (e) => !e.sold_out && e.sales !== 'upcoming' && e.sales !== 'closed';
-  const paint = () => {
-    const term = input.value.trim().toLowerCase();
-    const rows = events.filter((e) => (!term || [e.name, e.venue, e.city].filter(Boolean).join(' ').toLowerCase().includes(term))
-      && (filter === 'all' || (filter === 'on' && onSale(e)) || (filter === 'free' && e.from_kobo === 0)));
-    mount(chips, FILTERS.map(([k, label]) => h('button', { type: 'button', class: 'chip', 'aria-pressed': filter === k ? 'true' : 'false', onclick: () => { filter = k; paint(); } }, label)));
-    count.textContent = rows.length === events.length ? events.length + (events.length === 1 ? ' event' : ' events') : rows.length + ' of ' + events.length;
-    mount(list, rows.length ? rows.map(card) : h('div', { class: 'emptybox' }, h('h3', {}, 'Nothing matches'), h('p', { class: 'muted', style: 'margin-top:6px' }, 'Try a different search or filter.')));
-  };
-  input.addEventListener('input', paint);
-  mount(box, h('div', { class: 'evtools' }, input, chips), count, list);
-  paint();
+// Filters: the server does the filtering (search, place, category, date, price, free, available) so the list stays small.
+const CATEGORY_LABEL = { music: 'Music and concerts', festival: 'Festivals', nightlife: 'Nightlife', sports: 'Sports', conference: 'Conferences', exhibition: 'Exhibitions', education: 'Education', networking: 'Business networking', religious: 'Religious gatherings', private: 'Private events', other: 'Other' };
+const f = { q: '', country: '', city: '', category: '', from: '', max_price: '', free: false, available: false };
+let facets = { countries: [], cities: [], categories: [] };
+let timer = null;
+
+function select(label, key, values, labelOf = (v) => v) {
+  const el = h('select', { class: 'input', 'aria-label': label, onchange: (e) => { f[key] = e.target.value; load(); } },
+    h('option', { value: '' }, label), values.map((v) => h('option', { value: v, selected: f[key] === v }, labelOf(v))));
+  return el;
+}
+function toolbar() {
+  const q = h('input', { class: 'input', type: 'search', placeholder: 'Search events, venues, cities', 'aria-label': 'Search events', autocomplete: 'off', enterkeyhint: 'search', value: f.q });
+  q.addEventListener('input', () => { f.q = q.value.trim(); clearTimeout(timer); timer = setTimeout(load, 250); });
+  const date = h('input', { class: 'input', type: 'date', 'aria-label': 'On or after this date', value: f.from, onchange: (e) => { f.from = e.target.value; load(); } });
+  const price = h('input', { class: 'input', type: 'number', min: '0', step: '500', placeholder: 'Max price ₦', 'aria-label': 'Maximum price in naira', value: f.max_price, style: 'max-width:150px' });
+  price.addEventListener('input', () => { f.max_price = price.value; clearTimeout(timer); timer = setTimeout(load, 400); });
+  const chip = (key, label) => h('button', { type: 'button', class: 'chip', 'aria-pressed': f[key] ? 'true' : 'false', onclick: () => { f[key] = !f[key]; load(); } }, label);
+  return h('div', { class: 'evtools' }, q,
+    h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' },
+      facets.categories.length > 0 && select('Any category', 'category', facets.categories, (v) => CATEGORY_LABEL[v] || v),
+      facets.countries.length > 1 && select('Any country', 'country', facets.countries),
+      facets.cities.length > 0 && select('Any city', 'city', facets.cities), date, price),
+    h('div', { class: 'chips', role: 'group', 'aria-label': 'Quick filters' }, chip('free', 'Free'), chip('available', 'Not sold out'),
+      Object.values(f).some(Boolean) && h('button', { type: 'button', class: 'chip', onclick: () => { Object.assign(f, { q: '', country: '', city: '', category: '', from: '', max_price: '', free: false, available: false }); load(true); } }, 'Clear filters')));
 }
 
-get('/public/events').then((r) => {
-  if (!r.events.length) {
-    return mount(box, h('div', { class: 'emptybox' }, h('h3', {}, 'No upcoming events yet'), h('p', { class: 'muted', style: 'margin-top:6px' }, 'Check back soon, or run your own.'),
-      h('a', { class: 'btn primary', style: 'margin-top:16px', href: '/organiser/' }, 'Organiser sign in')));
-  }
-  if (document.documentElement.classList.contains('is-native')) nativeList(r.events);
-  else mount(box, r.events.map(card));
-}).catch((ex) => mount(box, h('div', { class: 'error' }, ex.message || 'Could not load events. Try again.')));
+const bar = h('div', {});
+box.before(bar);
+const count = h('p', { class: 'muted evcount', role: 'status' });
+box.before(count);
+let seq = 0;
+function load(repaintBar = false) {
+  const mine = ++seq;
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(f)) if (v) qs.set(k, v === true ? '1' : v);
+  get('/public/events' + (qs.toString() ? '?' + qs : '')).then((r) => {
+    if (mine !== seq) return; // a newer search has started
+    const first = !bar.firstChild;
+    if (first || repaintBar === true || JSON.stringify(r.facets) !== JSON.stringify(facets)) {
+      // Keep the search box (and its caret) alive while typing; only rebuild the toolbar when its choices changed.
+      const focused = document.activeElement && document.activeElement.closest && document.activeElement.closest('.evtools');
+      facets = r.facets;
+      if (!focused || repaintBar === true) mount(bar, toolbar());
+    }
+    const filtering = Object.values(f).some(Boolean);
+    count.textContent = r.events.length ? r.events.length + (r.events.length === 1 ? ' event' : ' events') : '';
+    if (!r.events.length) {
+      return mount(box, filtering
+        ? h('div', { class: 'emptybox' }, h('h3', {}, 'Nothing matches'), h('p', { class: 'muted', style: 'margin-top:6px' }, 'Try a different search or clear the filters.'))
+        : h('div', { class: 'emptybox' }, h('h3', {}, 'No upcoming events yet'), h('p', { class: 'muted', style: 'margin-top:6px' }, 'Check back soon, or run your own.'),
+          h('a', { class: 'btn primary', style: 'margin-top:16px', href: '/organiser/' }, 'Organiser sign in')));
+    }
+    mount(box, r.events.map(card));
+  }).catch((ex) => mount(box, h('div', { class: 'error' }, ex.message || 'Could not load events. Try again.')));
+}
+load();

@@ -22,21 +22,30 @@ Decisions (from the owner): neutral payment layer first, no provider chosen yet;
 | Ledger and organiser finance summary that reconciles | 11 | Done, tested |
 | Real provider adapter (Paystack or Flutterwave) | live payment | Blocked: provider account and keys |
 | Provider split/subaccount creation per organiser | settlement | Blocked: provider account |
-| Checkout screens on the sales page (redirect, poll order) | 1 | Todo |
+| Checkout screens on the sales page (discount code, quote, redirect, wait for confirmation) | 1 | Done (needs a real provider to test end to end) |
 | Partial refunds, disputes/chargebacks, payout statements | 12 | Todo |
 | SMS (OTP, ticket confirmation) | 14 | Blocked: SMS provider |
 | Tests run in CI (`.github/workflows/worker-tests.yml`) | n/a | Done |
-| MFA for organiser/staff/admin | 13, 15 | Todo |
-| Staging environment, backup and recovery runbook | 16 | Todo (needs Cloudflare access) |
+| MFA (authenticator app, recovery codes): mandatory for staff, required for organiser refunds if turned on (mandatory with `REQUIRE_ORGANISER_MFA=1`) | 13, 15 | Done, tested |
+| Staging environment config and operations runbook (`docs/RUNBOOK.md`) | 16 | Written; staging needs the owner to create its database; restore never practised |
 
 Open business decisions: who bears the provider's processing fee (currently recorded as a Tap In cost, see `src/lib/fees.js`); commission rates (checkout stays closed until set); refund policy wording (needs legal review).
 
-## Phase 2 items requested early
+## Phase 2 items built early
 | Item | Status |
 |---|---|
-| Ticket transfers (revoke old pass, issue new, notify both) | Todo |
-| Discount codes | Todo |
-| Discovery filters (country, city, category, date, price) | Todo |
+| Ticket transfers (old pass revoked, new pass issued, organiser can switch off, 10 a day limit, refund follows the ticket) | Done, tested. Notifying both parties needs an SMS/email provider (Blocked); the transfer shows in the app instantly |
+| Discount codes (percent or fixed, per ticket type, use limit, expiry, quote before paying) | Done, tested |
+| Discovery filters (search, country, region, city, category, date, price, free, not sold out) and organiser category/country/region fields | Done, tested. Currency and time zone display still NGN and Lagos only |
+| Organiser "Sales & discounts" tab (money summary, orders, refunds, discount codes, fees, transfers) | Done |
+
+## Owner actions outstanding (reminder list)
+1. Payment provider account (Paystack or Flutterwave): keys and webhook secret, then the real adapter and organiser split accounts.
+2. Commission rates (`PLATFORM_COMMISSION_BPS`, `PLATFORM_FLAT_KOBO`), and who bears the provider's processing fee.
+3. SMS provider (Termii or Africa's Talking), sender ID; WhatsApp Business verification and message templates; transactional email domain.
+4. Legal and data-protection adviser (NDPA 2023, refund and cookie policies, data-processing agreements); penetration test.
+5. Apple Developer and Google Play accounts.
+6. Cloudflare: confirm production secrets, create the staging database, confirm D1 Time Travel, practise one restore.
 
 ## Later phases
 Phases 2 to 4 are listed in `docs/TECHNICAL_AUDIT.md` section 7 and are not started. Per the dossier, no phase starts until the previous one passes acceptance.

@@ -3,6 +3,7 @@
 import { h, mount, toast, when, ago, download, wordmarkText } from '/js/dom.js';
 import { api, get, post } from '/js/api.js';
 import { signInFlow } from '/js/auth-ui.js?v=2';
+import { mfaSetup, mfaVerify } from '/js/mfa-ui.js';
 
 const root = document.getElementById('root');
 let me = null; // the signed-in team member
@@ -39,6 +40,12 @@ async function boot() {
       let who = null;
       try { who = (await get('/me')).user; } catch {}
       return who ? noAccess(who) : signIn();
+    }
+    // Staff must pass a second step. They are on the team list, so the server says why.
+    if (ex.status === 403 && (ex.code === 'mfa_required' || ex.code === 'mfa_setup_required')) {
+      const box = h('div', { class: 'card' });
+      mount(root, h('main', { class: 'main', style: 'max-width:460px;margin:8vh auto 0' }, h('p', { class: 'eyebrow' }, 'Tap In team'), box));
+      return ex.code === 'mfa_required' ? mfaVerify(box, { onDone: () => boot() }) : mfaSetup(box, { onDone: () => boot() });
     }
     return mount(root, h('main', { class: 'main' }, h('div', { class: 'error' }, ex.message)));
   }
