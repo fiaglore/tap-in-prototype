@@ -1,6 +1,6 @@
 // Landing page for the emailed sign-in link. Trades the one-time code in the URL for a session.
 import { h, mount } from '/js/dom.js';
-import { patch, post } from '/js/api.js';
+import { api, post } from '/js/api.js';
 
 const root = document.getElementById('root');
 const query = new URLSearchParams(location.search);
@@ -10,7 +10,9 @@ const appChallenge = /^[A-Za-z0-9_-]{43}$/.test(query.get('ac') || '') ? query.g
 let saved = {};
 try { saved = JSON.parse(localStorage.getItem('tapin-signin') || '{}'); } catch {}
 
-const back = () => (typeof saved.ret === 'string' && /^\/(app|organiser)\/$/.test(saved.ret) ? saved.ret : '/app/');
+const back = () => (typeof saved.ret === 'string' && /^\/(app|organiser|offices)\/$/.test(saved.ret) ? saved.ret : '/app/');
+// The emailed link signs in to whichever area asked for it: the organiser and Business consoles are separate from the app.
+const area = () => (/^\/(organiser|offices)\/$/.test(saved.ret || '') ? 'console' : 'app');
 const fail = (msg) => mount(root, h('h2', {}, 'That link did not work'), h('p', { class: 'muted', style: 'margin-top:6px' }, msg),
   h('a', { class: 'btn primary block', style: 'margin-top:16px', href: back() }, 'Request a new link'));
 
@@ -31,7 +33,7 @@ function backToApp(user) {
 function nameStep(user, err = '') {
   const input = h('input', { class: 'input', id: 'nm', type: 'text', autocomplete: 'name', placeholder: 'Full name', maxlength: '80' });
   mount(root, h('h2', {}, 'Welcome. What should we call you?'),
-    h('form', { onsubmit: async (e) => { e.preventDefault(); try { await patch('/me', { name: input.value.trim() }); finish(); } catch (ex) { nameStep(user, ex.message); } } },
+    h('form', { onsubmit: async (e) => { e.preventDefault(); try { await api('PATCH', '/me', { name: input.value.trim() }, { 'X-Tap-In-Area': area() }); finish(); } catch (ex) { nameStep(user, ex.message); } } },
       h('div', { class: 'field' }, h('label', { for: 'nm' }, 'Your name'), input,
         h('p', { class: 'hint' }, 'Gate staff see your first name and last initial, so they can match you to your pass.')),
       err && h('div', { class: 'error', role: 'alert' }, err),
@@ -42,7 +44,7 @@ function nameStep(user, err = '') {
 async function complete(email) {
   mount(root, h('p', { class: 'muted' }, 'Signing you in…'));
   try {
-    const r = await post('/auth/email-link/complete', appChallenge ? { email, oobCode, app_challenge: appChallenge } : { email, oobCode });
+    const r = await post('/auth/email-link/complete', appChallenge ? { email, oobCode, app_challenge: appChallenge } : { email, oobCode }, { 'X-Tap-In-Area': area() });
     if (r.app_handoff === true) backToApp(r.user);
     else if (r.is_new || !r.user.name) nameStep(r.user);
     else finish(r.user);

@@ -62,5 +62,10 @@ Open business decisions: who bears the provider's processing fee (currently reco
 
 NFC note: reading a plain NFC tag ID is not safe (IDs can be copied). A safe design uses secure credentials (for example a signed, expiring credential in Apple/Google Wallet "smart tap" or a secure-element card) checked by the same gate logic. That needs a hardware pilot (which reader, which phones) before code.
 
+## Sign-in separation
+| Item | Status |
+|---|---|
+| The app and the organiser/Business consoles are separate sign-ins (own cookie, own sessions); the console asks before reusing the app account and offers a different email | Done, tested (browser-checked). The team console (`/admin/`) still shares the app sign-in. The API itself does not refuse an app session on organiser routes; the separation is which session each page uses |
+
 ## Later phases
 Phases 2 to 4 are listed in `docs/TECHNICAL_AUDIT.md` section 7 and are not started. Per the dossier, no phase starts until the previous one passes acceptance.

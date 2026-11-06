@@ -32,18 +32,42 @@ async function boot() {
     user = null;
   }
   header();
-  if (!user) return viewSignIn();
-  route();
+  if (user) return route();
+  // The console has its own sign-in. If this browser is signed in to the Tap In app, ask before reusing that account.
+  let appUser = null;
+  try { appUser = (await get('/me', { 'X-Tap-In-Area': 'app' })).user; } catch { appUser = null; }
+  if (appUser) return viewLinkApp(appUser);
+  viewSignIn();
+}
+
+// "You are signed in to the app as X. Use X here too?" Either answer is fine; nothing is shared unless they say yes.
+function viewLinkApp(appUser) {
+  const who = appUser.identifier || appUser.email || appUser.phone;
+  const box = h('div', { class: 'card signin-top' });
+  const err = h('div', { class: 'error', role: 'alert', hidden: true });
+  mount(main, h('div', { class: 'narrow' }, box));
+  mount(box,
+    h('p', { class: 'eyebrow' }, OFFICE ? 'Tap In for Business' : 'Organiser'),
+    h('h2', { style: 'margin:4px 0 8px' }, 'Use your app account here?'),
+    h('p', { class: 'lede' }, `You are signed in to the Tap In app as ${who}. The ${OFFICE ? 'Business' : 'organiser'} console is a separate sign-in. Do you want to use ${who} here too?`),
+    h('p', { class: 'hint', style: 'margin-top:8px' }, 'If you choose a different email, your app stays signed in as it is and the two accounts stay apart.'),
+    err,
+    h('div', { class: 'row', style: 'margin-top:16px;gap:10px;flex-wrap:wrap' },
+      h('button', { class: 'btn primary', type: 'button', onclick: async (e) => {
+        e.currentTarget.disabled = true; err.hidden = true;
+        try { user = (await post('/auth/console/link')).user; header(); location.hash = '#/'; route(); } catch (ex) { err.textContent = ex.message; err.hidden = false; e.target.disabled = false; }
+      } }, `Yes, use ${who}`),
+      h('button', { class: 'btn ghost', type: 'button', onclick: () => viewSignIn(appUser) }, 'Use a different email or phone')));
 }
 window.addEventListener('hashchange', () => user && route());
 
-function viewSignIn() {
+function viewSignIn(appUser = null) {
   // Signing in sits at the very top of the page, with a short reminder of what you get below it.
   const box = h('div', { class: 'card signin-top' });
   const perks = OFFICE
     ? [['Add people by email', 'Staff, contractors and visitors get their pass in the app. Nothing to send.'], ['Set the hours', 'Each group is allowed in at certain entrances, only at certain times.'], ['Selfie check', 'Door staff see a face next to every name.']]
     : [['Sell tickets', 'Limits that cannot oversell, sales windows, and a public page for each event.'], ['Live QR', 'The pass code changes every 30 seconds, so screenshots stop working.'], ['Scan at the gate', 'Staff see a clear admit or refuse, with the face on file.']];
-  mount(main, h('div', { class: 'narrow' }, box,
+  mount(main, h('div', { class: 'narrow' }, appUser && h('p', { style: 'margin-bottom:10px' }, h('button', { class: 'btn ghost small', type: 'button', onclick: () => viewLinkApp(appUser) }, '← Use my app account instead')), box,
     h('div', { class: 'grid three', style: 'margin-top:18px' }, perks.map(([t, d]) => h('div', { class: 'card' }, h('h3', {}, t), h('p', { class: 'muted', style: 'margin-top:4px;font-size:14px' }, d))))));
   signInFlow(box, { title: OFFICE ? 'Tap In for Business sign in' : 'Organiser sign in', lede: OFFICE ? 'Sign in with the phone number or email you will manage your office from.' : 'Sign in with the phone number or email you will run events from.', onDone: (u) => { user = u; header(); location.hash = '#/'; route(); } });
 }
@@ -632,7 +656,7 @@ async function tabReport(body, data) {
     h('div', { class: 'spread noprint' },
       h('p', { class: 'hint' }, 'Generated ' + when(r.generated_at) + (t.first_entry ? ` · entries from ${clock(t.first_entry)} to ${clock(t.last_entry)}` : '')),
       h('div', { class: 'row' },
-        h('a', { class: 'btn ghost small', href: `/api/events/${id}/scans.csv`, download: '' }, 'Download every scan (CSV)'),
+        h('a', { class: 'btn ghost small', href: `/api/events/${id}/scans.csv?area=console`, download: '' }, 'Download every scan (CSV)'),
         h('button', { class: 'btn primary small', type: 'button', onclick: () => window.print() }, 'Print or save as PDF'))),
     h('h2', { class: 'printonly' }, data.event.name + ' · Report'),
 
@@ -1177,7 +1201,7 @@ async function tabAttendance(body, data) {
           : h('p', { class: 'muted', style: 'margin-top:8px' }, 'No visitors in this period.')));
   }
 
-  const csv = (type, label) => h('a', { class: 'btn ghost small', href: `/api/events/${id}/attendance.csv?type=${type}&${qs()}`, download: '', onclick: (e) => { e.currentTarget.href = `/api/events/${id}/attendance.csv?type=${type}&${qs()}`; } }, label);
+  const csv = (type, label) => h('a', { class: 'btn ghost small', href: `/api/events/${id}/attendance.csv?type=${type}&${qs()}&area=console`, download: '', onclick: (e) => { e.currentTarget.href = `/api/events/${id}/attendance.csv?type=${type}&${qs()}&area=console`; } }, label);
   drawPresets();
   body.append(
     h('div', { class: 'card noprint' },

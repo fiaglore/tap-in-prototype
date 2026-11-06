@@ -39,6 +39,7 @@ const ROUTES = [
   ['POST', '/api/auth/otp/verify', 'none', auth.otpVerify],
   ['POST', '/api/auth/email-link/complete', 'none', auth.emailLinkComplete],
   ['POST', '/api/auth/app/redeem', 'none', auth.appRedeem],
+  ['POST', '/api/auth/console/link', 'none', auth.linkConsole],
   ['POST', '/api/auth/logout', 'none', auth.logout],
 
   ['GET', '/api/me', 'user', me.me],

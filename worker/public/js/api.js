@@ -5,13 +5,15 @@ export class ApiError extends Error {
     this.code = code;
   }
 }
+// The app and the organiser/Business consoles are separate sign-ins (separate cookies). Console pages say so on every call.
+const AREA = /^\/(organiser|offices)(\/|$)/.test(location.pathname) ? 'console' : 'app';
 export async function api(method, path, body, headers = {}) {
   let res;
   try {
     res = await fetch('/api' + path, {
       method,
       credentials: 'same-origin',
-      headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...headers },
+      headers: { 'X-Tap-In-Area': AREA, ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...headers },
       body: body !== undefined ? JSON.stringify(body) : undefined
     });
   } catch {
