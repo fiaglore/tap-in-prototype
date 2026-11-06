@@ -4,7 +4,7 @@ import { hashOtp, makeOtp } from '../lib/codes.js';
 import { deliverOtp, isDemo, isFirebase } from '../lib/otp-delivery.js';
 import { completeSignIn, sendSignInLink } from '../lib/firebase.js';
 import { isFull, record, take } from '../lib/limits.js';
-import { endSession, publicUser, startSession } from '../lib/session.js';
+import { currentUser, endSession, publicUser, startSession } from '../lib/session.js';
 
 const OTP_TTL = 600; // 10 minutes
 const OTP_MAX_ATTEMPTS = 5;
@@ -180,6 +180,16 @@ export async function appRedeem({ request, env }) {
   if (!user) return json({ pending: true });
   const setCookie = await startSession(env, request, user.id);
   return json({ user: publicUser(user), is_new: !user.name }, 200, { 'Set-Cookie': setCookie });
+}
+
+// POST /api/auth/console/link
+// Someone signed in to the app asks to use the same account for the organiser console. Only they can ask: it needs their
+// app session, and the console session it creates is a separate one they can end on their own.
+export async function linkConsole({ request, env }) {
+  const user = await currentUser(env, request, 'app');
+  if (!user) throw new HttpError(401, 'unauthorised', 'Sign in to the Tap In app first.');
+  const setCookie = await startSession(env, request, user.id, 'console');
+  return json({ user: publicUser(user) }, 200, { 'Set-Cookie': setCookie });
 }
 
 export async function logout({ request, env }) {

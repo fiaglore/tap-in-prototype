@@ -20,7 +20,8 @@ One-time staging setup is in the comment block in `worker/wrangler.jsonc`.
 2. Deploy to staging: `cd worker && npx wrangler d1 migrations apply tap-in-staging --remote --env staging && npx wrangler deploy --env staging`.
 3. Check staging by hand: sign in, create an event, buy a free ticket, take a mock payment, scan a pass.
 4. Production: take a backup first (section 3), then `npx wrangler d1 migrations apply tap-in-db --remote && npx wrangler deploy`.
-5. Migrations only ever add. If a migration must be undone, restore (section 4) rather than editing it.
+5. **Apply migrations before deploying code that needs them.** Migration `0017_session_scope.sql` adds a column that every sign-in check reads: deploying the code first signs everyone out and breaks the site until the migration runs.
+6. Migrations only ever add. If a migration must be undone, restore (section 4) rather than editing it.
 
 Rollback of code only: `npx wrangler rollback` (Cloudflare keeps recent versions). Rollback does not undo database changes.
 

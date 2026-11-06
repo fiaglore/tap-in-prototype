@@ -29,10 +29,10 @@ export function makeEnv(extra = {}) {
 
 // A browser-like client: keeps its own cookie jar and source address.
 export function client(env, ip = '10.0.0.1') {
-  let cookie = '';
+  const jar = new Map(); // cookie name -> value; the app and the console each have their own
   async function call(method, path, { body, headers = {}, raw } = {}) {
     const h = { 'CF-Connecting-IP': ip, ...headers };
-    if (cookie) h.Cookie = cookie;
+    if (jar.size && !h.Cookie) h.Cookie = [...jar].map(([k, v]) => k + '=' + v).join('; ');
     let payload;
     if (body !== undefined) {
       if (!h['Content-Type']) h['Content-Type'] = 'application/json';
@@ -43,8 +43,8 @@ export function client(env, ip = '10.0.0.1') {
     });
     const set = res.headers.get('set-cookie');
     if (set) {
-      const pair = set.split(';')[0];
-      cookie = /Max-Age=0/i.test(set) ? '' : pair;
+      const [name, ...rest] = set.split(';')[0].split('=');
+      if (/Max-Age=0/i.test(set)) jar.delete(name); else jar.set(name, rest.join('='));
     }
     const text = await res.text();
     let data = null;
@@ -60,7 +60,8 @@ export function client(env, ip = '10.0.0.1') {
     post: (p, body, o) => call('POST', p, { body, ...o }),
     patch: (p, body, o) => call('PATCH', p, { body, ...o }),
     call,
-    ip
+    ip,
+    cookies: () => Object.fromEntries(jar)
   };
 }
 

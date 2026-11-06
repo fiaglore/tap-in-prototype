@@ -1,15 +1,14 @@
 // Two-step sign-in routes. Setup is two calls: setup (get a secret to scan) then enable (prove the app works).
 import { HttpError, hmacHex, nowSec } from '../lib/util.js';
-import { json, readCookies, readJson } from '../lib/http.js';
+import { json, readJson } from '../lib/http.js';
+import { sessionToken } from '../lib/session.js';
 import { MFA_FRESH_SEC, hashRecovery, makeRecoveryCodes, matchTotp, newSecret, openSecret, otpauthUri, sealSecret } from '../lib/mfa.js';
 import { take } from '../lib/limits.js';
 
-const COOKIE = 'tapin_session';
 const row = (env, id) => env.DB.prepare('SELECT id, email, phone, mfa_secret, mfa_enabled_at, mfa_last_step, mfa_recovery FROM users WHERE id = ?1').bind(id).first();
 
 async function markSession(env, request) {
-  const token = readCookies(request)[COOKIE];
-  const hash = await hmacHex(env.SECRET_PEPPER, 'session|' + token);
+  const hash = await hmacHex(env.SECRET_PEPPER, 'session|' + sessionToken(request));
   await env.DB.prepare('UPDATE sessions SET mfa_at = ?2 WHERE token_hash = ?1').bind(hash, nowSec()).run();
 }
 
@@ -93,8 +92,7 @@ export async function requireSecondStep(env, request, userId, { mandatory = fals
     if (mandatory) throw new HttpError(403, 'mfa_setup_required', 'Turn on two-step sign-in (Account > Security) to do this.');
     return;
   }
-  const token = readCookies(request)[COOKIE];
-  const hash = await hmacHex(env.SECRET_PEPPER, 'session|' + token);
+  const hash = await hmacHex(env.SECRET_PEPPER, 'session|' + sessionToken(request));
   const s = await env.DB.prepare('SELECT mfa_at FROM sessions WHERE token_hash = ?1').bind(hash).first();
   if (!s || !s.mfa_at || nowSec() - s.mfa_at > MFA_FRESH_SEC) throw new HttpError(403, 'mfa_required', 'Enter your two-step sign-in code to continue.');
 }
