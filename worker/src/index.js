@@ -19,6 +19,7 @@ import * as vendors from './routes/vendors.js';
 import * as till from './routes/till.js';
 import { PAYMENT_API, PAYMENT_PAGES, paymentsOff } from './lib/money.js';
 import * as photo from './routes/photo.js';
+import * as orders from './routes/orders.js';
 import { routeByHost } from './lib/hosts.js';
 import { requireStaff } from './lib/staff.js';
 import * as admin from './routes/admin.js';
@@ -105,6 +106,11 @@ const ROUTES = [
   ['GET', '/api/public/events', 'none', publicSale.listUpcoming],
   ['GET', '/api/public/events/:id', 'none', publicSale.getEvent],
   ['POST', '/api/public/events/:id/buy', 'user', publicSale.buy],
+  ['POST', '/api/public/events/:id/checkout', 'user', orders.checkout],
+  ['POST', '/api/webhooks/payments/:provider', 'none', orders.webhook],
+  ['GET', '/api/orders/:id', 'user', orders.getOrder],
+  ['POST', '/api/events/:id/orders/:orderId/refund', 'user', orders.refundOrder],
+  ['GET', '/api/events/:id/finance', 'user', orders.finance],
 
   // The team's support console. 'staff' means: on the STAFF_IDENTIFIERS list, signed in within 8 hours, otherwise "not found".
   ['GET', '/api/admin/me', 'staff', admin.adminMe],

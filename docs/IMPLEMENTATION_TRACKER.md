@@ -11,16 +11,32 @@ A feature is **Done** only when it passes its acceptance test (dossier section 2
 | Confirm live-site configuration (secrets, D1 backups, domains) | Blocked: needs owner access/screenshots |
 
 ## Phase 1: Commercial readiness
+Decisions (from the owner): neutral payment layer first, no provider chosen yet; organiser money settles by provider splits (Tap In never holds funds); fees configurable per event (`fee_mode` pass or absorb) with the commission set by `PLATFORM_COMMISSION_BPS` and `PLATFORM_FLAT_KOBO`.
+
 | Item | Acceptance test (dossier 20) | Status |
 |---|---|---|
-| Provider-agnostic payment layer, `orders`/`payments` tables | 1, 2, 3 | Blocked: provider choice |
-| Verified webhooks, idempotent ticket issuance | 3 | Blocked: provider choice |
-| Refunds updating ticket and financial records | 12 | Blocked: provider choice |
-| Ledger: gross, processor fee, commission, tax, organiser payable | 11 | Blocked: fee/commission decisions |
+| `orders`, `payment_events`, `order_ledger` tables (migration 0014) | n/a | Done |
+| Provider interface and mock provider; checkout route; fee calculation | 1 | Done, tested |
+| Verified webhook, replay-safe, idempotent issuance, wrong-amount hold | 2, 3 | Done, tested |
+| Refund (full) revoking tickets and reversing the ledger | 12 | Done, tested |
+| Ledger and organiser finance summary that reconciles | 11 | Done, tested |
+| Real provider adapter (Paystack or Flutterwave) | live payment | Blocked: provider account and keys |
+| Provider split/subaccount creation per organiser | settlement | Blocked: provider account |
+| Checkout screens on the sales page (redirect, poll order) | 1 | Todo |
+| Partial refunds, disputes/chargebacks, payout statements | 12 | Todo |
 | SMS (OTP, ticket confirmation) | 14 | Blocked: SMS provider |
+| Tests run in CI (`.github/workflows/worker-tests.yml`) | n/a | Done |
 | MFA for organiser/staff/admin | 13, 15 | Todo |
-| Run tests in CI, add staging environment | n/a | Todo |
-| Backup and recovery documentation, tested restore | 16 | Todo (needs Cloudflare access) |
+| Staging environment, backup and recovery runbook | 16 | Todo (needs Cloudflare access) |
+
+Open business decisions: who bears the provider's processing fee (currently recorded as a Tap In cost, see `src/lib/fees.js`); commission rates (checkout stays closed until set); refund policy wording (needs legal review).
+
+## Phase 2 items requested early
+| Item | Status |
+|---|---|
+| Ticket transfers (revoke old pass, issue new, notify both) | Todo |
+| Discount codes | Todo |
+| Discovery filters (country, city, category, date, price) | Todo |
 
 ## Later phases
 Phases 2 to 4 are listed in `docs/TECHNICAL_AUDIT.md` section 7 and are not started. Per the dossier, no phase starts until the previous one passes acceptance.
