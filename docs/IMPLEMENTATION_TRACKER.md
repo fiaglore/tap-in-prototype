@@ -52,9 +52,12 @@ Open business decisions: who bears the provider's processing fee (currently reco
 |---|---|
 | Public API v1: keys with scopes, sandbox vs live, rate limit, events, attendance, payments (`docs/API.md`) | Done, tested |
 | Outbound webhooks: signed, retried, `order.fulfilled` / `order.refunded` / `order.disputed` | Done, tested (cron every 15 minutes retries) |
-| API key and webhook screens in the app/console | Todo (API works; keys are created by API call today) |
+| API key and webhook screens (console: Developers) | Done, browser-checked |
 | Hosted OpenAPI file, per-key limits UI, creating orders via API | Todo |
-| Business: employee and department records, check-out, incident reports, admin roles | Todo (existing: offices, doors, visitors, attendance) |
+| Business: departments and employee IDs (set when adding people or later), attendance filtered and rolled up by department, CSV with both | Done, tested |
+| Business: visitor check-out and an "On site now" emergency list (printable) | Done, tested. Scans record entries only, so staff are "scanned in today" and the page says so; there are no exit scans |
+| Business: incident log (security, access, safety, other) with resolve and CSV | Done, tested |
+| Business: team access roles (viewer, security) so colleagues see only what they need; owner-only for changes, gate key and money | Done, tested, browser-checked |
 | Business subscriptions (Starter / Professional / Enterprise) | Blocked: needs the payment provider for billing and decisions on plan limits and prices |
 | NFC / hardware | Not started. Needs hardware choices and a security design; see below |
 | Tap In Identity | Not started on purpose: the dossier requires a separate privacy, consent and regulatory assessment first |

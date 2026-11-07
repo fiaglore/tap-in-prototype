@@ -8,7 +8,7 @@ import { HttpError, cleanText, newId, normaliseCode, nowSec, parseIdentifier, sa
 import { clientIp, json, readJson } from '../lib/http.js';
 import { guestToken, hashGuestCode, inviteLinkMac, inviteLinkToken, parseInviteLinkToken, wristbandCode } from '../lib/codes.js';
 import { isFull, record } from '../lib/limits.js';
-import { ownedEvent } from './events.js';
+import { accessibleEvent, ownedEvent } from './events.js';
 
 const MAX_INVITES_PER_CALL = 500;
 const MAX_IMPORT_PER_CALL = 1000;
@@ -373,11 +373,11 @@ export async function addVisitor({ request, env, user, params, url }) {
 
 // GET /api/events/:id/visitors -> visits from the last 30 days and upcoming ones, newest first
 export async function listVisitors({ env, user, params, url }) {
-  const ev = await ownedEvent(env, user, params.id);
+  const ev = await accessibleEvent(env, user, params.id);
   await workplace(env, ev);
   const rows = (
     await env.DB.prepare(
-      `SELECT g.id, g.name, g.contact, g.host, g.purpose, g.valid_from, g.valid_until, g.walk_in, g.status, g.created_at, t.name AS tier,
+      `SELECT g.id, g.name, g.contact, g.host, g.purpose, g.valid_from, g.valid_until, g.walk_in, g.status, g.created_at, g.checked_out_at, t.name AS tier,
         (SELECT MIN(s.at) FROM scans s WHERE s.guest_id = g.id AND s.result = 'granted') AS entered_at
        FROM guests g JOIN tiers t ON t.id = g.tier_id
        WHERE g.event_id = ?1 AND g.kind = 'visitor' AND g.valid_until > ?2 ORDER BY g.valid_from DESC, g.created_at DESC LIMIT 2000`

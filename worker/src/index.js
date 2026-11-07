@@ -25,6 +25,7 @@ import * as discounts from './routes/discounts.js';
 import * as mfa from './routes/mfa.js';
 import * as apikeys from './routes/apikeys.js';
 import * as v1 from './routes/v1.js';
+import * as biz from './routes/business.js';
 import { authenticateKey } from './routes/apikeys.js';
 import { flush as flushWebhooks } from './lib/outbound.js';
 import { checkoutMode } from './lib/payments/provider.js';
@@ -92,6 +93,20 @@ const ROUTES = [
   ['POST', '/api/gate/sync', 'none', gate.gateSync],
   ['POST', '/api/gate/walkin', 'none', gate.gateWalkin],
   ['GET', '/api/events/:id/visitors', 'user', guests.listVisitors],
+  ['GET', '/api/events/:id/departments', 'user', biz.listDepartments],
+  ['POST', '/api/events/:id/departments', 'user', biz.createDepartment],
+  ['PATCH', '/api/events/:id/departments/:depId', 'user', biz.renameDepartment],
+  ['DELETE', '/api/events/:id/departments/:depId', 'user', biz.deleteDepartment],
+  ['POST', '/api/events/:id/people/profile', 'user', biz.setProfile],
+  ['POST', '/api/events/:id/visitors/:guestId/checkout', 'user', biz.checkoutVisitor],
+  ['GET', '/api/events/:id/on-site', 'user', biz.onSite],
+  ['GET', '/api/events/:id/incidents', 'user', biz.listIncidents],
+  ['GET', '/api/events/:id/incidents.csv', 'user', biz.incidentsCsv],
+  ['POST', '/api/events/:id/incidents', 'user', biz.createIncident],
+  ['POST', '/api/events/:id/incidents/:incidentId/resolve', 'user', biz.resolveIncident],
+  ['GET', '/api/events/:id/members', 'user', biz.listMembers],
+  ['POST', '/api/events/:id/members', 'user', biz.addMember],
+  ['POST', '/api/events/:id/members/:memberId/remove', 'user', biz.removeMember],
   ['GET', '/api/events/:id/attendance', 'user', attendance.attendance],
   ['GET', '/api/events/:id/attendance.csv', 'user', attendance.attendanceCsv],
   ['POST', '/api/events/:id/visitors', 'user', guests.addVisitor],
