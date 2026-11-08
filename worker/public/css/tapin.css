@@ -4,7 +4,7 @@
   --fg:#FFFFFF; --muted:#C9B8D4; --signal:#B5A0CC; --plum:#6C4A6C; --ok:#7FE0B4; --warn:#F2C96B; --bad:#FF9AA8;
   --primary:#80619A; --card:rgba(58,38,61,.78); --card-on:rgba(181,160,204,.14);
   --ok-soft:rgba(127,224,180,.12); --bad-soft:rgba(255,154,168,.12); --glow:rgba(181,160,204,.28);
-  --display:"Syne","Avenir Next","Segoe UI",sans-serif; --body:"Manrope","Segoe UI",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --display:"Inter","Segoe UI",system-ui,sans-serif; --body:"Inter","Segoe UI",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
   color-scheme:dark;
 }
 :root[data-mode="light"]{
