@@ -432,18 +432,34 @@ async function tabSales(body, data) {
 async function tabTickets(body, data) {
   const id = data.event.id;
   const local = (sec) => { if (!sec) return ''; const d = new Date(sec * 1000); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+  const perPerson = (value, label) => h('select', { class: 'input', style: 'width:76px', 'aria-label': label },
+    [1, 2, 3, 4, 5].map((n) => h('option', { value: n, selected: n === value }, String(n))));
+  const afterSelect = (self, value, label) => h('select', { class: 'input', style: 'min-width:150px', 'aria-label': label },
+    h('option', { value: '' }, 'On the dates only'),
+    ...data.tiers.filter((o) => o.id !== (self && self.id) && o.capacity !== null).map((o) => h('option', { value: o.id, selected: o.id === value }, 'When ' + o.name + ' sells out')));
+  const iso = (el) => (el.value ? new Date(el.value).toISOString() : null);
   const rows = data.tiers.map((t) => {
     const cap = h('input', { class: 'input', style: 'width:110px', inputmode: 'numeric', value: t.capacity ?? '', placeholder: 'No limit', 'aria-label': `Limit for ${t.name}` });
     const price = h('input', { class: 'input', style: 'width:110px', inputmode: 'decimal', value: t.price_kobo ? String(t.price_kobo / 100) : '', placeholder: 'Free', 'aria-label': `Price for ${t.name}` });
+    const per = perPerson(t.max_per_buyer ?? 2, `Most tickets one person can buy of ${t.name}`);
+    const opens = h('input', { class: 'input', type: 'datetime-local', value: local(t.opens_at), 'aria-label': `${t.name} goes on sale at` });
+    const closes = h('input', { class: 'input', type: 'datetime-local', value: local(t.closes_at), 'aria-label': `${t.name} stops selling at` });
+    const after = afterSelect(t, t.opens_after_tier_id, `${t.name} opens`);
     const left = t.capacity === null ? 'No limit' : Math.max(0, t.capacity - t.issued) + ' left';
-    return h('tr', {}, h('td', {}, h('strong', {}, t.name)), h('td', {}, price), h('td', {}, cap),
-      h('td', {}, t.issued + ' issued', h('div', { class: 'hint' }, left)),
-      h('td', {}, h('button', { class: 'btn small primary', type: 'button', onclick: async () => {
-        try {
-          await patch(`/events/${id}/tiers/${t.id}`, { capacity: cap.value.trim() ? cap.value.trim() : null, price_kobo: price.value.trim() ? Math.round(parseFloat(price.value) * 100) : 0 });
-          toast('Saved'); viewEvent(id, 'tickets');
-        } catch (ex) { toast(ex.message); }
-      } }, 'Save')));
+    const field = (label, el) => h('label', { class: 'hint', style: 'display:flex;flex-direction:column;gap:4px' }, label, el);
+    return h('div', { style: 'border-top:1px solid var(--line);padding:14px 0' },
+      h('div', { class: 'row', style: 'justify-content:space-between;align-items:baseline' }, h('strong', {}, t.name), h('span', { class: 'hint' }, t.issued + ' issued · ' + left)),
+      h('div', { class: 'row', style: 'margin-top:8px;align-items:flex-end;flex-wrap:wrap;gap:12px' },
+        field('Price (₦)', price), field('Limit', cap), field('Per person', per)),
+      h('div', { class: 'row', style: 'margin-top:10px;align-items:flex-end;flex-wrap:wrap;gap:12px' },
+        field('Goes on sale', opens), field('Stops selling', closes), field('Opens', after),
+        h('button', { class: 'btn small primary', type: 'button', onclick: async () => {
+          try {
+            await patch(`/events/${id}/tiers/${t.id}`, { capacity: cap.value.trim() ? cap.value.trim() : null, price_kobo: price.value.trim() ? Math.round(parseFloat(price.value) * 100) : 0,
+              max_per_buyer: Number(per.value), opens_at: iso(opens), closes_at: iso(closes), opens_after_tier_id: after.value || null });
+            toast('Saved'); viewEvent(id, 'tickets');
+          } catch (ex) { toast(ex.message); }
+        } }, 'Save')));
   });
   const start = h('input', { class: 'input', id: 'ts', type: 'datetime-local', value: local(data.event.sales_start) });
   const end = h('input', { class: 'input', id: 'te', type: 'datetime-local', value: local(data.event.sales_end) });
@@ -454,7 +470,8 @@ async function tabTickets(body, data) {
   body.append(
     h('div', { class: 'card' }, h('h3', {}, 'Ticket types'),
       h('p', { class: 'hint', style: 'margin:4px 0 8px' }, 'A limit is the most tickets that can be issued (cancelled invites free their place). Price changes apply to tickets sold from now on.'),
-      h('div', { class: 'scroll-x' }, h('table', {}, h('thead', {}, h('tr', {}, ['Type', 'Price (₦)', 'Limit', 'Issued', ''].map((c) => h('th', {}, c)))), h('tbody', {}, rows)))),
+      h('p', { class: 'hint', style: 'margin:0 0 8px' }, 'Per person is the most one buyer can take of a type: 2 is usual, and a group type can allow up to 5. To sell in waves (early bird, then regular), give each type its own start and end, or set a type to open when an earlier one sells out. Leave the dates blank to sell any time the event is on sale.'),
+      h('div', {}, rows)),
     h('div', { class: 'grid two', style: 'margin-top:14px' },
       h('form', { class: 'card', onsubmit: async (e) => {
         e.preventDefault();
@@ -1070,15 +1087,28 @@ function tabEdit(body, data) {
   const addPrice = h('input', { class: 'input', style: 'width:120px', inputmode: 'decimal', placeholder: 'Free', 'aria-label': 'Price in naira' });
   const addCap = h('input', { class: 'input', style: 'width:120px', inputmode: 'numeric', placeholder: 'No limit', 'aria-label': 'Limit' });
   const addSc = office && scheduleInputs(null);
+  const addPer = h('select', { class: 'input', style: 'width:150px', 'aria-label': 'Most tickets one person can buy' },
+    [1, 2, 3, 4, 5].map((n) => h('option', { value: n, selected: n === 2 }, n === 5 ? '5 (group ticket)' : String(n))));
+  const addOpens = h('input', { class: 'input', type: 'datetime-local', 'aria-label': 'Goes on sale at' });
+  const addCloses = h('input', { class: 'input', type: 'datetime-local', 'aria-label': 'Stops selling at' });
+  const addAfter = h('select', { class: 'input', 'aria-label': 'Opens when' }, h('option', { value: '' }, 'On the dates only'),
+    ...data.tiers.filter((o) => o.capacity !== null).map((o) => h('option', { value: o.id }, 'When ' + o.name + ' sells out')));
+  const isoOf = (el) => (el.value ? new Date(el.value).toISOString() : null);
   const add = h('form', { class: 'card', onsubmit: act(() => post(`/events/${id}/tiers`, {
     name: addName.value, zone_ids: [...addZones.set],
-    ...(office ? addSc.value() : { price_kobo: addPrice.value.trim() ? Math.round(parseFloat(addPrice.value) * 100) : 0, capacity: addCap.value.trim() || undefined })
+    ...(office ? addSc.value() : { price_kobo: addPrice.value.trim() ? Math.round(parseFloat(addPrice.value) * 100) : 0, capacity: addCap.value.trim() || undefined,
+      max_per_buyer: Number(addPer.value), opens_at: isoOf(addOpens), closes_at: isoOf(addCloses), opens_after_tier_id: addAfter.value || null })
   }), 'Added') },
     h('h3', {}, 'Add a ' + W.typeOne),
     h('div', { class: 'field' }, h('label', {}, 'Name'), addName),
     h('div', { class: 'field' }, h('label', {}, `Opens these ${W.areaOne}s`), addZones.el),
     office ? h('div', { class: 'field' }, h('label', {}, 'Days and hours'), addSc.el)
       : h('div', { class: 'row', style: 'margin-top:10px' }, h('label', { class: 'hint' }, 'Price (₦)'), addPrice, h('label', { class: 'hint' }, 'Limit'), addCap),
+    !office && h('div', { class: 'field' }, h('label', {}, 'Most tickets one person can buy'), addPer,
+      h('p', { class: 'hint' }, 'Usually 2. For a group ticket, choose 5.')),
+    !office && h('div', { class: 'field' }, h('label', {}, 'Sell in waves (optional, for early bird and similar)'),
+      h('div', { class: 'row' }, h('label', { class: 'hint' }, 'Goes on sale'), addOpens, h('label', { class: 'hint' }, 'Stops selling'), addCloses),
+      h('div', { style: 'margin-top:8px' }, addAfter)),
     h('div', { style: 'margin-top:12px' }, h('button', { class: 'btn primary', type: 'submit' }, 'Add ' + W.typeOne)));
 
   body.append(basics, h('div', { class: 'grid two', style: 'margin-top:14px' }, zones, add), h('div', { style: 'margin-top:14px' }, types));

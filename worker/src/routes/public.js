@@ -6,8 +6,7 @@
 import { HttpError, newId, nowSec } from '../lib/util.js';
 import { json, readJson } from '../lib/http.js';
 import { CATEGORIES, MAX_INVITES_PER_EVENT, mintInvites } from './events.js';
-
-const MAX_QTY = 8;
+import { assertCanBuy, boughtSql, prevSoldOut, waveState, DEFAULT_MAX_PER_BUYER } from '../lib/tier-sales.js';
 
 // 'upcoming' before sales open, 'closed' after they end, otherwise 'open'.
 export function salesState(ev, now) {
@@ -29,19 +28,27 @@ export async function getEvent({ env, params }) {
   const ev = await saleEvent(env, params.id);
   const tiers = (
     await env.DB.prepare(
-      `SELECT id, name, price_kobo, capacity,
+      `SELECT id, name, price_kobo, capacity, max_per_buyer, opens_at, closes_at, opens_after_tier_id,
         (SELECT COUNT(*) FROM invites i WHERE i.tier_id = tiers.id AND i.status != 'revoked') AS issued
        FROM tiers WHERE event_id = ?1 ORDER BY sort, name`
     )
       .bind(ev.id)
       .all()
   ).results;
+  const byId = new Map(tiers.map((t) => [t.id, t]));
+  const now = nowSec();
   return json({
-    event: { id: ev.id, name: ev.name, venue: ev.venue, city: ev.city, starts_at: ev.starts_at, require_photo: !!ev.require_photo, sales: salesState(ev, nowSec()), sales_start: ev.sales_start, sales_end: ev.sales_end },
+    event: { id: ev.id, name: ev.name, venue: ev.venue, city: ev.city, starts_at: ev.starts_at, require_photo: !!ev.require_photo, sales: salesState(ev, now), sales_start: ev.sales_start, sales_end: ev.sales_end },
     // Exact counts are the organiser's business; buyers only learn how many are left once it is few.
     tiers: tiers.map((t) => {
       const left = t.capacity === null ? null : Math.max(0, t.capacity - t.issued);
-      return { id: t.id, name: t.name, price_kobo: t.price_kobo, sold_out: left === 0, left: left !== null && left <= 20 ? left : null };
+      const prev = t.opens_after_tier_id ? byId.get(t.opens_after_tier_id) : null;
+      const prevDone = !prev || (prev.capacity !== null && prev.issued >= prev.capacity);
+      return {
+        id: t.id, name: t.name, price_kobo: t.price_kobo, sold_out: left === 0, left: left !== null && left <= 20 ? left : null,
+        max_per_buyer: t.max_per_buyer ?? DEFAULT_MAX_PER_BUYER,
+        wave: { state: waveState(t, now, prevDone), opens_at: t.opens_at, closes_at: t.closes_at, opens_after: prev ? prev.name : null }
+      };
     })
   });
 }
@@ -59,7 +66,7 @@ export async function buy({ request, env, user, params }) {
   const state = salesState(ev, nowSec());
   if (state === 'upcoming') throw new HttpError(409, 'sales_not_open', 'Ticket sales have not opened yet.');
   if (state === 'closed') throw new HttpError(409, 'sales_closed', 'Ticket sales for this event have closed.');
-  const tier = await env.DB.prepare('SELECT id, name, capacity, price_kobo FROM tiers WHERE id = ?1 AND event_id = ?2').bind(b.tier_id, ev.id).first();
+  const tier = await env.DB.prepare('SELECT id, name, capacity, price_kobo, max_per_buyer, opens_at, closes_at, opens_after_tier_id FROM tiers WHERE id = ?1 AND event_id = ?2').bind(b.tier_id, ev.id).first();
   if (!tier) throw new HttpError(400, 'invalid_tier', 'Choose a ticket type.');
   // A paid ticket is never issued without a verified payment. Until a payment provider is connected (Phase 1),
   // only free ticket types can be taken here. TICKET_CHECKOUT=demo is for local development and tests only.
@@ -68,16 +75,35 @@ export async function buy({ request, env, user, params }) {
   }
 
   const qty = b.qty === undefined ? 1 : Number.parseInt(b.qty, 10);
-  if (!Number.isInteger(qty) || qty < 1 || qty > MAX_QTY) {
-    throw new HttpError(400, 'invalid_qty', `Buy between 1 and ${MAX_QTY} tickets at a time.`);
+  if (!Number.isInteger(qty) || qty < 1) {
+    throw new HttpError(400, 'invalid_qty', 'Choose how many tickets you want.');
   }
 
   const total = await env.DB.prepare('SELECT COUNT(*) AS n FROM invites WHERE event_id = ?1').bind(ev.id).first();
   if (total.n + qty > MAX_INVITES_PER_EVENT) {
     throw new HttpError(400, 'sold_out', 'This event has sold all the tickets it can issue.');
   }
+  // Sold out is the more useful answer, so say it before the per-person limit.
+  if (tier.capacity !== null) {
+    const taken = await env.DB.prepare(`SELECT COUNT(*) AS n FROM invites WHERE tier_id = ?1 AND status != 'revoked'`).bind(tier.id).first();
+    if (taken.n >= tier.capacity) throw new HttpError(409, 'sold_out', `"${tier.name}" is sold out.`);
+  }
+  await assertCanBuy(env, user.id, tier, qty, nowSec());
+  // Take the person's share first, in one statement, so two taps at once cannot get past the limit.
+  const reserve = await env.DB.prepare(
+    `INSERT INTO tier_buys (user_id, tier_id, qty, at) SELECT ?1, ?2, ?3, ?4 WHERE (${boughtSql('?1', '?2', '?4')}) + ?3 <= ?5`
+  ).bind(user.id, tier.id, qty, nowSec(), tier.max_per_buyer ?? DEFAULT_MAX_PER_BUYER).run();
+  if (reserve.meta.changes !== 1) throw new HttpError(409, 'ticket_limit', `You have reached the limit for "${tier.name}" tickets.`);
+  const reserved = reserve.meta.last_row_id;
 
-  const { ids, codes } = await mintInvites(env, ev, tier, qty, { label: 'Online purchase (demo)' });
+  let minted;
+  try {
+    minted = await mintInvites(env, ev, tier, qty, { label: 'Online purchase (demo)' });
+  } catch (e) {
+    await env.DB.prepare('DELETE FROM tier_buys WHERE id = ?1').bind(reserved).run(); // nothing was issued, so give the share back
+    throw e;
+  }
+  const { ids, codes } = minted;
 
   const now = nowSec();
   const passId = newId(10);

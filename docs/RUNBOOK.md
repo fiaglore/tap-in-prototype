@@ -22,7 +22,8 @@ One-time staging setup is in the comment block in `worker/wrangler.jsonc`.
 4. Production: take a backup first (section 3), then `npx wrangler d1 migrations apply tap-in-db --remote && npx wrangler deploy`.
 5. **Apply migrations before deploying code that needs them.** Migration `0017_session_scope.sql` adds a column that every sign-in check reads: deploying the code first signs everyone out and breaks the site until the migration runs.
 6. Migration `0018_business.sql` (departments, incidents, team access, visitor check-out) is needed by the Business console screens and by the attendance report: apply it before deploying code that reads it.
-7. Migrations only ever add. If a migration must be undone, restore (section 4) rather than editing it.
+7. Migration `0019_ticket_limits_waves.sql` (per-person ticket limits and sales waves) adds columns to `tiers` and a `tier_buys` table. Apply it before deploying code that reads it: the checkout and the public sales page select the new columns. Every existing ticket type starts at 2 tickets per person.
+8. Migrations only ever add. If a migration must be undone, restore (section 4) rather than editing it.
 
 Rollback of code only: `npx wrangler rollback` (Cloudflare keeps recent versions). Rollback does not undo database changes.
 

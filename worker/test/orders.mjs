@@ -79,7 +79,7 @@ await test('pending orders hold stock; a second buyer cannot take the held ticke
 
 console.log('\nWebhook: payment and issuance');
 await test('a signed success webhook issues exactly the tickets ordered, once', async () => {
-  const e = await mk();
+  const e = await mk({}, { max_per_buyer: 3 }); // a group-style type: more than the usual 2 per person
   const o = await start(e, 3);
   const r = await hook(paidEvt(o));
   assert.equal(r.status, 200, JSON.stringify(r.body));
