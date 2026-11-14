@@ -14,3 +14,11 @@
 .entry .qr svg{display:block;width:100%;height:auto}
 .entry .code{font-family:var(--mono);letter-spacing:.06em;margin-top:10px;font-size:15px;user-select:all}
 .status-chip{display:inline-block;margin-top:10px}
+
+/* The nudge to explore Tap In: a quiet pill pointing at the logo, and a short pulse on the logo itself (three times, then still). */
+.explore{display:flex;align-items:center;justify-content:center;gap:8px;width:fit-content;max-width:100%;margin:2px auto 0;padding:8px 14px;border:1px solid var(--line);border-radius:99px;background:var(--card-on);color:var(--muted);font-size:13px;font-weight:600;text-decoration:none;text-align:center}
+.explore:hover{color:var(--fg);border-color:var(--signal)}
+.explore span{font-size:16px;line-height:1;color:var(--signal)}
+.topbar .wordmark{border-radius:12px;animation:logonudge 2.2s ease-in-out 1.2s 3}
+@keyframes logonudge{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 0 8px var(--glow,rgba(181,160,204,.3))}}
+@media (prefers-reduced-motion:reduce){.topbar .wordmark{animation:none}}
