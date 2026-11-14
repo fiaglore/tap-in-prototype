@@ -85,11 +85,18 @@ function route() {
 
 
 // Two-column layout: sidebar navigation on the left, content on the right (stacks on phones).
+// On a phone the sidebar becomes one drop-down menu instead of a strip you have to swipe along.
 function layout(items, content) {
+  const links = items.filter((i) => !i.label);
+  const name = (items.find((i) => i.label) || {}).label;
+  const menu = h('select', { class: 'input side-select', 'aria-label': name ? 'Sections of ' + name : 'Sections',
+    onchange: (e) => { location.href = e.target.value; } },
+    links.map((i) => h('option', { value: i.href, selected: !!i.on }, i.text)));
   return h('div', { class: 'org' },
     h('nav', { class: 'side', 'aria-label': 'Sections' }, items.map((i) => i.label
       ? h('p', { class: 'eyebrow side-label' }, i.label)
       : h('a', { href: i.href, 'aria-current': i.on ? 'page' : null }, i.text))),
+    h('div', { class: 'side-phone' }, name && h('p', { class: 'eyebrow side-name' }, name), menu),
     h('div', { class: 'main' }, content));
 }
 const listNav = (on) => [{ href: '#/', text: OFFICE ? 'Your offices' : 'Your events', on: on === 'list' }, { href: '#/new', text: OFFICE ? 'New office' : 'New event', on: on === 'new' }, { href: '#/developers', text: 'Developers', on: on === 'dev' }, { href: '/gate/', text: 'Open scanner' }];
