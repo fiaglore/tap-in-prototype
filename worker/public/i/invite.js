@@ -72,6 +72,8 @@ function render(d, note = '') {
   const no = h('button', { class: 'btn ghost', type: 'button', 'aria-pressed': String(g.rsvp === 'no'), onclick: (ev) => answer('no', ev.currentTarget) }, g.rsvp === 'no' ? 'Not coming' : 'I can’t make it');
 
   mount(root,
+    // A light nudge for guests who have never used Tap In: the logo at the top left leads to the rest of it.
+    h('a', { class: 'explore', href: '/' }, h('span', { 'aria-hidden': 'true' }, '↖'), ' New to Tap In? Tap the logo to explore'),
     h('div', { class: 'inv-head' },
       h('p', { class: 'eyebrow' }, 'You’re invited'),
       h('h1', {}, e.name),
