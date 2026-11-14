@@ -39,7 +39,11 @@
   Cache-Control: public, max-age=600
 
 # The Android app file: always fetched fresh so a new build replaces the old one, and saved as a download.
-/download/*
+/download/tap-in.apk
   Content-Type: application/vnd.android.package-archive
   Content-Disposition: attachment; filename="tap-in.apk"
+  Cache-Control: no-cache
+/download/tap-in-business.apk
+  Content-Type: application/vnd.android.package-archive
+  Content-Disposition: attachment; filename="tap-in-business.apk"
   Cache-Control: no-cache
