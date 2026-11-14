@@ -16,7 +16,7 @@ function encode(source, sw, sh) {
   return out;
 }
 
-export function selfieModal({ title = 'Add your photo', note = '' } = {}) {
+export function selfieModal({ title = 'Add your photo', note = '', consent = '' } = {}) {
   return new Promise((resolve) => {
     let stream = null, shot = null, done = false;
     const prevOverflow = document.body.style.overflow;
@@ -63,7 +63,7 @@ export function selfieModal({ title = 'Add your photo', note = '' } = {}) {
       h('div', { class: 'stack', style: 'width:100%;max-width:340px;margin-top:10px' }, snap, use, retake, choose, picker),
       // Consent: what the photo is for, who sees it, how long it is kept, and how to take it back.
       h('p', { class: 'hint', style: 'text-align:center;max-width:340px;margin-top:14px' },
-        'Your photo is used only so door staff at events and offices that ask for it can match your face to your pass. Nobody else sees it, and it is never used for automatic face recognition. It is deleted 30 days after you last set it unless a pass still needs it, and you can delete it any time under Me. ',
+        consent || 'Your photo is used only so door staff at events and offices that ask for it can match your face to your pass. Nobody else sees it, and it is never used for automatic face recognition. It is deleted 30 days after you last set it unless a pass still needs it, and you can delete it any time under Me. ',
         h('a', { href: '/privacy/#photos', target: '_blank', rel: 'noopener' }, 'Privacy policy')));
     document.body.style.overflow = 'hidden';
     document.body.append(overlay);
