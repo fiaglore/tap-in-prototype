@@ -122,8 +122,17 @@ async function waitForOrder(orderId) {
 }
 
 // The quantity menu never offers more than are left (when the server says how many that is).
-const MAX_QTY = 8;
-const maxQty = (t) => Math.max(1, Math.min(MAX_QTY, t.left === null || t.left === undefined ? MAX_QTY : t.left));
+// ...nor more than one person is allowed to take (the organiser's per-person limit, 2 unless they chose otherwise).
+const maxQty = (t) => { const per = t.max_per_buyer || 2; return Math.max(1, Math.min(per, t.left === null || t.left === undefined ? per : t.left)); };
+
+// What a ticket type's sales wave says: not open yet, waiting for the earlier tickets to sell out, or ended.
+function waveNote(t) {
+  const w = t.wave || {};
+  if (w.state === 'upcoming') return 'Opens ' + when(w.opens_at);
+  if (w.state === 'waiting') return w.opens_after ? 'Opens when ' + w.opens_after + ' sells out' : 'Opens when the earlier tickets sell out';
+  if (w.state === 'closed') return 'Sales ended';
+  return null;
+}
 
 // Inside the phone app: the phone's own share sheet; anywhere else (or if it fails) the link is copied.
 async function shareEvent(e) {
@@ -147,7 +156,8 @@ function tierPage(ev, notice = null) {
       const want = notice && notice.tierId === t.id && notice.qty ? Math.min(notice.qty, top) : 1;
       const qty = h('select', { class: 'input qty', 'aria-label': `Quantity for ${t.name}` },
         Array.from({ length: top }, (_, k) => k + 1).map((n) => h('option', { value: n, selected: n === want }, String(n))));
-      const canBuy = ev.event.sales === 'open' && !t.sold_out;
+      const wave = waveNote(t);
+      const canBuy = ev.event.sales === 'open' && !t.sold_out && !wave;
       const paying = canBuy && t.price_kobo > 0 && (checkoutMode === 'live' || checkoutMode === 'mock');
       const code = paying && h('input', { class: 'input', placeholder: 'Discount code', 'aria-label': 'Discount code', autocomplete: 'off', style: 'max-width:180px;text-transform:uppercase' });
       const quoteOut = paying && h('div', { style: 'margin-top:8px' });
@@ -156,7 +166,11 @@ function tierPage(ev, notice = null) {
         h('div', { class: 'row', style: 'justify-content:space-between' },
           h('div', {}, h('div', { style: 'font-weight:700' }, t.name),
             h('div', { class: 'muted' }, naira(t.price_kobo)),
-            t.sold_out ? h('div', { class: 'chip bad', style: 'margin-top:6px' }, 'Sold out') : t.left !== null && t.left > 0 && h('div', { class: 'chip', style: 'margin-top:6px' }, 'Only ' + t.left + ' left')),
+            t.sold_out ? h('div', { class: 'chip bad', style: 'margin-top:6px' }, 'Sold out')
+              : wave ? h('div', { class: 'chip', style: 'margin-top:6px' }, wave)
+              : t.left !== null && t.left > 0 && h('div', { class: 'chip', style: 'margin-top:6px' }, 'Only ' + t.left + ' left'),
+            !t.sold_out && h('div', { class: 'hint', style: 'margin-top:6px' }, 'Up to ' + (t.max_per_buyer || 2) + ' per person'
+              + (t.wave && t.wave.state === 'open' && t.wave.closes_at ? ' · on sale until ' + when(t.wave.closes_at) : ''))),
           canBuy && (t.price_kobo > 0 && checkoutMode === 'off'
             ? h('span', { class: 'chip' }, 'Online payment opens soon')
             : h('div', { class: 'row buyrow' }, qty,

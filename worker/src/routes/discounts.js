@@ -89,7 +89,7 @@ export async function quoteRoute({ request, env, params }) {
   const tier = await env.DB.prepare('SELECT id, name, price_kobo FROM tiers WHERE id = ?1 AND event_id = ?2').bind(b.tier_id, ev.id).first();
   if (!tier) throw new HttpError(400, 'invalid_tier', 'Choose a ticket type.');
   const qty = b.qty === undefined ? 1 : Number.parseInt(b.qty, 10);
-  if (!Number.isInteger(qty) || qty < 1 || qty > 8) throw new HttpError(400, 'invalid_qty', 'Buy between 1 and 8 tickets at a time.');
+  if (!Number.isInteger(qty) || qty < 1 || qty > 5) throw new HttpError(400, 'invalid_qty', 'Buy between 1 and 5 tickets at a time.');
   const q = await quote(env, { event: ev, tier, qty, codeText: b.discount_code });
   return json({ quote: { currency: 'NGN', unit_kobo: tier.price_kobo, qty, discount_kobo: q.discountKobo, subtotal_kobo: q.subtotal_kobo, fee_kobo: q.buyer_fee_kobo, total_kobo: q.total_kobo } });
 }

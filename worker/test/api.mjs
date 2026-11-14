@@ -26,7 +26,7 @@ const mkKey = async (mode = 'live', scopes = ['events:read', 'events:write', 'at
 };
 const call = (key, method, path, body) => anon.call(method, '/api/v1' + path, { body, ...bearer(key) });
 const hook = async (body) => { const raw = JSON.stringify(body); return anon.call('POST', '/api/webhooks/payments/mock', { body: raw, raw: true, headers: { 'Content-Type': 'application/json', 'x-mock-signature': await hmacHex(SECRET, raw) } }); };
-const mkEvent = async (price = 500000, extra = {}) => { const r = await org.post('/api/events', { name: 'Api Fest', zones: ['G'], tiers: [{ name: 'GA', zones: ['G'], price_kobo: price }], ...extra }); assert.equal(r.status, 201); return r.body; };
+const mkEvent = async (price = 500000, extra = {}) => { const r = await org.post('/api/events', { name: 'Api Fest', zones: ['G'], tiers: [{ name: 'GA', zones: ['G'], price_kobo: price, max_per_buyer: 5 }], ...extra }); assert.equal(r.status, 201); return r.body; };
 const buy = async (e, qty = 1) => { const b = await person(); const o = (await b.post(`/api/public/events/${e.event.id}/checkout`, { tier_id: e.tiers[0].id, qty })).body; return { ...o, buyer: b }; };
 const pay = async (o, extra = {}) => { const r = db.prepare('SELECT provider_ref, total_kobo FROM orders WHERE id = ?').get(o.order.id); return hook({ id: 'e' + Math.random(), type: 'charge.success', ref: r.provider_ref, amount_kobo: r.total_kobo, currency: 'NGN', processor_fee_kobo: 1000, ...extra }); };
 const dispute = (o, type) => hook({ id: 'd' + Math.random(), type, ref: db.prepare('SELECT provider_ref FROM orders WHERE id = ?').get(o.order.id).provider_ref, currency: 'NGN' });

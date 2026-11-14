@@ -12,6 +12,7 @@ import {
 } from '../lib/util.js';
 import { json, readJson } from '../lib/http.js';
 import { parseSchedule, scheduleOut } from '../lib/schedule.js';
+import { DEFAULT_MAX_PER_BUYER, assertWindowOrder, parseMaxPerBuyer, parseTierWindow } from '../lib/tier-sales.js';
 import { eventPrefix, hashGateKey, hashInvite, inviteHint, makeGateKey, makeInviteCode, tierCode } from '../lib/codes.js';
 
 export const MAX_EVENTS_PER_USER = 20;
@@ -121,7 +122,7 @@ async function structure(env, eventId) {
   const zones = (await env.DB.prepare('SELECT id, name FROM zones WHERE event_id = ?1 ORDER BY sort, name').bind(eventId).all()).results;
   const tiers = (
     await env.DB.prepare(
-      `SELECT id, name, price_kobo, capacity, days_mask, from_min, to_min,
+      `SELECT id, name, price_kobo, capacity, days_mask, from_min, to_min, max_per_buyer, opens_at, closes_at, opens_after_tier_id,
         (SELECT COUNT(*) FROM invites i WHERE i.tier_id = tiers.id AND i.status != 'revoked') AS issued
        FROM tiers WHERE event_id = ?1 ORDER BY sort, name`
     )
@@ -209,6 +210,12 @@ export async function createEvent({ request, env, user }) {
   });
   const tierSchedules = b.tiers.map((t, ti) => (workplace ? parseSchedule(t, tierNames[ti]) : parseSchedule({}, tierNames[ti])));
   const tierCaps = b.tiers.map((t, ti) => parseCapacity(t?.capacity, tierNames[ti]));
+  const tierMax = b.tiers.map((t, ti) => parseMaxPerBuyer(t?.max_per_buyer, tierNames[ti]) ?? DEFAULT_MAX_PER_BUYER);
+  const tierWindows = b.tiers.map((t, ti) => {
+    const w = parseTierWindow(t || {}, tierNames[ti]);
+    assertWindowOrder(w.opens_at, w.closes_at, tierNames[ti]);
+    return { opens_at: w.opens_at ?? null, closes_at: w.closes_at ?? null };
+  });
   const salesStart = parseWhen(b.sales_start, 'sales start');
   const salesEnd = parseWhen(b.sales_end, 'sales end');
   if (salesStart && salesEnd && salesEnd <= salesStart) throw new HttpError(400, 'invalid_sales_window', 'Ticket sales must end after they start.');
@@ -229,7 +236,7 @@ export async function createEvent({ request, env, user }) {
   const id = newId(12);
   const now = nowSec();
   const zoneRows = zoneNames.map((n, i) => ({ id: newId(10), name: n, sort: i }));
-  const tierRows = tierNames.map((n, i) => ({ id: newId(10), name: n, sort: i, price_kobo: tierPrices[i], capacity: tierCaps[i], ...tierSchedules[i] }));
+  const tierRows = tierNames.map((n, i) => ({ id: newId(10), name: n, sort: i, price_kobo: tierPrices[i], capacity: tierCaps[i], max_per_buyer: tierMax[i], ...tierWindows[i], ...tierSchedules[i] }));
   const linkRows = tierZones.flatMap((idxs, ti) => idxs.map((zi) => ({ t: tierRows[ti].id, z: zoneRows[zi].id })));
   const gateKey = makeGateKey();
 
@@ -261,9 +268,10 @@ export async function createEvent({ request, env, user }) {
        SELECT json_extract(value, '$.id'), ?1, json_extract(value, '$.name'), json_extract(value, '$.sort') FROM json_each(?2)`
     ).bind(id, JSON.stringify(zoneRows)),
     env.DB.prepare(
-      `INSERT INTO tiers (id, event_id, name, sort, price_kobo, capacity, days_mask, from_min, to_min)
+      `INSERT INTO tiers (id, event_id, name, sort, price_kobo, capacity, days_mask, from_min, to_min, max_per_buyer, opens_at, closes_at)
        SELECT json_extract(value, '$.id'), ?1, json_extract(value, '$.name'), json_extract(value, '$.sort'), json_extract(value, '$.price_kobo'), json_extract(value, '$.capacity'),
-              json_extract(value, '$.days_mask'), json_extract(value, '$.from_min'), json_extract(value, '$.to_min') FROM json_each(?2)`
+              json_extract(value, '$.days_mask'), json_extract(value, '$.from_min'), json_extract(value, '$.to_min'),
+              json_extract(value, '$.max_per_buyer'), json_extract(value, '$.opens_at'), json_extract(value, '$.closes_at') FROM json_each(?2)`
     ).bind(id, JSON.stringify(tierRows)),
     env.DB.prepare(
       `INSERT INTO tier_zones (tier_id, zone_id)
@@ -419,7 +427,7 @@ export async function patchEvent({ request, env, user, params }) {
   return json({ event: publicEvent(await ownedEvent(env, user, ev.id)) });
 }
 
-// PATCH /api/events/:id/tiers/:tierId  { name?, zone_ids?, days?, from?, to?, capacity?, price_kobo? }
+// PATCH /api/events/:id/tiers/:tierId  { name?, zone_ids?, days?, from?, to?, capacity?, price_kobo?, max_per_buyer?, opens_at?, closes_at?, opens_after_tier_id? }
 // Rename a ticket type, change which areas it opens (and, for offices, its days and hours), raise or lower its
 // limit, or change the price for tickets sold from now on. A limit cannot be set below what has already been
 // issued. Area and hour changes apply to every pass of that type at its next scan.
@@ -457,8 +465,37 @@ export async function patchTier({ request, env, user, params }) {
     if (!Number.isInteger(price) || price < 0 || price > MAX_PRICE_KOBO) throw new HttpError(400, 'invalid_price', `Enter a valid price for "${tier.name}".`);
   }
   stmts.push(env.DB.prepare('UPDATE tiers SET capacity = ?1, price_kobo = ?2 WHERE id = ?3').bind(capacity, price, tier.id));
+  if ('max_per_buyer' in b) {
+    const max = parseMaxPerBuyer(b.max_per_buyer ?? DEFAULT_MAX_PER_BUYER, tier.name);
+    stmts.push(env.DB.prepare('UPDATE tiers SET max_per_buyer = ?1 WHERE id = ?2').bind(max, tier.id));
+  }
+  if ('opens_at' in b || 'closes_at' in b) {
+    const w = parseTierWindow(b, tier.name);
+    const opensAt = 'opens_at' in b ? w.opens_at : tier.opens_at;
+    const closesAt = 'closes_at' in b ? w.closes_at : tier.closes_at;
+    assertWindowOrder(opensAt, closesAt, tier.name);
+    stmts.push(env.DB.prepare('UPDATE tiers SET opens_at = ?1, closes_at = ?2 WHERE id = ?3').bind(opensAt, closesAt, tier.id));
+  }
+  if ('opens_after_tier_id' in b) {
+    const after = await waitsFor(tiers, tier, b.opens_after_tier_id);
+    stmts.push(env.DB.prepare('UPDATE tiers SET opens_after_tier_id = ?1 WHERE id = ?2').bind(after, tier.id));
+  }
   await env.DB.batch(stmts);
   return json({ ...(await structure(env, ev.id)) });
+}
+
+// "Opens once <another type> sells out": it must be a different type of this event, with a limit (or it never sells out),
+// and the chain must not loop back, or none of them would ever open. Blank clears it.
+async function waitsFor(tiers, tier, raw) {
+  if (raw === null || raw === undefined || raw === '') return null;
+  const other = tiers.find((t) => t.id === String(raw));
+  if (!other || other.id === tier.id) throw new HttpError(400, 'invalid_wave', 'Choose another ticket type of this event to wait for.');
+  if (other.capacity === null) throw new HttpError(400, 'invalid_wave', `"${other.name}" has no limit, so it never sells out. Give it a limit first.`);
+  for (let t = other, hops = 0; t && hops < 20; hops++) {
+    if (t.id === tier.id) throw new HttpError(400, 'invalid_wave', 'Those ticket types would wait for each other, so neither would ever open.');
+    t = t.opens_after_tier_id ? tiers.find((x) => x.id === t.opens_after_tier_id) : null;
+  }
+  return other.id;
 }
 
 // The areas a ticket type opens: at least one, all from this event.
@@ -469,7 +506,7 @@ async function zoneIdsFor(env, eventId, ids, tierName) {
   return wanted;
 }
 
-// POST /api/events/:id/tiers  { name, zone_ids, price_kobo?, capacity?, days?, from?, to? } -> a new ticket type
+// POST /api/events/:id/tiers  { name, zone_ids, price_kobo?, capacity?, days?, from?, to?, max_per_buyer?, opens_at?, closes_at?, opens_after_tier_id? } -> a new ticket type
 export async function addTier({ request, env, user, params }) {
   const ev = await ownedEvent(env, user, params.id);
   const b = await readJson(request);
@@ -485,11 +522,15 @@ export async function addTier({ request, env, user, params }) {
     if (!Number.isInteger(price) || price < 0 || price > MAX_PRICE_KOBO) throw new HttpError(400, 'invalid_price', `Enter a valid price for "${name}".`);
   }
   const sc = ev.kind === 'workplace' ? parseSchedule(b, name) : parseSchedule({}, name);
+  const maxPer = parseMaxPerBuyer(b.max_per_buyer, name) ?? DEFAULT_MAX_PER_BUYER;
+  const w = parseTierWindow(b, name);
+  assertWindowOrder(w.opens_at, w.closes_at, name);
   const id = newId(10);
+  const after = await waitsFor(tiers, { id, name }, b.opens_after_tier_id);
   const sort = tiers.length;
   await env.DB.batch([
-    env.DB.prepare('INSERT INTO tiers (id, event_id, name, sort, price_kobo, capacity, days_mask, from_min, to_min) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)')
-      .bind(id, ev.id, name, sort, price, capacity, sc.days_mask, sc.from_min, sc.to_min),
+    env.DB.prepare('INSERT INTO tiers (id, event_id, name, sort, price_kobo, capacity, days_mask, from_min, to_min, max_per_buyer, opens_at, closes_at, opens_after_tier_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)')
+      .bind(id, ev.id, name, sort, price, capacity, sc.days_mask, sc.from_min, sc.to_min, maxPer, w.opens_at ?? null, w.closes_at ?? null, after),
     ...zones.map((z) => env.DB.prepare('INSERT INTO tier_zones (tier_id, zone_id) VALUES (?1, ?2)').bind(id, z))
   ]);
   return json({ ...(await structure(env, ev.id)) }, 201);
@@ -508,6 +549,7 @@ export async function deleteTier({ env, user, params }) {
   if (used.n) throw new HttpError(409, 'tier_in_use', `"${tier.name}" already has tickets, codes or guests, so it cannot be removed. Rename it, or set its limit to stop selling it.`);
   await env.DB.batch([
     env.DB.prepare('DELETE FROM tier_zones WHERE tier_id = ?1').bind(tier.id),
+    env.DB.prepare('UPDATE tiers SET opens_after_tier_id = NULL WHERE opens_after_tier_id = ?1').bind(tier.id),
     env.DB.prepare('DELETE FROM tiers WHERE id = ?1').bind(tier.id)
   ]);
   return json({ ...(await structure(env, ev.id)) });

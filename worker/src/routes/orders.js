@@ -10,8 +10,8 @@ import * as limits from '../lib/limits.js';
 import { organiserMfaMandatory } from '../lib/mfa.js';
 import { emit, flush as flushWebhooks } from '../lib/outbound.js';
 import { requireSecondStep } from './mfa.js';
+import { assertCanBuy, boughtSql, DEFAULT_MAX_PER_BUYER } from '../lib/tier-sales.js';
 
-const MAX_QTY = 8;
 const HOLD_SEC = 30 * 60; // a pending order holds its tickets for 30 minutes
 const LOCK_SEC = 60;
 const PAID = ['paid', 'fulfilled', 'refunding', 'refund_due'];
@@ -37,11 +37,17 @@ export async function checkout({ request, env, user, params }) {
     const ph = await env.DB.prepare('SELECT 1 AS x FROM user_photos WHERE user_id = ?1').bind(user.id).first();
     if (!ph) throw new HttpError(428, 'photo_required', 'This event needs a photo of you so door staff can match it to your face. Add one to continue.');
   }
-  const tier = await env.DB.prepare('SELECT id, name, capacity, price_kobo FROM tiers WHERE id = ?1 AND event_id = ?2').bind(b.tier_id, ev.id).first();
+  const tier = await env.DB.prepare('SELECT id, name, capacity, price_kobo, max_per_buyer, opens_at, closes_at, opens_after_tier_id FROM tiers WHERE id = ?1 AND event_id = ?2').bind(b.tier_id, ev.id).first();
   if (!tier) throw new HttpError(400, 'invalid_tier', 'Choose a ticket type.');
   if (!(tier.price_kobo > 0)) throw new HttpError(400, 'free_ticket', 'This ticket is free. Use the free ticket button.');
   const qty = b.qty === undefined ? 1 : Number.parseInt(b.qty, 10);
-  if (!Number.isInteger(qty) || qty < 1 || qty > MAX_QTY) throw new HttpError(400, 'invalid_qty', `Buy between 1 and ${MAX_QTY} tickets at a time.`);
+  if (!Number.isInteger(qty) || qty < 1) throw new HttpError(400, 'invalid_qty', 'Choose how many tickets you want.');
+  // Sold out is the more useful answer, so say it before the per-person limit.
+  if (tier.capacity !== null) {
+    const taken = await env.DB.prepare(`SELECT COUNT(*) AS n FROM invites WHERE tier_id = ?1 AND status != 'revoked'`).bind(tier.id).first();
+    if (taken.n >= tier.capacity) throw new HttpError(409, 'sold_out', `"${tier.name}" is sold out.`);
+  }
+  await assertCanBuy(env, user.id, tier, qty, nowSec());
   if (await limits.isFull(env.DB, 'checkout:' + user.id, 10, 3600)) throw new HttpError(429, 'rate_limited', 'Too many checkouts. Try again later.');
 
   const price = await quote(env, { event: ev, tier, qty, codeText: b.discount_code });
@@ -56,9 +62,10 @@ export async function checkout({ request, env, user, params }) {
      SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'pending', ?12, ?13, ?14, ?15, ?17, ?18
      WHERE (?16 IS NULL OR (SELECT COUNT(*) FROM invites WHERE tier_id = ?3 AND status != 'revoked')
        + (SELECT COALESCE(SUM(qty), 0) FROM orders WHERE tier_id = ?3 AND status = 'pending' AND expires_at > ?14) + ?5 <= ?16)
+       AND (${boughtSql('?4', '?3', '?14')}) + ?5 <= ?19
        AND (?17 IS NULL OR (SELECT max_uses FROM discount_codes WHERE id = ?17) IS NULL OR (SELECT COUNT(*) FROM orders o WHERE o.discount_code_id = ?17 AND (o.status IN ('paid','fulfilled','refund_due','refunding') OR (o.status = 'pending' AND o.expires_at > ?14))) < (SELECT max_uses FROM discount_codes WHERE id = ?17))`
   ).bind(id, ev.id, tier.id, user.id, qty, tier.price_kobo, price.subtotal_kobo, price.commission_kobo, ev.fee_mode, price.buyer_fee_kobo, price.total_kobo,
-    provider.name, ref, now, now + HOLD_SEC, tier.capacity ?? null, discId, price.discountKobo).run();
+    provider.name, ref, now, now + HOLD_SEC, tier.capacity ?? null, discId, price.discountKobo, tier.max_per_buyer ?? DEFAULT_MAX_PER_BUYER).run();
   if (ins.meta.changes !== 1) throw new HttpError(409, 'sold_out', `Not enough "${tier.name}" tickets left, or that discount code was just used up.`);
   await limits.record(env.DB, 'checkout:' + user.id);
 
