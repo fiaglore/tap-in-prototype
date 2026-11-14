@@ -6,7 +6,9 @@
   var root = document.documentElement;
   if (!root.classList.contains('is-native')) return;
   var path = location.pathname;
-  var area = /^\/(play|e)\/(index\.html)?$/.test(path) ? 'events'
+  var biz = root.classList.contains('is-biz');                  // the Tap In Business app: office console and scanner only
+  var area = biz ? (/^\/offices\/(index\.html)?$/.test(path) ? 'office' : /^\/gate\/(index\.html)?$/.test(path) ? 'gate' : null)
+    : /^\/(play|e)\/(index\.html)?$/.test(path) ? 'events'
     : /^\/organiser\/(index\.html)?$/.test(path) ? 'organiser'
     : /^\/gate\/(index\.html)?$/.test(path) ? 'gate'
     : /^\/app\/(index\.html)?$/.test(path) ? (/^#(me|custom|delete)$/.test(location.hash) ? 'account' : 'passes')
@@ -14,7 +16,7 @@
   // Tap In's logo takes you to the events home, not the marketing site. Every page, including ones drawn later.
   document.addEventListener('click', function (e) {
     var a = e.target && e.target.closest ? e.target.closest('a') : null;
-    if (a && a.getAttribute('href') === '/' && !e.defaultPrevented) { e.preventDefault(); location.replace('/play/'); }
+    if (a && a.getAttribute('href') === '/' && !e.defaultPrevented) { e.preventDefault(); location.replace(biz ? '/offices/' : '/play/'); }
   }, true);
   if (!area) return;                                            // the opening screen, scanner, sign-in and invites have no tabs
 
@@ -26,8 +28,13 @@
     { id: 'passes', label: 'Passes', href: '/app/#passes', d: 'M4 7h16v10H4zM4 11h16' },
     { id: 'account', label: 'Account', href: '/app/#me', d: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 20a7 7 0 0 1 14 0' }
   ];
+  if (biz) TABS = [
+    { id: 'office', label: 'Office', href: '/offices/', d: 'M4 21V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16M14 10h5a1 1 0 0 1 1 1v10M3 21h18M8 8h2M8 12h2M8 16h2' },
+    { id: 'gate', label: 'Scan', href: '/gate/', d: 'M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M4 12h16' }
+  ];
   var nav = document.createElement('nav'), row = document.createElement('div'), links = {};
-  nav.className = 'apptabs'; nav.setAttribute('aria-label', 'Main'); nav.appendChild(row);
+  nav.className = 'apptabs'; if (biz) row.style.gridTemplateColumns = 'repeat(' + TABS.length + ',minmax(0,1fr))';
+  nav.setAttribute('data-count', TABS.length); nav.setAttribute('aria-label', 'Main'); nav.appendChild(row);
   TABS.forEach(function (t) {
     var a = document.createElement('a'), svg = document.createElementNS(NS, 'svg'), p = document.createElementNS(NS, 'path');
     a.href = t.href; a.setAttribute('data-tab', t.id);

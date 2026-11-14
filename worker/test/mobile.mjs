@@ -187,5 +187,39 @@ await test('icons and splash screens were generated for both platforms', () => {
   for (const f of ['mobile/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png', 'mobile/ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png', 'mobile/ios/App/App/Assets.xcassets/Splash.imageset/Default@2x~universal~anyany.png']) assert.ok(existsSync(join(root, f)), f);
 });
 
+console.log('\nThe Tap In Business app (/mobile-business)');
+await test('the Business app has its own id and opens the office console on the business host', () => {
+  const c = JSON.parse(read('mobile-business/capacitor.config.json'));
+  assert.equal(c.appId, 'world.tapin.business');
+  assert.notEqual(c.appId, JSON.parse(read('mobile/capacitor.config.json')).appId, 'both apps on one phone need different ids');
+  assert.match(c.server.url, /^https:\/\/business\.tap-in\.world\/offices\/\?source=bizapp$/);
+  assert.equal(c.server.cleartext, false);
+  const gradle = read('mobile-business/android/app/build.gradle');
+  assert.match(gradle, /applicationId "world\.tapin\.business"/);
+  assert.match(read('mobile-business/android/app/src/main/java/world/tapin/business/MainActivity.java'), /^package world\.tapin\.business;/);
+  assert.equal(existsSync(join(root, 'mobile-business/android/app/src/main/java/world/tapin/app')), false);
+});
+await test('the Business app may use the camera for scanning, opens business links, and does not back up its data', () => {
+  const m = read('mobile-business/android/app/src/main/AndroidManifest.xml');
+  assert.match(m, /android\.permission\.CAMERA/);
+  assert.match(m, /android:allowBackup="false"/);
+  assert.match(m, /android:host="business\.tap-in\.world"/);
+  assert.match(m, /pathPrefix="\/offices\/"/);
+  assert.match(m, /pathPrefix="\/gate\/"/);
+  assert.match(read('mobile-business/android/app/src/main/res/values/strings.xml'), /<string name="app_name">Tap In Business<\/string>/);
+});
+await test('the office console loads the app shell, and the Business tabs are Office and Scan only', () => {
+  const html = read('worker/public/offices/index.html');
+  assert.match(html, /\/js\/native\.js/); assert.match(html, /\/js\/appnav\.js/); assert.match(html, /\/css\/appshell\.css/);
+  const nav = read('worker/public/js/appnav.js');
+  assert.match(nav, /is-biz/); assert.match(nav, /href: '\/offices\/'/); assert.match(nav, /label: 'Scan'/);
+  const nat = read('worker/public/js/native.js');
+  assert.match(nat, /source=bizapp/); assert.match(nat, /is-biz/);
+});
+await test('the Business app has its own build workflow and a deep-link template', () => {
+  assert.match(read('.github/workflows/mobile-business.yml'), /mobile-business/);
+  assert.equal(JSON.parse(read('mobile-business/deeplinks/assetlinks.json.template'))[0].target.package_name, 'world.tapin.business');
+});
+
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) { console.log('Failed: ' + failures.join('; ')); process.exit(1); }
