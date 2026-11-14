@@ -110,3 +110,10 @@ html{overflow-x:clip}
 
 /* a button that looks like a link */
 .linkbtn{background:none;border:0;padding:0;font:inherit;color:inherit;font-weight:700;text-decoration:underline;cursor:pointer}
+
+/* Phone app on newer Android: the status bar is drawn over the page (Capacitor leaves the page to make room for it when a page
+   says viewport-fit=cover). Keep the page below the bar, and paint the strip behind the bar the app's plum so its icons stay readable.
+   --sat/--sab are the bar heights, from the browser when it knows them or from the value Capacitor puts in --safe-area-inset-*. */
+html.is-native{--sat:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px));--sab:max(env(safe-area-inset-bottom,0px),var(--safe-area-inset-bottom,0px))}
+html.is-native body{padding-top:var(--sat)}
+html.is-native::before{content:"";position:fixed;top:0;left:0;right:0;height:var(--sat);background:#2B1B2D;z-index:1000;pointer-events:none}

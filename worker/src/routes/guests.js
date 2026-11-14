@@ -287,12 +287,24 @@ export async function invitationFor(request, env, token) {
   return g;
 }
 
-const invitationOut = async (env, g) => ({
-  kind: g.kind,
-  event: { name: g.event_name, venue: g.venue, city: g.city, starts_at: g.starts_at, reentry: !!g.allow_reentry, kind: g.event_kind },
-  guest: { name: g.name, party_size: g.party_size, table: g.table_label, tier: g.tier, rsvp: g.rsvp, attending: g.attending, host: g.host, purpose: g.purpose, valid_from: g.valid_from, valid_until: g.valid_until },
-  code: await guestToken(env.SECRET_PEPPER, g.id)
-});
+// A private-event invitation shows its entry code only from the start of the event's day (Lagos time), so a link
+// that was forwarded or a screenshot taken weeks ahead is worthless. Until then the server withholds the code
+// itself, not just the page. With no date set there is no "day of the event", so it stays withheld until the host
+// sets one. Visitor passes have their own valid window and are not held back here.
+// Returns the unix time the code appears, 0 when there is no wait, or null when the event has no date yet.
+export const entryOpensAt = (g) => (g.kind === 'invite' ? (g.starts_at ? startOfDay(g.starts_at) : null) : 0);
+export const entryOpen = (g, now = nowSec()) => { const at = entryOpensAt(g); return at === 0 || (at !== null && now >= at); };
+
+const invitationOut = async (env, g) => {
+  const open = entryOpen(g);
+  return {
+    kind: g.kind,
+    event: { name: g.event_name, venue: g.venue, city: g.city, starts_at: g.starts_at, reentry: !!g.allow_reentry, kind: g.event_kind },
+    guest: { name: g.name, party_size: g.party_size, table: g.table_label, tier: g.tier, rsvp: g.rsvp, attending: g.attending, host: g.host, purpose: g.purpose, valid_from: g.valid_from, valid_until: g.valid_until },
+    entry: { open, opens_at: open ? null : entryOpensAt(g) },
+    code: open ? await guestToken(env.SECRET_PEPPER, g.id) : null
+  };
+};
 
 // POST /api/invitation { token }  (POST so the link token never lands in a URL or a log)
 export async function openInvitation({ request, env }) {

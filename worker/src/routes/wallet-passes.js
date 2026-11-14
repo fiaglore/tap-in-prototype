@@ -4,7 +4,7 @@ import { HttpError, nowSec } from '../lib/util.js';
 import { json } from '../lib/http.js';
 import { guestToken, passToken } from '../lib/codes.js';
 import { applePass, googleSaveUrl, walletConfig } from '../lib/wallet.js';
-import { invitationFor } from './guests.js';
+import { entryOpen, invitationFor } from './guests.js';
 
 const IMAGES = ['icon.png', 'icon@2x.png', 'icon@3x.png', 'logo.png', 'logo@2x.png'];
 async function images(env, url) {
@@ -49,6 +49,7 @@ export async function invitationWallet({ request, env, params, url }) {
   if (provider !== 'apple' && provider !== 'google') throw new HttpError(404, 'not_found', 'Not found.');
   need(env, provider);
   const g = await invitationFor(request, env, url.searchParams.get('t'));
+  if (!entryOpen(g)) throw new HttpError(409, 'entry_not_open', 'The entry code is available on the day of the event, so it cannot be saved to a wallet yet.');
   const visitor = g.kind === 'visitor';
   return deliver(env, url, provider, {
     serial: g.id, kind: visitor ? 'visitor' : 'invite', title: g.event_name, holder: g.name, type: visitor ? g.tier : null,

@@ -20,6 +20,11 @@ const other = await signIn(env, 'other@guests.test', '10.90.200.2', 'Other Host'
 
 const ev = (await org.post('/api/events', { name: 'Tolu & Ada Wedding', zones: ['Entrance', 'Reception'], tiers: [{ name: 'Guest', zones: ['Entrance', 'Reception'] }, { name: 'Family', zones: ['Entrance', 'Reception'] }, { name: 'Ceremony only', zones: ['Entrance'] }], listed: false })).body;
 const id = ev.event.id;
+const db = env.DB.raw;
+const nowS = () => Math.floor(Date.now() / 1000);
+// Invitation codes only show from the day of the event, so these tests hold the wedding today (the API will not take a date in the past).
+const setDate = (at) => db.prepare('UPDATE events SET starts_at = ?1 WHERE id = ?2').run(at, id);
+setDate(nowS());
 const entrance = ev.zones.find((z) => z.name === 'Entrance').id;
 const reception = ev.zones.find((z) => z.name === 'Reception').id;
 const tier = (n) => ev.tiers.find((t) => t.name === n).id;
@@ -174,6 +179,36 @@ await test('the report, overview and CSV count guests', async () => {
   const csv = (await org.call('GET', `/api/events/${id}/scans.csv`, { raw: true })).body;
   assert.ok(csv.includes('Adaeze Okafor'));
   assert.ok(!csv.includes('+234'), 'no phone numbers in the export');
+});
+
+group('Entry code timing');
+await test('before the day of the event the invitation shows no entry code, in the page data or in the reply to the RSVP', async () => {
+  const t = tokenOf(inv[0].link);
+  setDate(nowS() + 3 * 86400);
+  const r = await anon().post('/api/invitation', { token: t });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.code, null);
+  assert.equal(r.body.entry.open, false);
+  assert.ok(r.body.entry.opens_at > nowS() && r.body.entry.opens_at <= nowS() + 3 * 86400, 'tells the guest when it opens');
+  assert.ok(!JSON.stringify(r.body).includes('TG-'), 'no code anywhere in the response');
+  const yes = await anon().post('/api/invitation/rsvp', { token: t, response: 'yes', attending: 1 });
+  assert.equal(yes.status, 200); assert.equal(yes.body.code, null, 'replying does not reveal it');
+});
+await test('it appears on the day of the event, from the start of that day, and stays after', async () => {
+  const t = tokenOf(inv[0].link);
+  setDate(nowS() + 3600);
+  assert.match((await anon().post('/api/invitation', { token: t })).body.code, /^TG-/);
+  setDate(nowS() - 2 * 86400);
+  const after = await anon().post('/api/invitation', { token: t });
+  assert.match(after.body.code, /^TG-/); assert.equal(after.body.entry.open, true);
+  setDate(nowS());
+});
+await test('an event with no date yet keeps the code back until the host sets one', async () => {
+  db.prepare('UPDATE events SET starts_at = NULL WHERE id = ?1').run(id);
+  const r = await anon().post('/api/invitation', { token: tokenOf(inv[0].link) });
+  assert.equal(r.body.code, null); assert.equal(r.body.entry.opens_at, null);
+  setDate(nowS());
+  assert.match((await anon().post('/api/invitation', { token: tokenOf(inv[0].link) })).body.code, /^TG-/);
 });
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
