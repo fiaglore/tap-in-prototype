@@ -244,6 +244,8 @@ export async function deleteAccountData(env, user) {
     // An invite made for this email or phone must not turn into one that anybody holding the code can use.
     env.DB.prepare("UPDATE invites SET bound_identifier = 'deleted:' || ?1 WHERE bound_identifier IN (?2, ?3)").bind(user.id, email, phone),
     env.DB.prepare('DELETE FROM user_photos WHERE user_id = ?1').bind(user.id),
+    // Check-in selfies and locations go with the account; the attendance entry itself stays on the office's record.
+    env.DB.prepare('UPDATE checkins SET selfie_b64 = NULL, lat = NULL, lng = NULL WHERE user_id = ?1').bind(user.id),
     env.DB.prepare('DELETE FROM wallets WHERE user_id = ?1').bind(user.id),
     env.DB.prepare('DELETE FROM app_logins WHERE user_id = ?1').bind(user.id),
     env.DB.prepare('DELETE FROM otps WHERE identifier IN (?1, ?2)').bind(email, phone),

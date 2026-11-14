@@ -3,7 +3,7 @@ import { get, post, patch, del } from '/js/api.js';
 import { signInFlow } from '/js/auth-ui.js?v=2';
 import { qrSvg } from '/js/qr.js';
 import { mfaVerify } from '/js/mfa-ui.js';
-import { developersPage, tabDepartments, tabIncidents, tabOnSite, tabPeopleReadOnly, tabTeamAccess } from './business.js';
+import { developersPage, tabDepartments, tabCheckin, tabIncidents, tabOnSite, tabPeopleReadOnly, tabTeamAccess } from './business.js';
 
 const OFFICE = document.body.dataset.console === 'office';
 const CONSOLE = OFFICE ? 'Offices' : 'Organiser';
@@ -265,9 +265,9 @@ async function viewEvent(id, tab) {
     if (office !== OFFICE) { location.replace((office ? '/offices/' : '/organiser/') + '#/e/' + id); return; }
     const owner = !data.role || data.role === 'owner';
     // Team members added by the owner see a smaller console: reports, and for security staff the on-site list and incidents.
-    const memberTabs = [['attendance', 'Attendance'], ['people', 'Who has access'], ...(data.role === 'security' ? [['onsite', 'On site now']] : []), ['incidents', 'Incidents']];
+    const memberTabs = [['attendance', 'Attendance'], ['people', 'Who has access'], ...(data.role === 'security' ? [['onsite', 'On site now']] : []), ['checkin', 'Self check-in'], ['incidents', 'Incidents']];
     const tabs = !owner ? memberTabs : office
-      ? [['overview', 'Overview'], ['edit', 'Edit details'], ['visitors', 'Visitors'], ['onsite', 'On site now'], ['attendance', 'Attendance'], ['people', 'Add people'], ['departments', 'Departments'], ['attendees', 'Who has access'], ['incidents', 'Incidents'], ['team', 'Door staff'], ['access', 'Team access'], ['report', 'Report'], ['gate', 'Doors & key']]
+      ? [['overview', 'Overview'], ['edit', 'Edit details'], ['visitors', 'Visitors'], ['onsite', 'On site now'], ['checkin', 'Self check-in'], ['attendance', 'Attendance'], ['people', 'Add people'], ['departments', 'Departments'], ['attendees', 'Who has access'], ['incidents', 'Incidents'], ['team', 'Door staff'], ['access', 'Team access'], ['report', 'Report'], ['gate', 'Doors & key']]
       : [['overview', 'Overview'], ['edit', 'Edit details'], ['tickets', 'Tickets'], ['sales', 'Sales & discounts'], ['guests', 'Guest list'], ['invites', 'Invite codes'], ['attendees', 'Attendees'], ['team', 'Gate team'], ['report', 'Report'], ['gate', 'Gate key & rules']];
     if (!tabs.some(([k]) => k === tab)) { location.replace(`#/e/${id}/${tabs[0][0]}`); return; }
     const items = [{ href: '#/', text: OFFICE ? '\u2190 All offices' : '\u2190 All events' }, { label: data.event.name }]
@@ -280,7 +280,7 @@ async function viewEvent(id, tab) {
         // A private event with only free tickets has no sales page worth sharing: guests come in by invitation.
         !office && (data.event.listed || data.tiers.some((t) => t.price_kobo > 0)) && h('button', { class: 'btn ghost small', type: 'button', onclick: () => copy(location.origin + '/e/?id=' + id, 'Sales page link copied') }, 'Copy sales page link')),
       body)));
-    ({ overview: tabOverview, onsite: tabOnSite, departments: tabDepartments, incidents: tabIncidents, access: tabTeamAccess, tickets: tabTickets, sales: tabSales, invites: tabInvites, people: owner ? tabPeople : tabPeopleReadOnly, attendees: tabAttendees, team: tabTeam, report: tabReport, guests: tabGuests, edit: tabEdit, visitors: tabVisitors, attendance: tabAttendance, gate: tabGate }[tab] || tabOverview)(body, data);
+    ({ overview: tabOverview, onsite: tabOnSite, checkin: tabCheckin, departments: tabDepartments, incidents: tabIncidents, access: tabTeamAccess, tickets: tabTickets, sales: tabSales, invites: tabInvites, people: owner ? tabPeople : tabPeopleReadOnly, attendees: tabAttendees, team: tabTeam, report: tabReport, guests: tabGuests, edit: tabEdit, visitors: tabVisitors, attendance: tabAttendance, gate: tabGate }[tab] || tabOverview)(body, data);
   } catch (ex) { fail(ex); }
 }
 

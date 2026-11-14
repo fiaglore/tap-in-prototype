@@ -3,6 +3,7 @@
 import { h, mount, toast, when, ago, copy } from '/js/dom.js';
 import { get, post, patch, del } from '/js/api.js';
 import { mfaVerify } from '/js/mfa-ui.js';
+import { qrSvg } from '/js/qr.js';
 
 const clock = (sec) => (sec ? new Date(sec * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
 const fail = (box, ex) => mount(box, h('div', { class: 'error', role: 'alert' }, ex.message || String(ex)));
@@ -180,4 +181,90 @@ export function developersPage(container) {
   }
   mount(container, gate, keysBox, hooksBox);
   loadKeys(); loadHooks();
+}
+
+// ---- Self check-in (Tap In for Business): settings, the screen at the office, and the day's check-ins ------------------------
+const REASON = { outside_location: 'Outside the office', no_location: 'No location sent' };
+export async function tabCheckin(body, data) {
+  const id = data.event.id;
+  const owner = !data.role || data.role === 'owner';
+  const canSee = data.role !== 'viewer';
+  const box = h('div', {});
+  body.append(box);
+  let s;
+  try { s = (await get(`/events/${id}/checkin/settings`)).settings; } catch (ex) { return fail(box, ex); }
+
+  // 1. Settings (owner)
+  const on = h('input', { type: 'checkbox', checked: s.enabled, id: 'ci-on' });
+  const lat = h('input', { class: 'input', id: 'ci-lat', inputmode: 'decimal', value: s.lat ?? '', placeholder: 'e.g. 6.5244' });
+  const lng = h('input', { class: 'input', id: 'ci-lng', inputmode: 'decimal', value: s.lng ?? '', placeholder: 'e.g. 3.3792' });
+  const radius = h('input', { class: 'input', id: 'ci-r', type: 'number', min: '25', max: '2000', value: s.radius_m });
+  const acc = h('input', { class: 'input', id: 'ci-a', type: 'number', min: '20', max: '500', value: s.max_accuracy_m });
+  const mode = h('select', { class: 'input', id: 'ci-m' }, [['random', 'At random (recommended)'], ['always', 'Every check-in'], ['off', 'Never']].map(([v, l]) => h('option', { value: v, selected: s.selfie_mode === v }, l)));
+  const lo = h('input', { class: 'input', id: 'ci-lo', type: 'number', min: '0', max: '100', value: s.selfie_min_pct });
+  const hi = h('input', { class: 'input', id: 'ci-hi', type: 'number', min: '0', max: '100', value: s.selfie_max_pct });
+  const here = h('button', { class: 'btn ghost small', type: 'button', onclick: () => {
+    if (!navigator.geolocation) return toast('This browser cannot share its location.');
+    navigator.geolocation.getCurrentPosition((p) => { lat.value = p.coords.latitude.toFixed(6); lng.value = p.coords.longitude.toFixed(6); toast('Using where you are now. Stand at the office when you do this.'); }, () => toast('Location was not shared.'), { enableHighAccuracy: true, timeout: 15000 });
+  } }, 'Use where I am now');
+  const settings = h('form', { class: 'card', onsubmit: async (e) => {
+    e.preventDefault();
+    try {
+      await patch(`/events/${id}/checkin/settings`, { lat: lat.value === '' ? null : Number(lat.value), lng: lng.value === '' ? null : Number(lng.value), radius_m: Number(radius.value), max_accuracy_m: Number(acc.value), selfie_mode: mode.value, selfie_min_pct: Number(lo.value), selfie_max_pct: Number(hi.value), enabled: on.checked });
+      toast('Saved'); location.reload();
+    } catch (ex) { toast(ex.message); }
+  } },
+    h('h3', {}, 'Self check-in'),
+    h('p', { class: 'hint', style: 'margin:4px 0 10px' }, 'Staff scan a code on a screen at the office with their phone. The code changes every 30 seconds, so a photo of it stops working almost at once. Their phone must also be at the office, and now and then they take a live selfie.'),
+    h('label', { class: 'row', for: 'ci-on', style: 'gap:8px' }, on, h('span', {}, 'Turn on self check-in for this office')),
+    h('h4', { style: 'margin-top:14px' }, 'Where the office is'),
+    h('div', { class: 'grid two' }, h('div', { class: 'field' }, h('label', { for: 'ci-lat' }, 'Latitude'), lat), h('div', { class: 'field' }, h('label', { for: 'ci-lng' }, 'Longitude'), lng)),
+    h('div', { class: 'row', style: 'margin-bottom:8px' }, here),
+    h('div', { class: 'grid two' },
+      h('div', { class: 'field' }, h('label', { for: 'ci-r' }, 'Allowed distance (metres)'), radius, h('p', { class: 'hint' }, 'How far from that point a phone can be and still check in.')),
+      h('div', { class: 'field' }, h('label', { for: 'ci-a' }, 'Least precise location accepted (metres)'), acc, h('p', { class: 'hint' }, 'Phones that cannot place themselves this well are asked to try again.'))),
+    h('h4', { style: 'margin-top:14px' }, 'Live selfie'),
+    h('div', { class: 'field' }, h('label', { for: 'ci-m' }, 'Ask for a selfie'), mode),
+    h('div', { class: 'grid two' },
+      h('div', { class: 'field' }, h('label', { for: 'ci-lo' }, 'Chance for reliable people (%)'), lo, h('p', { class: 'hint' }, 'People who are punctual and rarely miss a day get this chance.')),
+      h('div', { class: 'field' }, h('label', { for: 'ci-hi' }, 'Chance for everyone else (%)'), hi, h('p', { class: 'hint' }, 'New people, people who are often late or absent. Anyone refused for being outside the office is asked every time for two weeks.'))),
+    h('p', { class: 'hint' }, `The chance is worked out from the last 30 working days: days in against days expected, and days arrived late. It is rolled once per person per day, so trying again does not change it. Selfies are kept ${s.selfie_keep_days} days.`),
+    h('div', { style: 'margin-top:12px' }, h('button', { class: 'btn primary', type: 'submit' }, 'Save')));
+
+  // 2. The screen at the office
+  const screen = h('div', { class: 'card', style: 'text-align:center' });
+  let timer = null;
+  async function drawCode() {
+    if (!document.body.contains(screen)) return clearInterval(timer);
+    try {
+      const c = await get(`/events/${id}/checkin/code`);
+      mount(screen, h('h3', {}, 'Screen at the office'), h('div', { style: 'max-width:300px;margin:10px auto' }, qrSvg(c.url, 'Check-in code for ' + data.event.name)),
+        h('p', { class: 'hint' }, 'Show this on a screen by the entrance. It changes every 30 seconds. Staff scan it with their phone camera.'),
+        h('button', { class: 'btn ghost small', type: 'button', onclick: () => { const w = screen.requestFullscreen?.(); if (w) w.catch(() => {}); } }, 'Full screen'));
+      clearInterval(timer);
+      timer = setTimeout(drawCode, Math.max(2, c.expires_in) * 1000);
+    } catch (ex) { mount(screen, h('h3', {}, 'Screen at the office'), h('p', { class: 'muted' }, s.enabled ? ex.message : 'Turn on self check-in to show the code.')); }
+  }
+
+  // 3. Today's check-ins
+  const list = h('div', { class: 'card scroll-x' });
+  const date = h('input', { class: 'input', type: 'date', 'aria-label': 'Date', style: 'max-width:180px' });
+  async function drawList() {
+    let r;
+    try { r = await get(`/events/${id}/checkins` + (date.value ? '?date=' + date.value : '')); } catch (ex) { return fail(list, ex); }
+    if (!date.value) date.value = r.date;
+    const chip = (c) => c.status === 'rejected' ? h('span', { class: 'chip bad' }, REASON[c.reason] || 'Refused')
+      : c.selfie_required ? (c.has_selfie ? h('span', { class: 'chip ok' }, 'Selfie') : h('span', { class: 'chip' }, 'Selfie expired')) : h('span', { class: 'chip' }, 'Not asked');
+    mount(list, h('div', { class: 'spread' }, h('h3', {}, 'Check-ins'), date),
+      h('p', { class: 'hint', style: 'margin:6px 0' }, `${r.summary.checked_in} checked in · ${r.summary.selfies_asked} asked for a selfie · ${r.summary.refused} refused · ${r.summary.weak_gps} with a weak location`),
+      r.checkins.length ? h('table', {}, h('thead', {}, h('tr', {}, ['Time', 'Person', 'Distance', 'Selfie', 'Chance of selfie', ''].map((c) => h('th', {}, c)))),
+        h('tbody', {}, r.checkins.map((c) => h('tr', { class: c.status === 'ok' ? '' : 'muted' }, h('td', { class: 'hint' }, clock(c.at)), h('td', {}, h('strong', {}, c.name || '—'), h('div', { class: 'hint' }, [c.employee_ref, c.department].filter(Boolean).join(' · '))),
+          h('td', { class: 'mono' }, c.distance_m === null ? '—' : c.distance_m + ' m' + (c.flags.includes('weak_gps') ? ' (weak)' : '')), h('td', {}, chip(c)), h('td', { class: 'mono' }, c.selfie_chance === null ? '—' : c.selfie_chance + '%'),
+          h('td', {}, canSee && c.has_selfie && h('img', { src: `/api/events/${id}/checkins/${c.id}/selfie?area=console`, alt: 'Selfie from this check-in', width: '48', height: '48', loading: 'lazy', style: 'border-radius:8px;object-fit:cover' })))))) : h('p', { class: 'muted' }, 'No check-ins on this day.'));
+  }
+  date.onchange = drawList;
+
+  mount(box, owner && settings, canSee && s.enabled && h('div', { style: 'margin-top:14px' }, screen), h('div', { style: 'margin-top:14px' }, list));
+  if (canSee && s.enabled) drawCode();
+  drawList();
 }

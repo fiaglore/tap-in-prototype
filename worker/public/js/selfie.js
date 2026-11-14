@@ -16,7 +16,7 @@ function encode(source, sw, sh) {
   return out;
 }
 
-export function selfieModal({ title = 'Add your photo', note = '' } = {}) {
+export function selfieModal({ title = 'Add your photo', note = '', consent = '', liveOnly = false } = {}) {
   return new Promise((resolve) => {
     let stream = null, shot = null, done = false;
     const prevOverflow = document.body.style.overflow;
@@ -60,10 +60,10 @@ export function selfieModal({ title = 'Add your photo', note = '' } = {}) {
       h('h2', { style: 'margin-top:14px;text-align:center' }, title),
       note && h('p', { class: 'muted', style: 'text-align:center;max-width:340px;margin-top:6px' }, note),
       stage, msg,
-      h('div', { class: 'stack', style: 'width:100%;max-width:340px;margin-top:10px' }, snap, use, retake, choose, picker),
+      h('div', { class: 'stack', style: 'width:100%;max-width:340px;margin-top:10px' }, snap, use, retake, ...(liveOnly ? [] : [choose, picker])),
       // Consent: what the photo is for, who sees it, how long it is kept, and how to take it back.
       h('p', { class: 'hint', style: 'text-align:center;max-width:340px;margin-top:14px' },
-        'Your photo is used only so door staff at events and offices that ask for it can match your face to your pass. Nobody else sees it, and it is never used for automatic face recognition. It is deleted 30 days after you last set it unless a pass still needs it, and you can delete it any time under Me. ',
+        consent || 'Your photo is used only so door staff at events and offices that ask for it can match your face to your pass. Nobody else sees it, and it is never used for automatic face recognition. It is deleted 30 days after you last set it unless a pass still needs it, and you can delete it any time under Me. ',
         h('a', { href: '/privacy/#photos', target: '_blank', rel: 'noopener' }, 'Privacy policy')));
     document.body.style.overflow = 'hidden';
     document.body.append(overlay);
@@ -73,7 +73,7 @@ export function selfieModal({ title = 'Add your photo', note = '' } = {}) {
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 720 } }, audio: false })
         .then((s) => { if (done) { s.getTracks().forEach((t) => t.stop()); return; } stream = s; video.srcObject = s; video.play().catch(() => {}); live(); snap.focus(); })
-        .catch(() => { msg.textContent = 'The camera is not available. You can choose or take a photo instead.'; live(); });
-    } else { msg.textContent = 'This browser cannot open the camera. Choose or take a photo instead.'; live(); }
+        .catch(() => { msg.textContent = liveOnly ? 'The camera is blocked. Allow camera access for this page in your browser settings, then reopen this check-in.' : 'The camera is not available. You can choose or take a photo instead.'; live(); });
+    } else { msg.textContent = liveOnly ? 'This browser cannot open the camera, so it cannot be used to check in.' : 'This browser cannot open the camera. Choose or take a photo instead.'; live(); }
   });
 }

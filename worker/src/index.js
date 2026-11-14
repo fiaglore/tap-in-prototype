@@ -26,6 +26,7 @@ import * as mfa from './routes/mfa.js';
 import * as apikeys from './routes/apikeys.js';
 import * as v1 from './routes/v1.js';
 import * as biz from './routes/business.js';
+import * as checkin from './routes/checkin.js';
 import { authenticateKey } from './routes/apikeys.js';
 import { flush as flushWebhooks } from './lib/outbound.js';
 import { checkoutMode } from './lib/payments/provider.js';
@@ -110,6 +111,12 @@ const ROUTES = [
   ['GET', '/api/events/:id/attendance', 'user', attendance.attendance],
   ['GET', '/api/events/:id/attendance.csv', 'user', attendance.attendanceCsv],
   ['POST', '/api/events/:id/visitors', 'user', guests.addVisitor],
+  ['GET', '/api/events/:id/checkin/settings', 'user', checkin.getSettings],
+  ['PATCH', '/api/events/:id/checkin/settings', 'user', checkin.patchSettings],
+  ['GET', '/api/events/:id/checkin/code', 'user', checkin.roomCode],
+  ['GET', '/api/events/:id/checkins', 'user', checkin.listCheckins],
+  ['GET', '/api/events/:id/checkins/:checkinId/selfie', 'user', checkin.checkinSelfie],
+  ['POST', '/api/checkin', 'user', checkin.checkIn],
 
   ['GET', '/api/wallet', 'user', wallet.wallet],
   ['POST', '/api/wallet/topup', 'user', wallet.topup],
@@ -260,7 +267,8 @@ export async function purge(env) {
       `DELETE FROM user_photos WHERE updated_at < ?1 AND user_id NOT IN (
          SELECT p.user_id FROM passes p JOIN events e ON e.id = p.event_id
          WHERE p.status = 'active' AND (e.kind = 'workplace' OR e.starts_at IS NULL OR e.starts_at > ?2))`
-    ).bind(now - 30 * 86400, now - 7 * 86400)
+    ).bind(now - 30 * 86400, now - 7 * 86400),
+    checkin.clearOldSelfies(env, now)
   ]);
 }
 
