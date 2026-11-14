@@ -33,4 +33,4 @@ cd android && ./gradlew assembleDebug     # android/app/build/outputs/apk/debug/
 3. Serve `deeplinks/assetlinks.json.template` (filled in with the Play signing key's SHA-256) at `/.well-known/assetlinks.json` on
    `business.tap-in.world`. Until then links open in the browser; the app still works. Note: the consumer app's file must list both packages if both are served from one host (they are on different hosts, so each host serves its own).
 4. Store listing: privacy policy (`/privacy/`), screenshots, data-safety form.
-5. **Icon.** It reuses the Tap In icon from `assets/`. Replace `assets/icon-*.png` with a Business variant and run `npm run assets` if you want the two apps told apart on the home screen.
+5. **Icon.** The app icon and splash show the Tap In logo with FOR BUSINESS under it (`../logo/tap-in-business-app-icon.svg`). To change them, edit `assets/` and run `npm run assets`.

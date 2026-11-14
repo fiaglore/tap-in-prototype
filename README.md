@@ -43,6 +43,7 @@ All files are in [`logo/`](logo/) as SVG.
 | File | Use |
 |------|-----|
 | `tap-in-app-icon.svg` | App icon: rounded plum tile |
+| `tap-in-business-app-icon.svg` | Tap In for Business app icon: the logo with FOR BUSINESS under it |
 | `tap-in-animated.svg` | Animated logo (2.4 s loop) for splash screens and readers |
 | `tap-in-mark-on-plum.svg` | Square mark on plum, for social profile pictures |
 | `tap-in-mark-one-colour.svg` | All-plum mark on white, for print and stamps |
