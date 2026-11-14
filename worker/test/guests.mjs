@@ -196,7 +196,10 @@ await test('before the day of the event the invitation shows no entry code, in t
 });
 await test('it appears on the day of the event, from the start of that day, and stays after', async () => {
   const t = tokenOf(inv[0].link);
-  setDate(nowS() + 3600);
+  // An event later today (Lagos): start of the current Lagos day + 20h, whatever the time of day the test runs.
+  // (now + 1h would fall on tomorrow's Lagos date between 23:00 and 24:00 Lagos time.)
+  const lagosDayStart = Math.floor((nowS() + 3600) / 86400) * 86400 - 3600;
+  setDate(lagosDayStart + 20 * 3600);
   assert.match((await anon().post('/api/invitation', { token: t })).body.code, /^TG-/);
   setDate(nowS() - 2 * 86400);
   const after = await anon().post('/api/invitation', { token: t });
