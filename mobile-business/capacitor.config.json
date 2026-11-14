@@ -1,0 +1,34 @@
+{
+  "appId": "world.tapin.business",
+  "appName": "Tap In Business",
+  "webDir": "www",
+  "server": {
+    "url": "https://business.tap-in.world/offices/?source=bizapp",
+    "cleartext": false,
+    "allowNavigation": [
+      "business.tap-in.world",
+      "www.tap-in.world",
+      "tap-in.world"
+    ]
+  },
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#2B1B2D"
+  },
+  "android": {
+    "backgroundColor": "#2B1B2D",
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "launchShowDuration": 0,
+      "backgroundColor": "#2B1B2D",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#2B1B2D"
+    }
+  }
+}

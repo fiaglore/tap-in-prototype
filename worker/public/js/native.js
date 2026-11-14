@@ -9,6 +9,13 @@
   root.classList.add('is-native', 'is-' + (C.getPlatform ? C.getPlatform() : 'native'));
   var call = function (plugin, method, arg) { try { var p = P[plugin]; if (p && p[method]) return p[method](arg); } catch (e) {} };
 
+  // The Tap In Business app (mobile-business/) opens the site with ?source=bizapp. Remember it for this host, so every page
+  // after the first (the office console, the scanner) knows it is inside that app and shows the Business tabs.
+  try {
+    if (/[?&]source=bizapp\b/.test(location.search)) localStorage.setItem('tapin.bizapp', '1');
+    if (localStorage.getItem('tapin.bizapp') === '1') root.classList.add('is-biz');
+  } catch (e) {}
+
   call('StatusBar', 'setStyle', { style: 'DARK' });                      // light icons on the plum bar
   call('StatusBar', 'setBackgroundColor', { color: '#2B1B2D' });
   // The splash goes as soon as the page has drawn its first frame, not after every font and image has arrived. A timer
