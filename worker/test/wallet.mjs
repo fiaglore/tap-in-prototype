@@ -123,6 +123,13 @@ await test('only the pass holder can get it; live passes and cancelled passes ar
 await test('invitations and visitor passes can be added to a wallet from their link, with party, table and host', async () => {
   const g = (await org.post(`/api/events/${ev.event.id}/guests`, { tier_id: ev.tiers[0].id, guests: [{ name: 'Adaeze Okafor', party_size: 3, table: 'Table 4' }] })).body.added[0];
   const t = g.link.split('#')[1];
+  // The entry code (and so the wallet pass) is only available from the day of the event.
+  const setDate = (at) => env.DB.raw.prepare('UPDATE events SET starts_at = ?1 WHERE id = ?2').run(at, ev.event.id);
+  setDate(Math.floor(Date.now() / 1000) + 3 * 86400);
+  const early = await raw(env, null, `/api/invitation/wallet/apple?t=${t}`);
+  assert.equal(early.status, 409); assert.equal((await early.json()).error.code, 'entry_not_open');
+  assert.equal((await raw(env, null, `/api/invitation/wallet/google?t=${t}`)).status, 409);
+  setDate(Math.floor(Date.now() / 1000));
   const r = await raw(env, null, `/api/invitation/wallet/apple?t=${t}`);
   assert.equal(r.status, 200);
   writeFileSync(join(dir, 'i.pkpass'), new Uint8Array(await r.arrayBuffer()));

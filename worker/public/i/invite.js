@@ -83,13 +83,19 @@ function render(d, note = '') {
       g.party_size > 1 && h('div', { class: 'howmany' }, h('span', {}, 'How many of you?'), howMany),
       h('div', { class: 'rsvp-row' }, yes, no),
       msg),
-    h('div', { class: 'card entry' },
+    d.code ? h('div', { class: 'card entry' },
       h('h3', {}, 'Your entry code'),
       h('p', { class: 'muted', style: 'margin-top:4px' }, g.party_size > 1 ? 'Show this at the door. One scan lets your whole party in.' : 'Show this at the door.'),
       h('div', { class: 'qr' }, qrSvg(d.code, 'Entry code for ' + g.name)),
       h('p', { class: 'code' }, d.code),
       h('p', { class: 'hint', style: 'margin-top:10px' }, 'Keep this link, or take a screenshot of the code. ' + (e.reentry ? 'You can come and go with it.' : 'It works once at each entrance.') + ' Please do not share it: it is only for you and your party.'),
-      walletRow()));
+      walletRow())
+    : h('div', { class: 'card entry' },
+      h('h3', {}, 'Your entry code'),
+      h('p', { class: 'muted', style: 'margin-top:4px' }, 'For security, your entry code is not shown until the day of the event. Open this link again on the day to see it.'),
+      h('p', { class: 'hint', style: 'margin-top:10px' }, d.entry && d.entry.opens_at
+        ? 'It will appear here from ' + new Date(d.entry.opens_at * 1000).toLocaleDateString('en-GB', { timeZone: 'Africa/Lagos', dateStyle: 'full' }) + '. Keep this link.'
+        : 'The host has not set the date yet. Keep this link.')));
 }
 
 (async function start() {
