@@ -23,7 +23,8 @@ One-time staging setup is in the comment block in `worker/wrangler.jsonc`.
 5. **Apply migrations before deploying code that needs them.** Migration `0017_session_scope.sql` adds a column that every sign-in check reads: deploying the code first signs everyone out and breaks the site until the migration runs.
 6. Migration `0018_business.sql` (departments, incidents, team access, visitor check-out) is needed by the Business console screens and by the attendance report: apply it before deploying code that reads it.
 7. Migration `0019_ticket_limits_waves.sql` (per-person ticket limits and sales waves) adds columns to `tiers` and a `tier_buys` table. Apply it before deploying code that reads it: the checkout and the public sales page select the new columns. Every existing ticket type starts at 2 tickets per person.
-8. Migrations only ever add. If a migration must be undone, restore (section 4) rather than editing it.
+8. Migrations `0020_checkin.sql` and `0021_checkin_selfie_hash.sql` (secure self check-in for offices: location settings on `events`, and a `checkins` table holding each check-in's evidence, including selfies) are needed by the Business console's Self check-in tab and by `POST /api/checkin`: apply them before deploying code that reads them. Self check-in is off for every office until its owner turns it on. Check-in selfies are cleared 30 days after they are taken by the daily purge, so the cron trigger must be running. The page needs the browser's location permission, so `public/_headers` allows `geolocation=(self)`; the phone app has no location permission set up for it yet.
+9. Migrations only ever add. If a migration must be undone, restore (section 4) rather than editing it.
 
 Rollback of code only: `npx wrangler rollback` (Cloudflare keeps recent versions). Rollback does not undo database changes.
 
