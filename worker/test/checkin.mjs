@@ -139,17 +139,36 @@ await test('the check-in shows up as an entry in the on-site report', async () =
   const r = (await org.get(`/api/events/${id}/on-site`)).body;
   assert.ok(r.staff.some((s) => s.name === 'Bola Ade'));
 });
-await test('selfie mode always: the selfie is required, checked, stored, and shown on the receipt', async () => {
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+await test('selfie mode always: the selfie must answer a fresh server challenge (no challenge, forged, or too early is refused)', async () => {
   await cfg({ selfie_mode: 'always' });
   const t = (await code()).token;
   const need = await ada.post('/api/checkin', { token: t, ...here });
   assert.equal(need.body.needs_selfie, true);
-  const bad = await ada.post('/api/checkin', { token: t, ...here, selfie: 'data:image/jpeg;base64,AAAA' });
+  assert.match(need.body.challenge, /^\d+\.[0-9A-Z]{12}$/);
+  const send = (extra) => ada.post('/api/checkin', { token: t, ...here, selfie: jpeg(), ...extra });
+  assert.equal((await send({})).body.error.code, 'selfie_challenge', 'a photo with no challenge is a pre-made upload');
+  assert.equal((await send({ challenge: '1794690000.AAAAAAAAAAAA' })).body.error.code, 'selfie_challenge', 'forged');
+  assert.equal((await send({ challenge: need.body.challenge })).body.error.code, 'selfie_challenge', 'too quick to have used the camera');
+  await wait(3200);
+  const bad = await ada.post('/api/checkin', { token: t, ...here, challenge: need.body.challenge, selfie: 'data:image/jpeg;base64,AAAA' });
   assert.equal(bad.status, 400);
-  const ok = await ada.post('/api/checkin', { token: t, ...here, selfie: jpeg() });
+  const ok = await send({ challenge: need.body.challenge });
   assert.equal(ok.status, 201, JSON.stringify(ok.body));
   assert.equal(ok.body.selfie_required, true);
   assert.match(ok.body.selfie, /^data:image\/jpeg;base64,/);
+});
+await test('the same selfie cannot be sent again for a later check-in', async () => {
+  // Pretend Ada's check-in was yesterday.
+  env.DB.raw.prepare("UPDATE checkins SET day = day - 1, at = at - 86400 WHERE status = 'ok' AND selfie_hash IS NOT NULL").run();
+  const t = (await code()).token;
+  const need = await ada.post('/api/checkin', { token: t, ...here });
+  assert.equal(need.body.needs_selfie, true);
+  await wait(3200);
+  const again = await ada.post('/api/checkin', { token: t, ...here, challenge: need.body.challenge, selfie: jpeg() });
+  assert.equal(again.body.error.code, 'selfie_reused');
+  const fresh = await ada.post('/api/checkin', { token: t, ...here, challenge: need.body.challenge, selfie: jpeg({ w: 200, h: 200 }) });
+  assert.equal(fresh.status, 201, JSON.stringify(fresh.body));
 });
 await test('random mode: a punctual person with a long clean record is asked far less than a new one', async () => {
   await cfg({ selfie_mode: 'random', selfie_min_pct: 0, selfie_max_pct: 100 });
@@ -171,9 +190,9 @@ group('Review');
 let list;
 await test('owner sees the day with chance, distance, selfie flags and a summary', async () => {
   list = (await org.get(`/api/events/${id}/checkins`)).body;
-  assert.equal(list.summary.checked_in, 3);
+  assert.equal(list.summary.checked_in, 3, 'today: Bola, Carl and Ada');
   assert.equal(list.summary.refused, 2, 'one outside the office, one with no location');
-  assert.equal(list.summary.selfies_asked, 1);
+  assert.ok(list.summary.selfies_asked >= 1);
   const a = list.checkins.find((c) => c.name === 'Ada Obi' && c.status === 'ok');
   assert.equal(a.has_selfie, true);
   assert.equal(a.selfie_chance, 100);

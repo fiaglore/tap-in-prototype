@@ -43,9 +43,9 @@ async function run() {
     let r = await post('/checkin', { token, ...pos, ...(selfie ? { selfie } : {}) });
     if (r.needs_selfie) {
       // Asked now and then, at random. The selfie is taken live (no photo library) and only used for this check-in.
-      selfie = await selfieModal({ title: 'Quick selfie', note: 'A selfie is needed to finish checking in today.', consent: 'This selfie is used only to confirm this check-in. Your office admin can see it, nobody else can, and it is deleted after 30 days. It is not used for automatic face recognition. ' });
+      selfie = await selfieModal({ title: 'Quick selfie', liveOnly: true, note: 'A live selfie is needed to finish checking in today. Photos from your gallery are not accepted.', consent: 'This selfie is used only to confirm this check-in. Your office admin can see it, nobody else can, and it is deleted after 30 days. It is not used for automatic face recognition. ' });
       if (!selfie) return fail('Selfie needed', 'This check-in needs a selfie. Nothing has been recorded yet.', run);
-      r = await post('/checkin', { token, ...pos, selfie });
+      r = await post('/checkin', { token, ...pos, selfie, challenge: r.challenge });
     }
     receipt(r);
   } catch (ex) {

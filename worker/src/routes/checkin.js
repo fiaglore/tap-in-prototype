@@ -9,7 +9,7 @@ import { json, readJson } from '../lib/http.js';
 import { take } from '../lib/limits.js';
 import { checkPhoto, photoDataUrl } from '../lib/photo.js';
 import { withinSchedule } from '../lib/schedule.js';
-import { distanceM, parseRoomToken, rollSelfie, roomToken, roomTokenValid, selfieChance, ROOM_STEP } from '../lib/checkin.js';
+import { checkChallenge, distanceM, makeChallenge, photoHash, parseRoomToken, rollSelfie, roomToken, roomTokenValid, selfieChance, ROOM_STEP } from '../lib/checkin.js';
 import { accessibleEvent, ownedEvent } from './events.js';
 
 const LATE_GRACE_MIN = 15;
@@ -164,10 +164,15 @@ export async function checkIn({ request, env, user }) {
   const rejects = (await env.DB.prepare("SELECT COUNT(*) AS n FROM checkins WHERE pass_id = ?1 AND status = 'rejected' AND reason = 'outside_location' AND at > ?2").bind(pass.id, now - 14 * 86400).first()).n;
   const chance = selfieChance({ mode: ev.checkin_selfie_mode, minPct: ev.checkin_selfie_min_pct, maxPct: ev.checkin_selfie_max_pct, ...hist, recentRejects: rejects });
   const asked = await rollSelfie(env.SECRET_PEPPER, pass.id, today, chance);
-  let selfie = null;
+  let selfie = null, selfieHash = null;
   if (asked) {
-    if (!b.selfie) return json({ needs_selfie: true, office: ev.name, message: 'Take a quick selfie to finish checking in.' });
+    if (!b.selfie) return json({ needs_selfie: true, office: ev.name, challenge: await makeChallenge(env.SECRET_PEPPER, pass.id, today, now), message: 'Take a live selfie to finish checking in.' });
+    // The selfie must answer a challenge issued a few seconds to a few minutes ago for this person and day, and must not be a
+    // picture this person has used for a check-in before (a saved photo cannot be re-sent).
+    if (!(await checkChallenge(env.SECRET_PEPPER, pass.id, today, b.challenge, now))) throw new HttpError(400, 'selfie_challenge', 'That selfie did not come from a live camera session. Open the check-in again and take a new selfie.');
     selfie = checkPhoto(b.selfie).b64;
+    selfieHash = await photoHash(selfie);
+    if (await env.DB.prepare('SELECT 1 AS x FROM checkins WHERE pass_id = ?1 AND selfie_hash = ?2').bind(pass.id, selfieHash).first()) throw new HttpError(400, 'selfie_reused', 'That photo has been used before. Take a new live selfie.');
   }
 
   const row = { id: newId(14), at: now, selfie_required: asked ? 1 : 0, distance_m: distance };
@@ -175,8 +180,8 @@ export async function checkIn({ request, env, user }) {
   try {
     await env.DB.batch([
       env.DB.prepare(
-        `INSERT INTO checkins (id, event_id, pass_id, user_id, day, at, status, lat, lng, accuracy_m, distance_m, selfie_chance, selfie_required, selfie_b64, flags) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'ok', ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`
-      ).bind(row.id, ev.id, pass.id, user.id, today, now, lat, lng, accuracy, distance, chance, row.selfie_required, selfie, flags),
+        `INSERT INTO checkins (id, event_id, pass_id, user_id, day, at, status, lat, lng, accuracy_m, distance_m, selfie_chance, selfie_required, selfie_b64, selfie_hash, flags) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'ok', ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)`
+      ).bind(row.id, ev.id, pass.id, user.id, today, now, lat, lng, accuracy, distance, chance, row.selfie_required, selfie, selfieHash, flags),
       // Counts as an entry, so attendance, lateness and "on site now" include it. No door: it is the office as a whole.
       env.DB.prepare("INSERT INTO scans (id, event_id, pass_id, zone_id, result, reason, once, at) VALUES (?1, ?2, ?3, NULL, 'granted', NULL, 0, ?4)").bind(newId(14), ev.id, pass.id, now)
     ]);

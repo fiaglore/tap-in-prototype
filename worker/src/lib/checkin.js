@@ -58,3 +58,23 @@ export async function rollSelfie(pepper, passId, day, chancePct) {
   const u = ((b[0] << 16) | (b[1] << 8) | b[2]) / 0x1000000; // 0 <= u < 1
   return u * 100 < chancePct;
 }
+
+// ---- Selfie challenge ----
+// When a selfie is asked for, the server hands out a signed, timed challenge. The selfie must come back with it, not sooner than
+// MIN seconds (nobody can take a photo before the camera has opened) and not later than MAX seconds after it was issued.
+// A challenge is bound to one pass and one day, so a photo cannot be prepared ahead for another person or another day.
+export const CHALLENGE_MIN = 3;
+export const CHALLENGE_MAX = 180;
+const challengeMac = async (pepper, passId, day, issued) => base32(await hmacBytes(pepper, `selfie-ch|${passId}|${day}|${issued}`)).slice(0, 12);
+export async function makeChallenge(pepper, passId, day, now) { return `${now}.${await challengeMac(pepper, passId, day, now)}`; }
+export async function checkChallenge(pepper, passId, day, raw, now) {
+  const m = /^(\d{9,11})\.([0-9A-Z]{12})$/.exec(String(raw ?? ''));
+  if (!m) return false;
+  const issued = Number(m[1]);
+  const age = now - issued;
+  return age >= CHALLENGE_MIN && age <= CHALLENGE_MAX && safeEqual(await challengeMac(pepper, passId, day, issued), m[2]);
+}
+export async function photoHash(b64) {
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(b64)));
+  return Array.from(d.slice(0, 16), (x) => x.toString(16).padStart(2, '0')).join('');
+}
